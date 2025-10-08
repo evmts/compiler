@@ -63,7 +63,7 @@
 		"serve": "^14.2.5",
 		"solc": "0.8.30",
 		"typescript": "^5.9.3",
-		"vite": "^7.1.7",
+		"vite": "^7.1.9",
 		"vite-plugin-node-polyfills": "^0.24.0",
 		"vite-plugin-top-level-await": "^1.6.0",
 		"vitest": "^3.2.4"
