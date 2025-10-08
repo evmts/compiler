@@ -1,0 +1,115 @@
+[**@tevm/whatsabi**](../README.md)
+
+***
+
+[@tevm/whatsabi](../globals.md) / UnknownChainError
+
+# Class: UnknownChainError
+
+Defined in: packages/whatsabi/src/resolveContractUri.js:7
+
+## Extends
+
+- `Error`
+
+## Constructors
+
+### Constructor
+
+> **new UnknownChainError**(`chainId`): `UnknownChainError`
+
+Defined in: packages/whatsabi/src/resolveContractUri.js:20
+
+#### Parameters
+
+##### chainId
+
+`number`
+
+#### Returns
+
+`UnknownChainError`
+
+#### Overrides
+
+`Error.constructor`
+
+## Properties
+
+### \_tag
+
+> **\_tag**: `"UnknownChainError"` = `'UnknownChainError'`
+
+Defined in: packages/whatsabi/src/resolveContractUri.js:16
+
+***
+
+### cause?
+
+> `optional` **cause**: `unknown`
+
+Defined in: node\_modules/.pnpm/typescript@5.9.3/node\_modules/typescript/lib/lib.es2022.error.d.ts:26
+
+#### Inherited from
+
+`Error.cause`
+
+***
+
+### message
+
+> **message**: `string`
+
+Defined in: node\_modules/.pnpm/typescript@5.9.3/node\_modules/typescript/lib/lib.es5.d.ts:1077
+
+#### Inherited from
+
+`Error.message`
+
+***
+
+### name
+
+> **name**: `"UnknownChainError"` = `'UnknownChainError'`
+
+Defined in: packages/whatsabi/src/resolveContractUri.js:12
+
+#### Overrides
+
+`Error.name`
+
+***
+
+### stack?
+
+> `optional` **stack**: `string`
+
+Defined in: node\_modules/.pnpm/typescript@5.9.3/node\_modules/typescript/lib/lib.es5.d.ts:1078
+
+#### Inherited from
+
+`Error.stack`
+
+## Methods
+
+### isError()
+
+> `static` **isError**(`error`): `error is Error`
+
+Defined in: node\_modules/.pnpm/typescript@5.9.3/node\_modules/typescript/lib/lib.esnext.error.d.ts:23
+
+Indicates whether the argument provided is a built-in Error instance or not.
+
+#### Parameters
+
+##### error
+
+`unknown`
+
+#### Returns
+
+`error is Error`
+
+#### Inherited from
+
+`Error.isError`

@@ -6,7 +6,7 @@
 
 # Class: CreateRequireError
 
-Defined in: [packages/effect/src/createRequireEffect.js:5](https://github.com/evmts/tevm-monorepo/blob/main/packages/effect/src/createRequireEffect.js#L5)
+Defined in: [packages/effect/src/createRequireEffect.js:5](https://github.com/evmts/compiler/blob/main/packages/effect/src/createRequireEffect.js#L5)
 
 ## Extends
 
@@ -18,7 +18,7 @@ Defined in: [packages/effect/src/createRequireEffect.js:5](https://github.com/ev
 
 > **new CreateRequireError**(`url`, `options`): `CreateRequireError`
 
-Defined in: [packages/effect/src/createRequireEffect.js:16](https://github.com/evmts/tevm-monorepo/blob/main/packages/effect/src/createRequireEffect.js#L16)
+Defined in: [packages/effect/src/createRequireEffect.js:16](https://github.com/evmts/compiler/blob/main/packages/effect/src/createRequireEffect.js#L16)
 
 **`Internal`**
 
@@ -44,7 +44,7 @@ Defined in: [packages/effect/src/createRequireEffect.js:16](https://github.com/e
 
 > **\_tag**: `"CreateRequireError"` = `'CreateRequireError'`
 
-Defined in: [packages/effect/src/createRequireEffect.js:9](https://github.com/evmts/tevm-monorepo/blob/main/packages/effect/src/createRequireEffect.js#L9)
+Defined in: [packages/effect/src/createRequireEffect.js:9](https://github.com/evmts/compiler/blob/main/packages/effect/src/createRequireEffect.js#L9)
 
 ***
 

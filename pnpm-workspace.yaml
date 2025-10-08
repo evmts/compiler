@@ -1,20 +1,9 @@
 packages:
-  - bundler-packages/*
-  - bundler-packages/resolutions-rs/npm/*
-  - bundler-packages/runtime-rs/npm/*
-  - bundler
-  - configs/*
-  - cli
-  - docs/*
-  - examples/*
-  - extensions/*
-  - lsp/*
   - packages/*
+  - packages/resolutions-rs/npm/*
+  - packages/runtime-rs/npm/*
+  - configs/*
   - scripts
-  - src
-  - src/ui
-  - tevm
-  - test/*
 onlyBuiltDependencies:
   - "@biomejs/biome"
   - "@swc/core"

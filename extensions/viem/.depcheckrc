@@ -1,8 +1,0 @@
-ignores: [
-  "@tevm/state",
-  "@tevm/node",
-  "@tevm/decorators",
-  "@tevm/procedures",
-  "@tevm/jsonrpc"
-]
-skip-missing: true

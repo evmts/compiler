@@ -8,7 +8,7 @@
 
 > **signMessage**(`params`): `Promise`\<`Signature`\>
 
-Defined in: [packages/utils/src/signature.js:187](https://github.com/evmts/tevm-monorepo/blob/main/packages/utils/src/signature.js#L187)
+Defined in: [packages/utils/src/signature.js:187](https://github.com/evmts/compiler/blob/main/packages/utils/src/signature.js#L187)
 
 Signs a message with a private key
 

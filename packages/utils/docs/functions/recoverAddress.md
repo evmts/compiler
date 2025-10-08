@@ -8,7 +8,7 @@
 
 > **recoverAddress**(`params`): `` `0x${string}` ``
 
-Defined in: [packages/utils/src/signature.js:88](https://github.com/evmts/tevm-monorepo/blob/main/packages/utils/src/signature.js#L88)
+Defined in: [packages/utils/src/signature.js:88](https://github.com/evmts/compiler/blob/main/packages/utils/src/signature.js#L88)
 
 Recovers the address from a signature
 
