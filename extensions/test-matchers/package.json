@@ -76,7 +76,7 @@
 		"@tevm/node": "workspace:^",
 		"@tevm/utils": "workspace:^",
 		"abitype": "^1.1.1",
-		"ox": "^0.9.8",
+		"ox": "^0.9.9",
 		"viem": "^2.37.9",
 		"vitest": "^3.2.4"
 	},
