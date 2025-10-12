@@ -6,7 +6,7 @@
 
 # Interface: SolcStorageLayoutInplaceType
 
-Defined in: [solcTypes.ts:535](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L535)
+Defined in: [solcTypes.ts:534](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L534)
 
 A storage layout type that is laid out contiguously in storage.
 
@@ -24,7 +24,7 @@ A storage layout type that is laid out contiguously in storage.
 
 > **encoding**: `"inplace"`
 
-Defined in: [solcTypes.ts:536](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L536)
+Defined in: [solcTypes.ts:535](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L535)
 
 How the data is encoded in storage
 
@@ -43,7 +43,7 @@ How the data is encoded in storage
 
 > **label**: `string`
 
-Defined in: [solcTypes.ts:523](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L523)
+Defined in: [solcTypes.ts:522](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L522)
 
 The canonical type name
 
@@ -57,7 +57,7 @@ The canonical type name
 
 > **numberOfBytes**: `string`
 
-Defined in: [solcTypes.ts:529](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L529)
+Defined in: [solcTypes.ts:528](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L528)
 
 The number of used bytes (as a decimal string)
 

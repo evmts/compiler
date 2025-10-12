@@ -8,7 +8,7 @@
 
 > **SolcDeployedBytecodeOutput** = `object`
 
-Defined in: [solcTypes.ts:630](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L630)
+Defined in: [solcTypes.ts:629](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L629)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: [solcTypes.ts:630](https://github.com/evmts/compiler/blob/main/packa
 
 > **immutableReferences**: `object`
 
-Defined in: [solcTypes.ts:632](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L632)
+Defined in: [solcTypes.ts:631](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L631)
 
 #### Index Signature
 

@@ -8,7 +8,7 @@
 
 > **SolcGasEstimates** = `object`
 
-Defined in: [solcTypes.ts:657](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L657)
+Defined in: [solcTypes.ts:656](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L656)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: [solcTypes.ts:657](https://github.com/evmts/compiler/blob/main/packa
 
 > **creation**: `object`
 
-Defined in: [solcTypes.ts:658](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L658)
+Defined in: [solcTypes.ts:657](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L657)
 
 #### codeDepositCost
 
@@ -36,7 +36,7 @@ Defined in: [solcTypes.ts:658](https://github.com/evmts/compiler/blob/main/packa
 
 > **external**: `object`
 
-Defined in: [solcTypes.ts:663](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L663)
+Defined in: [solcTypes.ts:662](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L662)
 
 #### Index Signature
 
@@ -48,7 +48,7 @@ Defined in: [solcTypes.ts:663](https://github.com/evmts/compiler/blob/main/packa
 
 > **internal**: `object`
 
-Defined in: [solcTypes.ts:666](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L666)
+Defined in: [solcTypes.ts:665](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L665)
 
 #### Index Signature
 

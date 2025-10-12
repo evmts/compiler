@@ -8,7 +8,7 @@
 
 > **SolcMetadataSettings** = `object`
 
-Defined in: [solcTypes.ts:231](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L231)
+Defined in: [solcTypes.ts:230](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L230)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: [solcTypes.ts:231](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **appendCBOR**: `boolean`
 
-Defined in: [solcTypes.ts:234](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L234)
+Defined in: [solcTypes.ts:233](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L233)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [solcTypes.ts:234](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **bytecodeHash**: `"ipfs"` \| `"bzzr1"` \| `"none"`
 
-Defined in: [solcTypes.ts:241](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L241)
+Defined in: [solcTypes.ts:240](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L240)
 
 ***
 
@@ -32,4 +32,4 @@ Defined in: [solcTypes.ts:241](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **useLiteralContent**: `boolean`
 
-Defined in: [solcTypes.ts:236](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L236)
+Defined in: [solcTypes.ts:235](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L235)

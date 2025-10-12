@@ -8,7 +8,7 @@
 
 > **SolcInputDescription**\<`T`\> = `object`
 
-Defined in: [solcTypes.ts:346](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L346)
+Defined in: [solcTypes.ts:345](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L345)
 
 ## Type Parameters
 
@@ -22,7 +22,7 @@ Defined in: [solcTypes.ts:346](https://github.com/evmts/compiler/blob/main/packa
 
 > **language**: `T`
 
-Defined in: [solcTypes.ts:347](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L347)
+Defined in: [solcTypes.ts:346](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L346)
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: [solcTypes.ts:347](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **settings**: [`SolcSettings`](SolcSettings.md)
 
-Defined in: [solcTypes.ts:350](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L350)
+Defined in: [solcTypes.ts:349](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L349)
 
 ***
 
@@ -38,4 +38,4 @@ Defined in: [solcTypes.ts:350](https://github.com/evmts/compiler/blob/main/packa
 
 > **sources**: [`SolcInputSources`](SolcInputSources.md)\<`T`\>
 
-Defined in: [solcTypes.ts:349](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L349)
+Defined in: [solcTypes.ts:348](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L348)

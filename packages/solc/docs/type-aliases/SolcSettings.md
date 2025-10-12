@@ -8,7 +8,7 @@
 
 > **SolcSettings** = `object`
 
-Defined in: [solcTypes.ts:261](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L261)
+Defined in: [solcTypes.ts:260](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L260)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: [solcTypes.ts:261](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **debug**: [`SolcDebugSettings`](SolcDebugSettings.md)
 
-Defined in: [solcTypes.ts:274](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L274)
+Defined in: [solcTypes.ts:273](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L273)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [solcTypes.ts:274](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **evmVersion**: [`SolcEvmVersion`](SolcEvmVersion.md)
 
-Defined in: [solcTypes.ts:269](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L269)
+Defined in: [solcTypes.ts:268](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L268)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: [solcTypes.ts:269](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **libraries**: `Record`\<`string`, `Record`\<`string`, `string`\>\>
 
-Defined in: [solcTypes.ts:283](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L283)
+Defined in: [solcTypes.ts:282](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L282)
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: [solcTypes.ts:283](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **metadata**: [`SolcMetadataSettings`](SolcMetadataSettings.md)
 
-Defined in: [solcTypes.ts:276](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L276)
+Defined in: [solcTypes.ts:275](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L275)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: [solcTypes.ts:276](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **modelChecker**: [`SolcModelChecker`](SolcModelChecker.md)
 
-Defined in: [solcTypes.ts:330](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L330)
+Defined in: [solcTypes.ts:329](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L329)
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: [solcTypes.ts:330](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **optimizer**: [`SolcOptimizer`](SolcOptimizer.md)
 
-Defined in: [solcTypes.ts:266](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L266)
+Defined in: [solcTypes.ts:265](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L265)
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: [solcTypes.ts:266](https://github.com/evmts/compiler/blob/main/packa
 
 > **outputSelection**: [`SolcOutputSelection`](SolcOutputSelection.md)
 
-Defined in: [solcTypes.ts:328](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L328)
+Defined in: [solcTypes.ts:327](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L327)
 
 ***
 
@@ -72,7 +72,7 @@ Defined in: [solcTypes.ts:328](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **remappings**: [`SolcRemapping`](SolcRemapping.md)
 
-Defined in: [solcTypes.ts:265](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L265)
+Defined in: [solcTypes.ts:264](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L264)
 
 ***
 
@@ -80,7 +80,7 @@ Defined in: [solcTypes.ts:265](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **stopAfter**: `"parsing"`
 
-Defined in: [solcTypes.ts:263](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L263)
+Defined in: [solcTypes.ts:262](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L262)
 
 ***
 
@@ -88,4 +88,4 @@ Defined in: [solcTypes.ts:263](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **viaIR**: `boolean`
 
-Defined in: [solcTypes.ts:272](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L272)
+Defined in: [solcTypes.ts:271](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L271)

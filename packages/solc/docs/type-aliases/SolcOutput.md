@@ -8,7 +8,7 @@
 
 > **SolcOutput**\<`T`\> = `object`
 
-Defined in: [solcTypes.ts:353](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L353)
+Defined in: [solcTypes.ts:352](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L352)
 
 ## Type Parameters
 
@@ -22,7 +22,7 @@ Defined in: [solcTypes.ts:353](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **contracts**: `object`
 
-Defined in: [solcTypes.ts:365](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L365)
+Defined in: [solcTypes.ts:364](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L364)
 
 #### Index Signature
 
@@ -34,7 +34,7 @@ Defined in: [solcTypes.ts:365](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **errors**: [`SolcErrorEntry`](SolcErrorEntry.md)[]
 
-Defined in: [solcTypes.ts:355](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L355)
+Defined in: [solcTypes.ts:354](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L354)
 
 ***
 
@@ -42,7 +42,7 @@ Defined in: [solcTypes.ts:355](https://github.com/evmts/compiler/blob/main/packa
 
 > **sources**: `object`
 
-Defined in: [solcTypes.ts:359](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L359)
+Defined in: [solcTypes.ts:358](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L358)
 
 #### Index Signature
 
