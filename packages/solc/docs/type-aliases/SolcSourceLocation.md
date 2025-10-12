@@ -8,7 +8,7 @@
 
 > **SolcSourceLocation** = `object`
 
-Defined in: [solcTypes.ts:399](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L399)
+Defined in: [solcTypes.ts:398](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L398)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: [solcTypes.ts:399](https://github.com/evmts/compiler/blob/main/packa
 
 > **end**: `number`
 
-Defined in: [solcTypes.ts:402](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L402)
+Defined in: [solcTypes.ts:401](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L401)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [solcTypes.ts:402](https://github.com/evmts/compiler/blob/main/packa
 
 > **file**: `string`
 
-Defined in: [solcTypes.ts:400](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L400)
+Defined in: [solcTypes.ts:399](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L399)
 
 ***
 
@@ -32,4 +32,4 @@ Defined in: [solcTypes.ts:400](https://github.com/evmts/compiler/blob/main/packa
 
 > **start**: `number`
 
-Defined in: [solcTypes.ts:401](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L401)
+Defined in: [solcTypes.ts:400](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L400)

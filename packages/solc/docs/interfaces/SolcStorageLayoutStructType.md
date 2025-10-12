@@ -6,7 +6,7 @@
 
 # Interface: SolcStorageLayoutStructType
 
-Defined in: [solcTypes.ts:575](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L575)
+Defined in: [solcTypes.ts:574](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L574)
 
 A storage layout type that is a struct.
 
@@ -20,7 +20,7 @@ A storage layout type that is a struct.
 
 > **encoding**: `"inplace"`
 
-Defined in: [solcTypes.ts:536](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L536)
+Defined in: [solcTypes.ts:535](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L535)
 
 How the data is encoded in storage
 
@@ -39,7 +39,7 @@ How the data is encoded in storage
 
 > **label**: `string`
 
-Defined in: [solcTypes.ts:523](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L523)
+Defined in: [solcTypes.ts:522](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L522)
 
 The canonical type name
 
@@ -53,7 +53,7 @@ The canonical type name
 
 > **members**: [`SolcStorageLayoutItem`](../type-aliases/SolcStorageLayoutItem.md)\<[`SolcStorageLayoutTypes`](../type-aliases/SolcStorageLayoutTypes.md)\>[]
 
-Defined in: [solcTypes.ts:579](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L579)
+Defined in: [solcTypes.ts:578](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L578)
 
 The members of the struct in the same format as a [SolcStorageLayoutItem](../type-aliases/SolcStorageLayoutItem.md)
 
@@ -63,7 +63,7 @@ The members of the struct in the same format as a [SolcStorageLayoutItem](../typ
 
 > **numberOfBytes**: `string`
 
-Defined in: [solcTypes.ts:529](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L529)
+Defined in: [solcTypes.ts:528](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L528)
 
 The number of used bytes (as a decimal string)
 

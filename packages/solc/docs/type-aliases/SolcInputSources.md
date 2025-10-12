@@ -8,7 +8,7 @@
 
 > **SolcInputSources**\<`T`\> = `object`
 
-Defined in: [solcTypes.ts:340](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L340)
+Defined in: [solcTypes.ts:339](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L339)
 
 ## Type Parameters
 

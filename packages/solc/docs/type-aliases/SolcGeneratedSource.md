@@ -8,7 +8,7 @@
 
 > **SolcGeneratedSource** = `object`
 
-Defined in: [solcTypes.ts:644](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L644)
+Defined in: [solcTypes.ts:643](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L643)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: [solcTypes.ts:644](https://github.com/evmts/compiler/blob/main/packa
 
 > **ast**: [`SolcAst`](SolcAst.md)
 
-Defined in: [solcTypes.ts:646](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L646)
+Defined in: [solcTypes.ts:645](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L645)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [solcTypes.ts:646](https://github.com/evmts/compiler/blob/main/packa
 
 > **contents**: `string`
 
-Defined in: [solcTypes.ts:649](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L649)
+Defined in: [solcTypes.ts:648](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L648)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: [solcTypes.ts:649](https://github.com/evmts/compiler/blob/main/packa
 
 > **id**: `number`
 
-Defined in: [solcTypes.ts:652](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L652)
+Defined in: [solcTypes.ts:651](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L651)
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: [solcTypes.ts:652](https://github.com/evmts/compiler/blob/main/packa
 
 > **language**: `string`
 
-Defined in: [solcTypes.ts:653](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L653)
+Defined in: [solcTypes.ts:652](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L652)
 
 ***
 
@@ -48,4 +48,4 @@ Defined in: [solcTypes.ts:653](https://github.com/evmts/compiler/blob/main/packa
 
 > **name**: `string`
 
-Defined in: [solcTypes.ts:654](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L654)
+Defined in: [solcTypes.ts:653](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L653)

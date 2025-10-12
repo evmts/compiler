@@ -8,7 +8,7 @@
 
 > **SolcModelCheckerContracts** = `object`
 
-Defined in: [solcTypes.ts:166](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L166)
+Defined in: [solcTypes.ts:165](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L165)
 
 ## Index Signature
 

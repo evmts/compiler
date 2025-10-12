@@ -148,7 +148,6 @@ export type SolcOutputSelection = {
 			| 'evm.gasEstimates'
 			| 'evm.methodIdentifiers'
 			| 'evm.legacyAssembly'
-			| 'evm.methodIdentifiers'
 			| 'evm.storageLayout'
 			| 'ewasm.wasm'
 			| 'ewasm.wast'

@@ -8,7 +8,7 @@
 
 > **SolcDebugSettings** = `object`
 
-Defined in: [solcTypes.ts:210](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L210)
+Defined in: [solcTypes.ts:209](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L209)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: [solcTypes.ts:210](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **debugInfo**: (`"location"` \| `"snippet"` \| `"*"`)[]
 
-Defined in: [solcTypes.ts:228](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L228)
+Defined in: [solcTypes.ts:227](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L227)
 
 ***
 
@@ -24,4 +24,4 @@ Defined in: [solcTypes.ts:228](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **revertStrings**: `"default"` \| `"strip"` \| `"debug"` \| `"verboseDebug"`
 
-Defined in: [solcTypes.ts:217](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L217)
+Defined in: [solcTypes.ts:216](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L216)

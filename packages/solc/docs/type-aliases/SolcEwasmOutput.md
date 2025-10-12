@@ -8,7 +8,7 @@
 
 > **SolcEwasmOutput** = `object`
 
-Defined in: [solcTypes.ts:671](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L671)
+Defined in: [solcTypes.ts:670](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L670)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: [solcTypes.ts:671](https://github.com/evmts/compiler/blob/main/packa
 
 > **wasm**: `string`
 
-Defined in: [solcTypes.ts:675](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L675)
+Defined in: [solcTypes.ts:674](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L674)
 
 ***
 
@@ -24,4 +24,4 @@ Defined in: [solcTypes.ts:675](https://github.com/evmts/compiler/blob/main/packa
 
 > **wast**: `string`
 
-Defined in: [solcTypes.ts:673](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L673)
+Defined in: [solcTypes.ts:672](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L672)

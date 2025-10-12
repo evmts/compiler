@@ -8,7 +8,7 @@
 
 > **SolcFunctionDebugData** = `object`
 
-Defined in: [solcTypes.ts:637](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L637)
+Defined in: [solcTypes.ts:636](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L636)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: [solcTypes.ts:637](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **entryPoint**: `number`
 
-Defined in: [solcTypes.ts:638](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L638)
+Defined in: [solcTypes.ts:637](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L637)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [solcTypes.ts:638](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **id**: `number` \| `null`
 
-Defined in: [solcTypes.ts:639](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L639)
+Defined in: [solcTypes.ts:638](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L638)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: [solcTypes.ts:639](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **parameterSlots**: `number`
 
-Defined in: [solcTypes.ts:640](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L640)
+Defined in: [solcTypes.ts:639](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L639)
 
 ***
 
@@ -40,4 +40,4 @@ Defined in: [solcTypes.ts:640](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **returnSlots**: `number`
 
-Defined in: [solcTypes.ts:641](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L641)
+Defined in: [solcTypes.ts:640](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L640)
