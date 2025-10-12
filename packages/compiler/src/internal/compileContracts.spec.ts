@@ -35,6 +35,10 @@ describe('compileContracts', () => {
 
 			const result = compileContracts(solc, sources, options, mockLogger)
 
+			expect(result.solcInput).toBeDefined()
+			expect(result.solcInput.language).toBe('Solidity')
+			expect(result.solcInput.sources['Contract.sol']).toBeDefined()
+			expect(result.solcInput.settings).toBeDefined()
 			assert(result.compilationResult['Contract.sol'], 'Contract.sol not found')
 			expect(result.compilationResult['Contract.sol'].ast).toBeDefined()
 			expect(result.compilationResult['Contract.sol'].id).toBeDefined()
@@ -82,6 +86,10 @@ describe('compileContracts', () => {
 
 			const result = compileContracts(solc, sources, options, mockLogger)
 
+			expect(result.solcInput).toBeDefined()
+			expect(result.solcInput.language).toBe('Solidity')
+			expect(result.solcInput.sources['Contract1.sol']).toBeDefined()
+			expect(result.solcInput.sources['Contract2.sol']).toBeDefined()
 			expect(Object.keys(result.compilationResult)).toHaveLength(2)
 			expect(result.compilationResult['Contract1.sol']).toBeDefined()
 			expect(result.compilationResult['Contract2.sol']).toBeDefined()
@@ -125,6 +133,7 @@ describe('compileContracts', () => {
 
 			const result = compileContracts(solc, sources, options, mockLogger)
 
+			expect(result.solcInput).toBeDefined()
 			expect(result.errors).toBeDefined()
 			expect(result.errors!.length).toBeGreaterThan(0)
 			expect(mockLogger.error).toHaveBeenCalled()
@@ -504,6 +513,9 @@ describe('compileContracts', () => {
 
 			const result = compileContracts(solc, sources, options, mockLogger)
 
+			expect(result.solcInput).toBeDefined()
+			expect(result.solcInput.language).toBe('Yul')
+			expect(result.solcInput.sources['SimpleYul.yul']).toBeDefined()
 			assert(result.compilationResult['SimpleYul.yul'], 'SimpleYul.yul not found')
 			expect(result.compilationResult['SimpleYul.yul'].ast).toBeDefined()
 			expect(result.compilationResult['SimpleYul.yul'].ast?.nodeType).toBe('YulObject')
@@ -532,6 +544,9 @@ describe('compileContracts', () => {
 
 			const result = compileContracts(solc, sources, options, mockLogger)
 
+			expect(result.solcInput).toBeDefined()
+			expect(result.solcInput.language).toBe('SolidityAST')
+			expect(result.solcInput.sources['SimpleContract.sol']).toBeDefined()
 			assert(result.compilationResult['SimpleContract.sol'], 'SimpleContract.sol not found')
 			expect(result.compilationResult['SimpleContract.sol'].contract['SimpleContract']).toBeDefined()
 			expect(result.compilationResult['SimpleContract.sol'].contract['SimpleContract']?.abi).toBeDefined()

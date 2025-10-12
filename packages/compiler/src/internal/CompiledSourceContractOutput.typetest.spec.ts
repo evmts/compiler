@@ -13,6 +13,7 @@ const mockCompileSource = <TCompilationOutput extends CompilationOutputOption[] 
 	_options?: { compilationOutput?: TCompilationOutput },
 ): CompileSourceResult<TCompilationOutput> => {
 	return {
+		solcInput: {} as any,
 		compilationResult: {
 			contract: {
 				Test: {},

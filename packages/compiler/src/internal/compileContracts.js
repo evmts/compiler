@@ -53,7 +53,7 @@ export const compileContracts = (solc, sources, options, logger) => {
 	logger.debug(`Compiling ${Object.keys(sources).length} sources`)
 	const solcOutput = solcCompile(solc, solcInput)
 	/** @type {import('./CompileContractsResult.js').CompileContractsResult} */
-	const result = { compilationResult: {} }
+	const result = { solcInput, compilationResult: {} }
 
 	if (solcOutput.errors) {
 		result.errors = solcOutput.errors
