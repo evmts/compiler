@@ -84,7 +84,7 @@ vi.stubGlobal('process', {
 	cwd: () => mockCwd,
 })
 
-const contractPath = '../../../examples/bun/ExampleContract.sol'
+const contractPath = './fixtures/ExampleContract.sol'
 
 describe('bunPluginTevm', () => {
 	beforeEach(() => {
