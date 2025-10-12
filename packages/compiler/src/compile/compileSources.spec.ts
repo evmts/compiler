@@ -215,6 +215,17 @@ describe('compileSources', () => {
 	})
 
 	describe('edge cases', () => {
+		it('should handle compilation without options parameter', async () => {
+			const result = await compileSources({
+				'Contract.sol': SimpleContract.source,
+			})
+
+			expect(result).toBeDefined()
+			expect(result.compilationResult).toBeDefined()
+			expect(result.compilationResult['Contract.sol']).toBeDefined()
+			expect(result.compilationResult['Contract.sol']?.contract['SimpleContract']).toBeDefined()
+		})
+
 		it('should handle single source (equivalent to compileSource)', async () => {
 			const result = await compileSources(
 				{

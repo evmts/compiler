@@ -5,7 +5,7 @@ import { compileFilesWithShadow } from './compileFilesWithShadow.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
-const SIMPLE_CONTRACT_PATH = join(__dirname, '../fixtures/SimpleContract.sol')
+const SIMPLE_CONTRACT_PATH = join(__dirname, '../../fixtures/SimpleContract.sol')
 
 /**
  * Tests for compileFilesWithShadow function
