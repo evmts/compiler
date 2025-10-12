@@ -95,13 +95,7 @@ describe('defaults', () => {
 		})
 
 		it('should have correct compilationOutput array', () => {
-			expect(defaults.compilationOutput).toEqual([
-				'abi',
-				'ast',
-				'bytecode',
-				'deployedBytecode',
-				'storageLayout',
-			])
+			expect(defaults.compilationOutput).toEqual(['abi', 'ast', 'bytecode', 'deployedBytecode', 'storageLayout'])
 		})
 
 		it('should have all expected compilationOutput items', () => {
