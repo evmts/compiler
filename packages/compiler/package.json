@@ -14,12 +14,13 @@
 	],
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/evmts/compiler.git",
-		"directory": "packages/compiler"
+		"url": "git+https://github.com/evmts/tevm-monorepo.git",
+		"directory": "bundler-packages/compiler"
 	},
 	"license": "MIT",
 	"contributors": [
-		"Will Cory <willcory10@gmail.com>"
+		"Will Cory <willcory10@gmail.com>",
+		"polarzero <0xpolarzero@gmail.com>"
 	],
 	"sideEffects": false,
 	"type": "module",
@@ -46,7 +47,7 @@
 	],
 	"scripts": {
 		"all": "pnpm i  && bun run build && bun run lint && bun run lint:check && bun run format:check && bun run format && bun run test:coverage && bun run generate:docs",
-		"build": "nx run-many --targets=build:dist,build:types --projects=@tevm/compiler ",
+		"build": "nx run-many --targets=build:dist,build:types --projects=@tevm/compiler",
 		"build:dist": "tsup",
 		"build:types": "tsup --dts-only && tsc --emitDeclarationOnly --declaration",
 		"clean": "rm -rf node_modules && rm -rf artifacts && rm -rf dist && rm -rf cache",
@@ -64,18 +65,17 @@
 	},
 	"dependencies": {
 		"@tevm/config": "workspace:^",
-		"@tevm/resolutions": "workspace:^",
+		"@tevm/logger": "1.0.0-next.148",
 		"@tevm/solc": "workspace:^",
 		"@types/node": "^24.6.1",
-		"effect": "3.18.1",
-		"resolve": "^1.22.10",
+		"abitype": "^1.1.1",
+		"solc-typed-ast": "^18.2.5",
 		"solidity-ast": "^0.4.61"
 	},
 	"devDependencies": {
 		"@openzeppelin/contracts": "5.4.0",
 		"@tevm/tsconfig": "workspace:^",
 		"@tevm/tsupconfig": "workspace:^",
-		"@types/resolve": "^1.20.6",
 		"solc": "0.8.30"
 	},
 	"publishConfig": {

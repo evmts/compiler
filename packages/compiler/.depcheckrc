@@ -1,5 +1,4 @@
 ignores: [
-  "@openzeppelin/contracts",
-  "@types/resolve"
+  "@openzeppelin/contracts"
 ]
 skip-missing: true
