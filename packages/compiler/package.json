@@ -65,8 +65,10 @@
 	},
 	"dependencies": {
 		"@tevm/config": "workspace:^",
+		"@tevm/contract": "workspace:^",
 		"@tevm/logger": "1.0.0-next.148",
 		"@tevm/solc": "workspace:^",
+		"@tevm/utils": "1.0.0-next.148",
 		"@types/node": "^24.6.1",
 		"abitype": "^1.1.1",
 		"solc-typed-ast": "^18.2.5",

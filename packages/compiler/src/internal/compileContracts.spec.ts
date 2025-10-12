@@ -594,4 +594,281 @@ describe('compileContracts', () => {
 			expect(result.compilationResult['Contract.sol']).toBeDefined()
 		})
 	})
+
+	describe('getContract', () => {
+		describe('happy path', () => {
+			it('should create contract instance for single contract without name', () => {
+				const sources = {
+					'Contract.sol':
+						'pragma solidity ^0.8.0; contract TestContract { function test() public pure returns (uint256) { return 42; } }',
+				}
+
+				const options: ValidatedCompileBaseOptions = {
+					language: 'Solidity',
+					compilationOutput: ['abi', 'bytecode', 'deployedBytecode'],
+					hardfork: 'cancun',
+					solcVersion: '0.8.28',
+					throwOnVersionMismatch: false,
+					throwOnCompilationError: false,
+				}
+
+				const result = compileContracts(solc, sources, options, mockLogger)
+				const source = result.compilationResult['Contract.sol']
+				assert(source, 'Source not found')
+
+				const contract = source.getContract()
+
+				expect(contract).toBeDefined()
+				expect(contract.name).toBe('TestContract')
+				expect(contract.abi).toBeDefined()
+				expect(contract.bytecode).toBeDefined()
+				expect(contract.bytecode).toMatch(/^0x[0-9a-fA-F]+$/)
+				expect(contract.deployedBytecode).toBeDefined()
+				expect(contract.deployedBytecode).toMatch(/^0x[0-9a-fA-F]+$/)
+				expect(contract.read).toBeDefined()
+				expect(contract.write).toBeDefined()
+				expect(contract.events).toBeDefined()
+			})
+
+			it('should create contract instance with name for single contract', () => {
+				const sources = {
+					'Contract.sol': 'pragma solidity ^0.8.0; contract TestContract {}',
+				}
+
+				const options: ValidatedCompileBaseOptions = {
+					language: 'Solidity',
+					compilationOutput: ['abi', 'bytecode', 'deployedBytecode'],
+					hardfork: 'cancun',
+					solcVersion: '0.8.28',
+					throwOnVersionMismatch: false,
+					throwOnCompilationError: false,
+				}
+
+				const result = compileContracts(solc, sources, options, mockLogger)
+				const source = result.compilationResult['Contract.sol']
+				assert(source, 'Source not found')
+
+				const contract = source.getContract('TestContract')
+
+				expect(contract).toBeDefined()
+				expect(contract.name).toBe('TestContract')
+			})
+
+			it('should create contract instance for multiple contracts with name specified', () => {
+				const sources = {
+					'Multi.sol': 'pragma solidity ^0.8.0; contract A {} contract B {}',
+				}
+
+				const options: ValidatedCompileBaseOptions = {
+					language: 'Solidity',
+					compilationOutput: ['abi', 'bytecode', 'deployedBytecode'],
+					hardfork: 'cancun',
+					solcVersion: '0.8.28',
+					throwOnVersionMismatch: false,
+					throwOnCompilationError: false,
+				}
+
+				const result = compileContracts(solc, sources, options, mockLogger)
+				const source = result.compilationResult['Multi.sol']
+				assert(source, 'Source not found')
+
+				const contractA = source.getContract('A')
+				expect(contractA.name).toBe('A')
+
+				const contractB = source.getContract('B')
+				expect(contractB.name).toBe('B')
+			})
+
+			it('should work with * compilation output', () => {
+				const sources = {
+					'Contract.sol': 'pragma solidity ^0.8.0; contract TestContract {}',
+				}
+
+				const options: ValidatedCompileBaseOptions = {
+					language: 'Solidity',
+					compilationOutput: ['*'],
+					hardfork: 'cancun',
+					solcVersion: '0.8.28',
+					throwOnVersionMismatch: false,
+					throwOnCompilationError: false,
+				}
+
+				const result = compileContracts(solc, sources, options, mockLogger)
+				const source = result.compilationResult['Contract.sol']
+				assert(source, 'Source not found')
+
+				const contract = source.getContract()
+				expect(contract).toBeDefined()
+				expect(contract.name).toBe('TestContract')
+			})
+		})
+
+		describe('error handling', () => {
+			it('should throw when missing required compilation output fields', () => {
+				const sources = {
+					'Contract.sol': 'pragma solidity ^0.8.0; contract TestContract {}',
+				}
+
+				const options: ValidatedCompileBaseOptions = {
+					language: 'Solidity',
+					compilationOutput: ['abi'], // Missing bytecode and deployedBytecode
+					hardfork: 'cancun',
+					solcVersion: '0.8.28',
+					throwOnVersionMismatch: false,
+					throwOnCompilationError: false,
+				}
+
+				const result = compileContracts(solc, sources, options, mockLogger)
+				const source = result.compilationResult['Contract.sol']
+				assert(source, 'Source not found')
+
+				expect(() => source.getContract()).toThrow(CompilerOutputError)
+				expect(() => source.getContract()).toThrow(/missing bytecode, deployedBytecode/)
+
+				try {
+					source.getContract()
+				} catch (error) {
+					if (error instanceof CompilerOutputError) {
+						expect(error.meta?.code).toBe('missing_compilation_output')
+					} else {
+						throw error
+					}
+				}
+			})
+
+			it('should throw when missing abi', () => {
+				const sources = {
+					'Contract.sol': 'pragma solidity ^0.8.0; contract TestContract {}',
+				}
+
+				const options: ValidatedCompileBaseOptions = {
+					language: 'Solidity',
+					compilationOutput: ['bytecode', 'deployedBytecode'], // Missing abi
+					hardfork: 'cancun',
+					solcVersion: '0.8.28',
+					throwOnVersionMismatch: false,
+					throwOnCompilationError: false,
+				}
+
+				const result = compileContracts(solc, sources, options, mockLogger)
+				const source = result.compilationResult['Contract.sol']
+				assert(source, 'Source not found')
+
+				expect(() => source.getContract()).toThrow(CompilerOutputError)
+				expect(() => source.getContract()).toThrow(/missing abi/)
+
+				try {
+					source.getContract()
+				} catch (error) {
+					if (error instanceof CompilerOutputError) {
+						expect(error.meta?.code).toBe('missing_compilation_output')
+					} else {
+						throw error
+					}
+				}
+			})
+
+			it('should throw when no contracts exist in source', () => {
+				const sources = {
+					'Empty.sol': 'pragma solidity ^0.8.0;',
+				}
+
+				const options: ValidatedCompileBaseOptions = {
+					language: 'Solidity',
+					compilationOutput: ['abi', 'bytecode', 'deployedBytecode'],
+					hardfork: 'cancun',
+					solcVersion: '0.8.28',
+					throwOnVersionMismatch: false,
+					throwOnCompilationError: false,
+				}
+
+				const result = compileContracts(solc, sources, options, mockLogger)
+				const source = result.compilationResult['Empty.sol']
+				assert(source, 'Source not found')
+
+				expect(() => source.getContract()).toThrow(CompilerOutputError)
+				expect(() => source.getContract()).toThrow(/No contracts found in source/)
+
+				try {
+					source.getContract()
+				} catch (error) {
+					if (error instanceof CompilerOutputError) {
+						expect(error.meta?.code).toBe('no_contracts')
+						expect(error.meta?.sourcePath).toBe('Empty.sol')
+					} else {
+						throw error
+					}
+				}
+			})
+
+			it('should throw when contract name not specified for multiple contracts', () => {
+				const sources = {
+					'Multi.sol': 'pragma solidity ^0.8.0; contract A {} contract B {}',
+				}
+
+				const options: ValidatedCompileBaseOptions = {
+					language: 'Solidity',
+					compilationOutput: ['abi', 'bytecode', 'deployedBytecode'],
+					hardfork: 'cancun',
+					solcVersion: '0.8.28',
+					throwOnVersionMismatch: false,
+					throwOnCompilationError: false,
+				}
+
+				const result = compileContracts(solc, sources, options, mockLogger)
+				const source = result.compilationResult['Multi.sol']
+				assert(source, 'Source not found')
+
+				expect(() => source.getContract()).toThrow(CompilerOutputError)
+				expect(() => source.getContract()).toThrow(/Multiple contracts found/)
+
+				try {
+					source.getContract()
+				} catch (error) {
+					if (error instanceof CompilerOutputError) {
+						expect(error.meta?.code).toBe('ambiguous_contract')
+						expect(error.meta?.sourcePath).toBe('Multi.sol')
+						expect(error.meta?.availableContracts).toEqual(['A', 'B'])
+					} else {
+						throw error
+					}
+				}
+			})
+
+			it('should throw when specified contract name not found', () => {
+				const sources = {
+					'Contract.sol': 'pragma solidity ^0.8.0; contract TestContract {}',
+				}
+
+				const options: ValidatedCompileBaseOptions = {
+					language: 'Solidity',
+					compilationOutput: ['abi', 'bytecode', 'deployedBytecode'],
+					hardfork: 'cancun',
+					solcVersion: '0.8.28',
+					throwOnVersionMismatch: false,
+					throwOnCompilationError: false,
+				}
+
+				const result = compileContracts(solc, sources, options, mockLogger)
+				const source = result.compilationResult['Contract.sol']
+				assert(source, 'Source not found')
+
+				expect(() => source.getContract('NonExistent')).toThrow(CompilerOutputError)
+				expect(() => source.getContract('NonExistent')).toThrow(/Contract "NonExistent" not found/)
+
+				try {
+					source.getContract('NonExistent')
+				} catch (error) {
+					if (error instanceof CompilerOutputError) {
+						expect(error.meta?.code).toBe('contract_not_found')
+						expect(error.meta?.contractName).toBe('NonExistent')
+						expect(error.meta?.sourcePath).toBe('Contract.sol')
+						expect(error.meta?.availableContracts).toEqual(['TestContract'])
+					} else {
+						throw error
+					}
+				}
+			})
+		})
+	})
 })

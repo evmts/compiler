@@ -221,7 +221,7 @@ export class FileReadError extends Error {
  * @property {string[]} [metaMessages] - Additional meta messages.
  * @property {Error|unknown} [cause] - The cause of the error.
  * @property {string} [details] - Details of the error.
- * @property {{ code: 'compilation_errors' | 'missing_source_output', errors?: import('@tevm/solc').SolcErrorEntry[] }} [meta] - Error metadata with specific code.
+ * @property {{ code: 'compilation_errors' | 'missing_source_output' | 'missing_compilation_output' | 'no_contracts' | 'ambiguous_contract' | 'contract_not_found', errors?: import('@tevm/solc').SolcErrorEntry[], sourcePath?: string, contractName?: string, availableContracts?: string[] }} [meta] - Error metadata with specific code.
  */
 
 /**
@@ -229,11 +229,17 @@ export class FileReadError extends Error {
  *
  * Error codes:
  * - `compilation_errors`: Compilation errors occurred
+ * - `missing_compilation_output`: Required compilation output fields are missing
+ * - `no_contracts`: No contracts found in source
+ * - `ambiguous_contract`: Multiple contracts found, contract name required
+ * - `contract_not_found`: Specified contract name not found in source
  *
  * This typically indicates:
  * - Mismatch between input sources and output structure
  * - Solc failed to parse the source file
  * - Internal compiler inconsistency
+ * - Incorrect compilation output configuration
+ * - Contract not found or ambiguous contract selection
  *
  * @example
  * ```javascript
@@ -241,11 +247,13 @@ export class FileReadError extends Error {
  *
  * try {
  *   const result = compileContracts(solc, sources, options)
+ *   const contract = result.compilationResult['Contract.sol'].getContract()
  * } catch (error) {
  *   if (error instanceof CompilerOutputError) {
  *     console.log('Code:', error.meta?.code)
- *     console.log('Expected:', error.meta?.sourcePath)
- *     console.log('Available:', error.meta?.availableSources)
+ *     if (error.meta?.code === 'ambiguous_contract') {
+ *       console.log('Available:', error.meta?.availableContracts)
+ *     }
  *   }
  * }
  * ```

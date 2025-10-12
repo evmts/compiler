@@ -100,10 +100,33 @@ const result = compiler.compileSourceWithShadow(
 
 /* ------------------------------ Shadow usage ------------------------------ */
 // This part of the API I've not done yet but usage would likely be something like:
+const compiler = new Compiler({
+	loggingLevel: 'debug',
+	chainId: 1,
+	etherscanApiKey: '<your api key>',
+	blockscoutApiKey: '<your api key>',
+})
 const contractAddress = '0x1234567890123456789012345678901234567890'
-const { sources } = await compiler.fetchVerifiedSource(contractAddress, { chainId: 1 })
-const { contract } = compiler.compileSourcesWithShadow(sources, `shadow methods`)
-const ShadowContract = contract.withAddress(contractAddress)
+const { sources, solcVersion } = await compiler.fetchVerifiedSource(contractAddress, {
+	// you can always override any constructor option here
+	chainId: 1,
+})
+await compiler.loadSolc(solcVersion)
+const { compilationResult } = compiler.compileSourcesWithShadow(sources, `shadow methods`, {
+	// This is the path to the source (as on Etherscan)
+	injectIntoContractPath: 'Contract.sol',
+	// You have to specify a contract's name only if there are multiple contracts in the source
+	injectIntoContractName: 'MyContract',
+})
+const ShadowContract = compilationResult['Contract.sol'].getContract('MyContract').withAddress(contractAddress)
 
 const client = createMemoryClient({ fork: { transport: http() } })
-const res = await client.tevmContract(ShadowContract.read.someShadowFunction())
+const res = await client.tevmShadow(ShadowContract.read.someShadowFunction())
+// This is the exact same thing as doing
+const res = await client.tevmShadow({
+	address: contractAddress,
+	abi: ShadowContract.abi,
+	functionName: 'someShadowFunction',
+	args: [],
+	deployedBytecode: ShadowContract.deployedBytecode,
+})

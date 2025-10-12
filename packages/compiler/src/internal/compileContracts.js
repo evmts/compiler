@@ -1,6 +1,7 @@
 import { solcCompile } from '@tevm/solc'
 import { compilationOutputToSolcOutputSelection } from './compilationOutputToSolcOutputSelection.js'
 import { CompilerOutputError } from './errors.js'
+import { getContractFactory } from './getContractFactory.js'
 
 /**
  * Compile Solidity or Yul code
@@ -97,7 +98,11 @@ export const compileContracts = (solc, sources, options, logger) => {
 			}
 		}
 
-		result.compilationResult[/** @type {keyof typeof result.compilationResult} */ (sourcePath)] = output
+		result.compilationResult[sourcePath] =
+			/** @type {import('./CompiledSource.js').CompiledSource<TCompilationOutput>} */ ({
+				...output,
+				getContract: getContractFactory(sourcePath, output, logger),
+			})
 	})
 
 	logger.debug(`Compiled ${Object.keys(result.compilationResult).length} sources`)
