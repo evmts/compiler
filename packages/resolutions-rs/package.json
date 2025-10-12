@@ -5,8 +5,8 @@
 	"description": "Rust implementation of solidity resolution",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/evmts/tevm-monorepo.git",
-		"directory": "bundler-packages/resolutions-rs"
+		"url": "git+https://github.com/evmts/compiler.git",
+		"directory": "packages/resolutions-rs"
 	},
 	"license": "MIT",
 	"type": "commonjs",

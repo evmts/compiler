@@ -5,8 +5,8 @@
 	"description": "Rust implementation of Tevm runtime",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/evmts/tevm-monorepo.git",
-		"directory": "bundler-packages/runtime-rs"
+		"url": "git+https://github.com/evmts/compiler.git",
+		"directory": "packages/runtime-rs"
 	},
 	"license": "MIT",
 	"type": "commonjs",

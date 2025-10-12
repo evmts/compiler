@@ -13,8 +13,8 @@
 	"homepage": "https://tevm.sh",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/evmts/tevm-monorepo.git",
-		"directory": "bundler-packages/base-bundler"
+		"url": "git+https://github.com/evmts/compiler.git",
+		"directory": "packages/base-bundler"
 	},
 	"license": "MIT",
 	"author": "roninjin10",
