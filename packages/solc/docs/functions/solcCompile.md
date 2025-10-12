@@ -6,7 +6,7 @@
 
 # Function: solcCompile()
 
-> **solcCompile**(`solc`, `input`): [`SolcOutput`](../type-aliases/SolcOutput.md)
+> **solcCompile**(`solc`, `input`): [`SolcOutput`](../type-aliases/SolcOutput.md)\<[`SolcLanguage`](../type-aliases/SolcLanguage.md)\>
 
 Defined in: [solc.js:133](https://github.com/evmts/compiler/blob/main/packages/solc/src/solc.js#L133)
 
@@ -20,8 +20,8 @@ Typesafe wrapper around solc.compile
 
 ### input
 
-[`SolcInputDescription`](../type-aliases/SolcInputDescription.md)
+[`SolcInputDescription`](../type-aliases/SolcInputDescription.md)\<[`SolcLanguage`](../type-aliases/SolcLanguage.md)\>
 
 ## Returns
 
-[`SolcOutput`](../type-aliases/SolcOutput.md)
+[`SolcOutput`](../type-aliases/SolcOutput.md)\<[`SolcLanguage`](../type-aliases/SolcLanguage.md)\>

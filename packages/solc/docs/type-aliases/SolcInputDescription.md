@@ -4,19 +4,25 @@
 
 [@tevm/solc](../globals.md) / SolcInputDescription
 
-# Type Alias: SolcInputDescription
+# Type Alias: SolcInputDescription\<T\>
 
-> **SolcInputDescription** = `object`
+> **SolcInputDescription**\<`T`\> = `object`
 
-Defined in: [solcTypes.ts:323](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L323)
+Defined in: [solcTypes.ts:346](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L346)
+
+## Type Parameters
+
+### T
+
+`T` *extends* [`SolcLanguage`](SolcLanguage.md) = [`SolcLanguage`](SolcLanguage.md)
 
 ## Properties
 
 ### language
 
-> **language**: [`SolcLanguage`](SolcLanguage.md)
+> **language**: `T`
 
-Defined in: [solcTypes.ts:324](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L324)
+Defined in: [solcTypes.ts:347](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L347)
 
 ***
 
@@ -24,12 +30,12 @@ Defined in: [solcTypes.ts:324](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **settings**: [`SolcSettings`](SolcSettings.md)
 
-Defined in: [solcTypes.ts:327](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L327)
+Defined in: [solcTypes.ts:350](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L350)
 
 ***
 
 ### sources
 
-> **sources**: [`SolcInputSources`](SolcInputSources.md)
+> **sources**: [`SolcInputSources`](SolcInputSources.md)\<`T`\>
 
-Defined in: [solcTypes.ts:326](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L326)
+Defined in: [solcTypes.ts:349](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L349)

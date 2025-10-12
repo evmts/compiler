@@ -8,7 +8,7 @@
 
 > **SolcStorageLayout**\<`T`\> = `object`
 
-Defined in: [solcTypes.ts:427](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L427)
+Defined in: [solcTypes.ts:451](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L451)
 
 The storage layout for a contract.
 
@@ -24,7 +24,7 @@ The storage layout for a contract.
 
 > **storage**: [`SolcStorageLayoutItem`](SolcStorageLayoutItem.md)\<`T`\>[]
 
-Defined in: [solcTypes.ts:432](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L432)
+Defined in: [solcTypes.ts:456](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L456)
 
 The list of stored variables with relevant slot information, type and metadata.
 
@@ -38,7 +38,7 @@ The list of stored variables with relevant slot information, type and metadata.
 
 > **types**: `T`
 
-Defined in: [solcTypes.ts:437](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L437)
+Defined in: [solcTypes.ts:461](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L461)
 
 A record of all types relevant to the stored variables with additional encoding information.
 

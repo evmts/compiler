@@ -8,7 +8,7 @@
 
 > **SolcInputSourcesDestructibleSettings** = `object`
 
-Defined in: [solcTypes.ts:310](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L310)
+Defined in: [solcTypes.ts:333](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L333)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: [solcTypes.ts:310](https://github.com/evmts/compiler/blob/main/packa
 
 > **content**: `string`
 
-Defined in: [solcTypes.ts:314](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L314)
+Defined in: [solcTypes.ts:337](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L337)
 
 ***
 
@@ -24,4 +24,4 @@ Defined in: [solcTypes.ts:314](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **keccak256**: `HexNumber`
 
-Defined in: [solcTypes.ts:312](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L312)
+Defined in: [solcTypes.ts:335](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L335)

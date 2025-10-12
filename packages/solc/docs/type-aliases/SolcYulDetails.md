@@ -8,15 +8,15 @@
 
 > **SolcYulDetails** = `object`
 
-Defined in: [solcTypes.ts:53](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L53)
+Defined in: [solcTypes.ts:57](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L57)
 
 ## Properties
 
-### optimizerSteps
+### optimizerSteps?
 
-> **optimizerSteps**: `string`
+> `optional` **optimizerSteps**: `string`
 
-Defined in: [solcTypes.ts:69](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L69)
+Defined in: [solcTypes.ts:73](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L73)
 
 ***
 
@@ -24,4 +24,4 @@ Defined in: [solcTypes.ts:69](https://github.com/evmts/compiler/blob/main/packag
 
 > `optional` **stackAllocation**: `boolean`
 
-Defined in: [solcTypes.ts:56](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L56)
+Defined in: [solcTypes.ts:60](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L60)

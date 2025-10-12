@@ -8,15 +8,15 @@
 
 > **SolcModelChecker** = `object`
 
-Defined in: [solcTypes.ts:163](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L163)
+Defined in: [solcTypes.ts:170](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L170)
 
 ## Properties
 
-### contracts
+### contracts?
 
-> **contracts**: [`SolcModelCheckerContracts`](SolcModelCheckerContracts.md)
+> `optional` **contracts**: [`SolcModelCheckerContracts`](SolcModelCheckerContracts.md)
 
-Defined in: [solcTypes.ts:164](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L164)
+Defined in: [solcTypes.ts:172](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L172)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [solcTypes.ts:164](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **divModNoSlacks**: `boolean`
 
-Defined in: [solcTypes.ts:171](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L171)
+Defined in: [solcTypes.ts:179](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L179)
 
 ***
 
@@ -32,23 +32,23 @@ Defined in: [solcTypes.ts:171](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **engine**: `"all"` \| `"bmc"` \| `"chc"` \| `"none"`
 
-Defined in: [solcTypes.ts:173](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L173)
+Defined in: [solcTypes.ts:181](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L181)
 
 ***
 
-### extCalls
+### extCalls?
 
-> **extCalls**: `"trusted"` \| `"untrusted"`
+> `optional` **extCalls**: `"trusted"` \| `"untrusted"`
 
-Defined in: [solcTypes.ts:177](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L177)
+Defined in: [solcTypes.ts:185](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L185)
 
 ***
 
-### invariants
+### invariants?
 
-> **invariants**: (`"contract"` \| `"reentrancy"`)[]
+> `optional` **invariants**: (`"contract"` \| `"reentrancy"`)[]
 
-Defined in: [solcTypes.ts:179](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L179)
+Defined in: [solcTypes.ts:187](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L187)
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: [solcTypes.ts:179](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **showProved**: `boolean`
 
-Defined in: [solcTypes.ts:181](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L181)
+Defined in: [solcTypes.ts:189](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L189)
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: [solcTypes.ts:181](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **showUnproved**: `boolean`
 
-Defined in: [solcTypes.ts:183](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L183)
+Defined in: [solcTypes.ts:191](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L191)
 
 ***
 
@@ -72,15 +72,15 @@ Defined in: [solcTypes.ts:183](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **showUnsupported**: `boolean`
 
-Defined in: [solcTypes.ts:185](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L185)
+Defined in: [solcTypes.ts:193](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L193)
 
 ***
 
-### solvers
+### solvers?
 
-> **solvers**: (`"cvc4"` \| `"smtlib2"` \| `"z3"`)[]
+> `optional` **solvers**: (`"cvc4"` \| `"smtlib2"` \| `"z3"`)[]
 
-Defined in: [solcTypes.ts:188](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L188)
+Defined in: [solcTypes.ts:196](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L196)
 
 ***
 
@@ -88,7 +88,7 @@ Defined in: [solcTypes.ts:188](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **targets**: (`"underflow"` \| `"overflow"` \| `"assert"`)[]
 
-Defined in: [solcTypes.ts:194](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L194)
+Defined in: [solcTypes.ts:202](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L202)
 
 ***
 
@@ -96,4 +96,4 @@ Defined in: [solcTypes.ts:194](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **timeout**: `boolean`
 
-Defined in: [solcTypes.ts:199](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L199)
+Defined in: [solcTypes.ts:207](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L207)

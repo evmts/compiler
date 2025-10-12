@@ -8,7 +8,7 @@
 
 > **SolcErrorEntry** = `object`
 
-Defined in: [solcTypes.ts:349](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L349)
+Defined in: [solcTypes.ts:373](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L373)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: [solcTypes.ts:349](https://github.com/evmts/compiler/blob/main/packa
 
 > **component**: `string`
 
-Defined in: [solcTypes.ts:360](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L360)
+Defined in: [solcTypes.ts:384](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L384)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [solcTypes.ts:360](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **errorCode**: `string`
 
-Defined in: [solcTypes.ts:366](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L366)
+Defined in: [solcTypes.ts:390](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L390)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: [solcTypes.ts:366](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **formattedMessage**: `string`
 
-Defined in: [solcTypes.ts:372](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L372)
+Defined in: [solcTypes.ts:396](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L396)
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: [solcTypes.ts:372](https://github.com/evmts/compiler/blob/main/packa
 
 > **message**: `string`
 
-Defined in: [solcTypes.ts:369](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L369)
+Defined in: [solcTypes.ts:393](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L393)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: [solcTypes.ts:369](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **secondarySourceLocations**: [`SolcSecondarySourceLocation`](SolcSecondarySourceLocation.md)[]
 
-Defined in: [solcTypes.ts:354](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L354)
+Defined in: [solcTypes.ts:378](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L378)
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: [solcTypes.ts:354](https://github.com/evmts/compiler/blob/main/packa
 
 > **severity**: `"error"` \| `"warning"` \| `"info"`
 
-Defined in: [solcTypes.ts:363](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L363)
+Defined in: [solcTypes.ts:387](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L387)
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: [solcTypes.ts:363](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **sourceLocation**: [`SolcSourceLocation`](SolcSourceLocation.md)
 
-Defined in: [solcTypes.ts:351](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L351)
+Defined in: [solcTypes.ts:375](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L375)
 
 ***
 
@@ -72,4 +72,4 @@ Defined in: [solcTypes.ts:351](https://github.com/evmts/compiler/blob/main/packa
 
 > **type**: `string`
 
-Defined in: [solcTypes.ts:357](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L357)
+Defined in: [solcTypes.ts:381](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L381)

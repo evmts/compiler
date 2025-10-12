@@ -4,19 +4,25 @@
 
 [@tevm/solc](../globals.md) / SolcOutput
 
-# Type Alias: SolcOutput
+# Type Alias: SolcOutput\<T\>
 
-> **SolcOutput** = `object`
+> **SolcOutput**\<`T`\> = `object`
 
-Defined in: [solcTypes.ts:330](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L330)
+Defined in: [solcTypes.ts:353](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L353)
+
+## Type Parameters
+
+### T
+
+`T` *extends* [`SolcLanguage`](SolcLanguage.md) = [`SolcLanguage`](SolcLanguage.md)
 
 ## Properties
 
-### contracts
+### contracts?
 
-> **contracts**: `object`
+> `optional` **contracts**: `object`
 
-Defined in: [solcTypes.ts:342](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L342)
+Defined in: [solcTypes.ts:365](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L365)
 
 #### Index Signature
 
@@ -28,7 +34,7 @@ Defined in: [solcTypes.ts:342](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **errors**: [`SolcErrorEntry`](SolcErrorEntry.md)[]
 
-Defined in: [solcTypes.ts:332](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L332)
+Defined in: [solcTypes.ts:355](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L355)
 
 ***
 
@@ -36,7 +42,7 @@ Defined in: [solcTypes.ts:332](https://github.com/evmts/compiler/blob/main/packa
 
 > **sources**: `object`
 
-Defined in: [solcTypes.ts:336](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L336)
+Defined in: [solcTypes.ts:359](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L359)
 
 #### Index Signature
 

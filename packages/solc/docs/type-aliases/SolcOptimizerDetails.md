@@ -8,76 +8,76 @@
 
 > **SolcOptimizerDetails** = `object`
 
-Defined in: [solcTypes.ts:75](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L75)
+Defined in: [solcTypes.ts:79](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L79)
 
 ## Properties
 
-### constantOptimizer
+### constantOptimizer?
 
-> **constantOptimizer**: `boolean`
+> `optional` **constantOptimizer**: `boolean`
 
-Defined in: [solcTypes.ts:93](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L93)
-
-***
-
-### cse
-
-> **cse**: `boolean`
-
-Defined in: [solcTypes.ts:91](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L91)
+Defined in: [solcTypes.ts:97](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L97)
 
 ***
 
-### deduplicate
+### cse?
 
-> **deduplicate**: `boolean`
+> `optional` **cse**: `boolean`
+
+Defined in: [solcTypes.ts:95](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L95)
+
+***
+
+### deduplicate?
+
+> `optional` **deduplicate**: `boolean`
+
+Defined in: [solcTypes.ts:92](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L92)
+
+***
+
+### inliner?
+
+> `optional` **inliner**: `boolean`
+
+Defined in: [solcTypes.ts:85](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L85)
+
+***
+
+### jumpdestRemover?
+
+> `optional` **jumpdestRemover**: `boolean`
 
 Defined in: [solcTypes.ts:88](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L88)
 
 ***
 
-### inliner
+### orderLiterals?
 
-> **inliner**: `boolean`
+> `optional` **orderLiterals**: `boolean`
 
-Defined in: [solcTypes.ts:81](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L81)
-
-***
-
-### jumpdestRemover
-
-> **jumpdestRemover**: `boolean`
-
-Defined in: [solcTypes.ts:84](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L84)
+Defined in: [solcTypes.ts:90](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L90)
 
 ***
 
-### orderLiterals
+### peephole?
 
-> **orderLiterals**: `boolean`
+> `optional` **peephole**: `boolean`
 
-Defined in: [solcTypes.ts:86](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L86)
-
-***
-
-### peephole
-
-> **peephole**: `boolean`
-
-Defined in: [solcTypes.ts:78](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L78)
+Defined in: [solcTypes.ts:82](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L82)
 
 ***
 
-### yul
+### yul?
 
-> **yul**: `boolean`
+> `optional` **yul**: `boolean`
 
-Defined in: [solcTypes.ts:99](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L99)
+Defined in: [solcTypes.ts:103](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L103)
 
 ***
 
-### yulDetails
+### yulDetails?
 
-> **yulDetails**: [`SolcYulDetails`](SolcYulDetails.md)
+> `optional` **yulDetails**: [`SolcYulDetails`](SolcYulDetails.md)
 
-Defined in: [solcTypes.ts:100](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L100)
+Defined in: [solcTypes.ts:104](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L104)

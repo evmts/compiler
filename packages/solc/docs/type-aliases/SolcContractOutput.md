@@ -8,7 +8,7 @@
 
 > **SolcContractOutput** = `object`
 
-Defined in: [solcTypes.ts:393](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L393)
+Defined in: [solcTypes.ts:417](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L417)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: [solcTypes.ts:393](https://github.com/evmts/compiler/blob/main/packa
 
 > **abi**: `Abi`
 
-Defined in: [solcTypes.ts:395](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L395)
+Defined in: [solcTypes.ts:419](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L419)
 
 ***
 
@@ -24,15 +24,15 @@ Defined in: [solcTypes.ts:395](https://github.com/evmts/compiler/blob/main/packa
 
 > **devdoc**: `any`
 
-Defined in: [solcTypes.ts:409](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L409)
+Defined in: [solcTypes.ts:433](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L433)
 
 ***
 
 ### evm
 
-> **evm**: [`SolcEVMOutput`](SolcEVMOutput.md)
+> **evm**: [`SolcEvmOutput`](SolcEvmOutput.md)
 
-Defined in: [solcTypes.ts:418](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L418)
+Defined in: [solcTypes.ts:442](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L442)
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: [solcTypes.ts:418](https://github.com/evmts/compiler/blob/main/packa
 
 > **ewasm**: [`SolcEwasmOutput`](SolcEwasmOutput.md)
 
-Defined in: [solcTypes.ts:421](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L421)
+Defined in: [solcTypes.ts:445](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L445)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: [solcTypes.ts:421](https://github.com/evmts/compiler/blob/main/packa
 
 > **ir**: `string`
 
-Defined in: [solcTypes.ts:412](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L412)
+Defined in: [solcTypes.ts:436](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L436)
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: [solcTypes.ts:412](https://github.com/evmts/compiler/blob/main/packa
 
 > **metadata**: `string`
 
-Defined in: [solcTypes.ts:398](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L398)
+Defined in: [solcTypes.ts:422](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L422)
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: [solcTypes.ts:398](https://github.com/evmts/compiler/blob/main/packa
 
 > **storageLayout**: [`SolcStorageLayout`](SolcStorageLayout.md)
 
-Defined in: [solcTypes.ts:415](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L415)
+Defined in: [solcTypes.ts:439](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L439)
 
 ***
 
@@ -72,7 +72,7 @@ Defined in: [solcTypes.ts:415](https://github.com/evmts/compiler/blob/main/packa
 
 > **userdoc**: `object`
 
-Defined in: [solcTypes.ts:401](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L401)
+Defined in: [solcTypes.ts:425](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L425)
 
 #### kind
 

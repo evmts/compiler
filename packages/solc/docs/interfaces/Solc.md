@@ -6,25 +6,31 @@
 
 # Interface: Solc
 
-Defined in: [solcTypes.ts:885](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L885)
+Defined in: [solcTypes.ts:909](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L909)
 
 ## Properties
 
 ### compile()
 
-> **compile**: (`input`) => [`SolcOutput`](../type-aliases/SolcOutput.md)
+> **compile**: \<`T`\>(`input`) => [`SolcOutput`](../type-aliases/SolcOutput.md)\<`T`\>
 
-Defined in: [solcTypes.ts:891](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L891)
+Defined in: [solcTypes.ts:915](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L915)
+
+#### Type Parameters
+
+##### T
+
+`T` *extends* [`SolcLanguage`](../type-aliases/SolcLanguage.md) = [`SolcLanguage`](../type-aliases/SolcLanguage.md)
 
 #### Parameters
 
 ##### input
 
-[`SolcInputDescription`](../type-aliases/SolcInputDescription.md)
+[`SolcInputDescription`](../type-aliases/SolcInputDescription.md)\<`T`\>
 
 #### Returns
 
-[`SolcOutput`](../type-aliases/SolcOutput.md)
+[`SolcOutput`](../type-aliases/SolcOutput.md)\<`T`\>
 
 ***
 
@@ -32,7 +38,7 @@ Defined in: [solcTypes.ts:891](https://github.com/evmts/compiler/blob/main/packa
 
 > **features**: `FeaturesConfig`
 
-Defined in: [solcTypes.ts:890](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L890)
+Defined in: [solcTypes.ts:914](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L914)
 
 ***
 
@@ -40,7 +46,7 @@ Defined in: [solcTypes.ts:890](https://github.com/evmts/compiler/blob/main/packa
 
 > **license**: `string`
 
-Defined in: [solcTypes.ts:888](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L888)
+Defined in: [solcTypes.ts:912](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L912)
 
 ***
 
@@ -48,7 +54,7 @@ Defined in: [solcTypes.ts:888](https://github.com/evmts/compiler/blob/main/packa
 
 > **loadRemoteVersion**: (`versionString`, `callback`) => `void`
 
-Defined in: [solcTypes.ts:892](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L892)
+Defined in: [solcTypes.ts:916](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L916)
 
 #### Parameters
 
@@ -70,7 +76,7 @@ Defined in: [solcTypes.ts:892](https://github.com/evmts/compiler/blob/main/packa
 
 > **lowlevel**: `LowLevelConfig`
 
-Defined in: [solcTypes.ts:889](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L889)
+Defined in: [solcTypes.ts:913](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L913)
 
 ***
 
@@ -78,7 +84,7 @@ Defined in: [solcTypes.ts:889](https://github.com/evmts/compiler/blob/main/packa
 
 > **semver**: `string`
 
-Defined in: [solcTypes.ts:887](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L887)
+Defined in: [solcTypes.ts:911](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L911)
 
 ***
 
@@ -86,7 +92,7 @@ Defined in: [solcTypes.ts:887](https://github.com/evmts/compiler/blob/main/packa
 
 > **setupMethods**: (`soljson`) => `void`
 
-Defined in: [solcTypes.ts:893](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L893)
+Defined in: [solcTypes.ts:917](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L917)
 
 #### Parameters
 
@@ -104,4 +110,4 @@ Defined in: [solcTypes.ts:893](https://github.com/evmts/compiler/blob/main/packa
 
 > **version**: `string`
 
-Defined in: [solcTypes.ts:886](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L886)
+Defined in: [solcTypes.ts:910](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L910)

@@ -8,15 +8,15 @@
 
 > **SolcOptimizer** = `object`
 
-Defined in: [solcTypes.ts:104](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L104)
+Defined in: [solcTypes.ts:108](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L108)
 
 ## Properties
 
-### details
+### details?
 
-> **details**: [`SolcOptimizerDetails`](SolcOptimizerDetails.md)
+> `optional` **details**: [`SolcOptimizerDetails`](SolcOptimizerDetails.md)
 
-Defined in: [solcTypes.ts:114](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L114)
+Defined in: [solcTypes.ts:121](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L121)
 
 ***
 
@@ -24,12 +24,12 @@ Defined in: [solcTypes.ts:114](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **enabled**: `boolean`
 
-Defined in: [solcTypes.ts:109](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L109)
+Defined in: [solcTypes.ts:113](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L113)
 
 ***
 
-### runs
+### runs?
 
-> **runs**: `number`
+> `optional` **runs**: `number`
 
-Defined in: [solcTypes.ts:113](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L113)
+Defined in: [solcTypes.ts:117](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L117)

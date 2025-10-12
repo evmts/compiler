@@ -6,7 +6,7 @@
 
 # Interface: SolcStorageLayoutDynamicArrayType
 
-Defined in: [solcTypes.ts:540](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L540)
+Defined in: [solcTypes.ts:564](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L564)
 
 A storage layout type that is laid out in a keccak-256 hash-based method.
 
@@ -20,7 +20,7 @@ A storage layout type that is laid out in a keccak-256 hash-based method.
 
 > **base**: `` `t_${string}` ``
 
-Defined in: [solcTypes.ts:545](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L545)
+Defined in: [solcTypes.ts:569](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L569)
 
 The base type of the dynamic array
 
@@ -30,7 +30,7 @@ The base type of the dynamic array
 
 > **encoding**: `"dynamic_array"`
 
-Defined in: [solcTypes.ts:541](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L541)
+Defined in: [solcTypes.ts:565](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L565)
 
 How the data is encoded in storage
 
@@ -49,7 +49,7 @@ How the data is encoded in storage
 
 > **label**: `string`
 
-Defined in: [solcTypes.ts:499](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L499)
+Defined in: [solcTypes.ts:523](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L523)
 
 The canonical type name
 
@@ -63,7 +63,7 @@ The canonical type name
 
 > **numberOfBytes**: `string`
 
-Defined in: [solcTypes.ts:505](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L505)
+Defined in: [solcTypes.ts:529](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L529)
 
 The number of used bytes (as a decimal string)
 

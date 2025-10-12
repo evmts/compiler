@@ -8,7 +8,7 @@
 
 > **SolcSettings** = `object`
 
-Defined in: [solcTypes.ts:237](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L237)
+Defined in: [solcTypes.ts:261](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L261)
 
 ## Properties
 
@@ -16,15 +16,15 @@ Defined in: [solcTypes.ts:237](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **debug**: [`SolcDebugSettings`](SolcDebugSettings.md)
 
-Defined in: [solcTypes.ts:251](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L251)
+Defined in: [solcTypes.ts:274](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L274)
 
 ***
 
 ### evmVersion?
 
-> `optional` **evmVersion**: `"byzantium"` \| `"constantinople"` \| `"petersburg"` \| `"istanbul"` \| `"berlin"` \| `"london"` \| `"paris"`
+> `optional` **evmVersion**: [`SolcEvmVersion`](SolcEvmVersion.md)
 
-Defined in: [solcTypes.ts:246](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L246)
+Defined in: [solcTypes.ts:269](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L269)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: [solcTypes.ts:246](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **libraries**: `Record`\<`string`, `Record`\<`string`, `string`\>\>
 
-Defined in: [solcTypes.ts:260](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L260)
+Defined in: [solcTypes.ts:283](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L283)
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: [solcTypes.ts:260](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **metadata**: [`SolcMetadataSettings`](SolcMetadataSettings.md)
 
-Defined in: [solcTypes.ts:253](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L253)
+Defined in: [solcTypes.ts:276](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L276)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: [solcTypes.ts:253](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **modelChecker**: [`SolcModelChecker`](SolcModelChecker.md)
 
-Defined in: [solcTypes.ts:307](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L307)
+Defined in: [solcTypes.ts:330](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L330)
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: [solcTypes.ts:307](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **optimizer**: [`SolcOptimizer`](SolcOptimizer.md)
 
-Defined in: [solcTypes.ts:242](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L242)
+Defined in: [solcTypes.ts:266](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L266)
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: [solcTypes.ts:242](https://github.com/evmts/compiler/blob/main/packa
 
 > **outputSelection**: [`SolcOutputSelection`](SolcOutputSelection.md)
 
-Defined in: [solcTypes.ts:305](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L305)
+Defined in: [solcTypes.ts:328](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L328)
 
 ***
 
@@ -72,7 +72,7 @@ Defined in: [solcTypes.ts:305](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **remappings**: [`SolcRemapping`](SolcRemapping.md)
 
-Defined in: [solcTypes.ts:241](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L241)
+Defined in: [solcTypes.ts:265](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L265)
 
 ***
 
@@ -80,7 +80,7 @@ Defined in: [solcTypes.ts:241](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **stopAfter**: `"parsing"`
 
-Defined in: [solcTypes.ts:239](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L239)
+Defined in: [solcTypes.ts:263](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L263)
 
 ***
 
@@ -88,4 +88,4 @@ Defined in: [solcTypes.ts:239](https://github.com/evmts/compiler/blob/main/packa
 
 > `optional` **viaIR**: `boolean`
 
-Defined in: [solcTypes.ts:249](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L249)
+Defined in: [solcTypes.ts:272](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L272)

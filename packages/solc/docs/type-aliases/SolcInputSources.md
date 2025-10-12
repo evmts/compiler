@@ -4,12 +4,18 @@
 
 [@tevm/solc](../globals.md) / SolcInputSources
 
-# Type Alias: SolcInputSources
+# Type Alias: SolcInputSources\<T\>
 
-> **SolcInputSources** = `object`
+> **SolcInputSources**\<`T`\> = `object`
 
-Defined in: [solcTypes.ts:317](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L317)
+Defined in: [solcTypes.ts:340](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L340)
+
+## Type Parameters
+
+### T
+
+`T` *extends* [`SolcLanguage`](SolcLanguage.md) = [`SolcLanguage`](SolcLanguage.md)
 
 ## Index Signature
 
-\[`globalName`: `string`\]: [`SolcInputSource`](SolcInputSource.md) & `object`
+\[`globalName`: `string`\]: [`SolcInputSource`](SolcInputSource.md)\<`T`\> & `object`

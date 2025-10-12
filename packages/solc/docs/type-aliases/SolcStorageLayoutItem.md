@@ -8,7 +8,7 @@
 
 > **SolcStorageLayoutItem**\<`T`\> = `object`
 
-Defined in: [solcTypes.ts:444](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L444)
+Defined in: [solcTypes.ts:468](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L468)
 
 An item present in the contract's storage
 
@@ -28,7 +28,7 @@ An item present in the contract's storage
 
 > **astId**: `number`
 
-Defined in: [solcTypes.ts:448](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L448)
+Defined in: [solcTypes.ts:472](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L472)
 
 The id of the AST node of the state variable's declaration
 
@@ -38,7 +38,7 @@ The id of the AST node of the state variable's declaration
 
 > **contract**: `string`
 
-Defined in: [solcTypes.ts:452](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L452)
+Defined in: [solcTypes.ts:476](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L476)
 
 The name of the contract including its path as prefix
 
@@ -48,7 +48,7 @@ The name of the contract including its path as prefix
 
 > **label**: `string`
 
-Defined in: [solcTypes.ts:456](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L456)
+Defined in: [solcTypes.ts:480](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L480)
 
 The name of the state variable
 
@@ -58,7 +58,7 @@ The name of the state variable
 
 > **offset**: `number`
 
-Defined in: [solcTypes.ts:460](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L460)
+Defined in: [solcTypes.ts:484](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L484)
 
 The offset in bytes within the storage slot according to the encoding
 
@@ -68,7 +68,7 @@ The offset in bytes within the storage slot according to the encoding
 
 > **slot**: `string`
 
-Defined in: [solcTypes.ts:464](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L464)
+Defined in: [solcTypes.ts:488](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L488)
 
 The storage slot where the state variable resides or starts
 
@@ -78,6 +78,6 @@ The storage slot where the state variable resides or starts
 
 > **type**: keyof `T`
 
-Defined in: [solcTypes.ts:468](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L468)
+Defined in: [solcTypes.ts:492](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L492)
 
 The identifier used as a key to the variable's type information in the [SolcStorageLayoutTypes](SolcStorageLayoutTypes.md) record
