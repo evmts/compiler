@@ -8,7 +8,7 @@
 
 > **SolcGeneratedSource** = `object`
 
-Defined in: solcTypes.ts:620
+Defined in: [solcTypes.ts:620](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L620)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: solcTypes.ts:620
 
 > **ast**: `any`
 
-Defined in: solcTypes.ts:622
+Defined in: [solcTypes.ts:622](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L622)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: solcTypes.ts:622
 
 > **contents**: `string`
 
-Defined in: solcTypes.ts:625
+Defined in: [solcTypes.ts:625](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L625)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: solcTypes.ts:625
 
 > **id**: `number`
 
-Defined in: solcTypes.ts:628
+Defined in: [solcTypes.ts:628](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L628)
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: solcTypes.ts:628
 
 > **language**: `string`
 
-Defined in: solcTypes.ts:629
+Defined in: [solcTypes.ts:629](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L629)
 
 ***
 
@@ -48,4 +48,4 @@ Defined in: solcTypes.ts:629
 
 > **name**: `string`
 
-Defined in: solcTypes.ts:630
+Defined in: [solcTypes.ts:630](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L630)

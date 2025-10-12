@@ -8,7 +8,7 @@
 
 > **generateRuntime**(`artifacts`, `moduleType`, `includeBytecode`, `tevmPackage`): `Effect`\<`string`, `never`, `never`\>
 
-Defined in: generateRuntime.js:80
+Defined in: [generateRuntime.js:80](https://github.com/evmts/compiler/blob/main/packages/runtime/src/generateRuntime.js#L80)
 
 Generates a complete runtime module from Solidity compilation artifacts.
 

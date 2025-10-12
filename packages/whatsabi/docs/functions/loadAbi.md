@@ -8,7 +8,7 @@
 
 > **loadAbi**(`options`): `Promise`\<`AutoloadResult`\>
 
-Defined in: packages/whatsabi/src/loadAbi.js:12
+Defined in: [packages/whatsabi/src/loadAbi.js:12](https://github.com/evmts/compiler/blob/main/packages/whatsabi/src/loadAbi.js#L12)
 
 ## Parameters
 

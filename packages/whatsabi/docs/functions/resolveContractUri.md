@@ -8,7 +8,7 @@
 
 > **resolveContractUri**(`contractUri`, `config`): `Promise`\<`undefined` \| \{ `abi`: `Abi`; `address`: `` `0x${string}` ``; `deployedBytecode`: `` `0x${string}` ``; \}\>
 
-Defined in: packages/whatsabi/src/resolveContractUri.js:34
+Defined in: [packages/whatsabi/src/resolveContractUri.js:34](https://github.com/evmts/compiler/blob/main/packages/whatsabi/src/resolveContractUri.js#L34)
 
 ## Parameters
 

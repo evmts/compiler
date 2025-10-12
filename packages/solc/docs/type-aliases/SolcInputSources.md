@@ -8,7 +8,7 @@
 
 > **SolcInputSources** = `object`
 
-Defined in: solcTypes.ts:317
+Defined in: [solcTypes.ts:317](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L317)
 
 ## Index Signature
 

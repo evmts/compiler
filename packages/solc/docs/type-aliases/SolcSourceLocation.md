@@ -8,7 +8,7 @@
 
 > **SolcSourceLocation** = `object`
 
-Defined in: solcTypes.ts:375
+Defined in: [solcTypes.ts:375](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L375)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: solcTypes.ts:375
 
 > **end**: `number`
 
-Defined in: solcTypes.ts:378
+Defined in: [solcTypes.ts:378](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L378)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: solcTypes.ts:378
 
 > **file**: `string`
 
-Defined in: solcTypes.ts:376
+Defined in: [solcTypes.ts:376](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L376)
 
 ***
 
@@ -32,4 +32,4 @@ Defined in: solcTypes.ts:376
 
 > **start**: `number`
 
-Defined in: solcTypes.ts:377
+Defined in: [solcTypes.ts:377](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L377)

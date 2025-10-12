@@ -8,7 +8,7 @@
 
 > **SolcInputDescription** = `object`
 
-Defined in: solcTypes.ts:323
+Defined in: [solcTypes.ts:323](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L323)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: solcTypes.ts:323
 
 > **language**: [`SolcLanguage`](SolcLanguage.md)
 
-Defined in: solcTypes.ts:324
+Defined in: [solcTypes.ts:324](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L324)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: solcTypes.ts:324
 
 > `optional` **settings**: [`SolcSettings`](SolcSettings.md)
 
-Defined in: solcTypes.ts:327
+Defined in: [solcTypes.ts:327](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L327)
 
 ***
 
@@ -32,4 +32,4 @@ Defined in: solcTypes.ts:327
 
 > **sources**: [`SolcInputSources`](SolcInputSources.md)
 
-Defined in: solcTypes.ts:326
+Defined in: [solcTypes.ts:326](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L326)

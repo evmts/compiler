@@ -8,7 +8,7 @@
 
 > **loadConfig**(`configFilePath`): `Effect`\<[`ResolvedCompilerConfig`](../../types/type-aliases/ResolvedCompilerConfig.md), [`LoadConfigError`](../classes/LoadConfigError.md), `never`\>
 
-Defined in: packages/config/src/loadConfig.js:55
+Defined in: [packages/config/src/loadConfig.js:55](https://github.com/evmts/compiler/blob/main/packages/config/src/loadConfig.js#L55)
 
 Loads an Tevm config from the given path
 

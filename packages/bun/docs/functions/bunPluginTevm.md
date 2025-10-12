@@ -8,7 +8,7 @@
 
 > **bunPluginTevm**(`options`): `BunPlugin`
 
-Defined in: packages/bun/src/bunPluginTevm.js:114
+Defined in: [packages/bun/src/bunPluginTevm.js:114](https://github.com/evmts/compiler/blob/main/packages/bun/src/bunPluginTevm.js#L114)
 
 Creates a Bun plugin for Tevm that enables direct Solidity imports in JavaScript and TypeScript.
 

@@ -8,7 +8,7 @@
 
 > **ModuleType** = `"cjs"` \| `"dts"` \| `"ts"` \| `"mjs"`
 
-Defined in: types.ts:20
+Defined in: [types.ts:20](https://github.com/evmts/compiler/blob/main/packages/runtime/src/types.ts#L20)
 
 Represents the different output module types supported by the Tevm runtime.
 

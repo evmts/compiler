@@ -8,7 +8,7 @@
 
 > **tevmUnplugin**(`options`, `meta`): `UnpluginOptions`
 
-Defined in: packages/unplugin/src/tevmUnplugin.js:37
+Defined in: [packages/unplugin/src/tevmUnplugin.js:37](https://github.com/evmts/compiler/blob/main/packages/unplugin/src/tevmUnplugin.js#L37)
 
 ## Parameters
 

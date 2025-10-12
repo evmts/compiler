@@ -6,7 +6,7 @@
 
 # Interface: Solc
 
-Defined in: solcTypes.ts:885
+Defined in: [solcTypes.ts:885](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L885)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: solcTypes.ts:885
 
 > **compile**: (`input`) => [`SolcOutput`](../type-aliases/SolcOutput.md)
 
-Defined in: solcTypes.ts:891
+Defined in: [solcTypes.ts:891](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L891)
 
 #### Parameters
 
@@ -32,7 +32,7 @@ Defined in: solcTypes.ts:891
 
 > **features**: `FeaturesConfig`
 
-Defined in: solcTypes.ts:890
+Defined in: [solcTypes.ts:890](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L890)
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: solcTypes.ts:890
 
 > **license**: `string`
 
-Defined in: solcTypes.ts:888
+Defined in: [solcTypes.ts:888](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L888)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: solcTypes.ts:888
 
 > **loadRemoteVersion**: (`versionString`, `callback`) => `void`
 
-Defined in: solcTypes.ts:892
+Defined in: [solcTypes.ts:892](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L892)
 
 #### Parameters
 
@@ -70,7 +70,7 @@ Defined in: solcTypes.ts:892
 
 > **lowlevel**: `LowLevelConfig`
 
-Defined in: solcTypes.ts:889
+Defined in: [solcTypes.ts:889](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L889)
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: solcTypes.ts:889
 
 > **semver**: `string`
 
-Defined in: solcTypes.ts:887
+Defined in: [solcTypes.ts:887](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L887)
 
 ***
 
@@ -86,7 +86,7 @@ Defined in: solcTypes.ts:887
 
 > **setupMethods**: (`soljson`) => `void`
 
-Defined in: solcTypes.ts:893
+Defined in: [solcTypes.ts:893](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L893)
 
 #### Parameters
 
@@ -104,4 +104,4 @@ Defined in: solcTypes.ts:893
 
 > **version**: `string`
 
-Defined in: solcTypes.ts:886
+Defined in: [solcTypes.ts:886](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L886)

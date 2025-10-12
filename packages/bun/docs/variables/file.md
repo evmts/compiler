@@ -8,7 +8,7 @@
 
 > `const` **file**: \{(`path`, `options?`): `BunFile`; (`path`, `options?`): `BunFile`; (`fileDescriptor`, `options?`): `BunFile`; \}
 
-Defined in: packages/bun/src/bunFile.js:26
+Defined in: [packages/bun/src/bunFile.js:26](https://github.com/evmts/compiler/blob/main/packages/bun/src/bunFile.js#L26)
 
 Re-exports the Bun file API for working with files in the file system.
 The Bun file API provides an optimized interface for file operations with
