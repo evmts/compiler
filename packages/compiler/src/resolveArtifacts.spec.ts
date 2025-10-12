@@ -150,7 +150,6 @@ describe('resolveArtifacts', () => {
 			},
 		} as SolcInputDescription
 
-		// @ts-expect-error - This is a mock for testing purposes
 		const mockSolcOutput = {
 			contracts: {
 				'test.sol': complexContracts,

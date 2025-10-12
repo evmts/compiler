@@ -124,7 +124,7 @@ export const compileContract = async (filePath, basedir, config, includeAst, inc
 			}),
 		)
 		return {
-			artifacts: output.contracts[entryModule.id],
+			artifacts: output.contracts?.[entryModule.id],
 			modules: /** @type {any} */ (modules),
 			asts: /** @type {any} */ (asts),
 			solcInput: input,
@@ -132,7 +132,7 @@ export const compileContract = async (filePath, basedir, config, includeAst, inc
 		}
 	}
 	return {
-		artifacts: output.contracts[entryModule.id],
+		artifacts: output.contracts?.[entryModule.id],
 		modules: /** @type {any} */ (modules),
 		asts: /** @type {any} */ (undefined),
 		solcInput: input,
