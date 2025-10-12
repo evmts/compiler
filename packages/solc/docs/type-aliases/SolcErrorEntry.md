@@ -8,7 +8,7 @@
 
 > **SolcErrorEntry** = `object`
 
-Defined in: solcTypes.ts:349
+Defined in: [solcTypes.ts:349](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L349)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: solcTypes.ts:349
 
 > **component**: `string`
 
-Defined in: solcTypes.ts:360
+Defined in: [solcTypes.ts:360](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L360)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: solcTypes.ts:360
 
 > `optional` **errorCode**: `string`
 
-Defined in: solcTypes.ts:366
+Defined in: [solcTypes.ts:366](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L366)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: solcTypes.ts:366
 
 > `optional` **formattedMessage**: `string`
 
-Defined in: solcTypes.ts:372
+Defined in: [solcTypes.ts:372](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L372)
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: solcTypes.ts:372
 
 > **message**: `string`
 
-Defined in: solcTypes.ts:369
+Defined in: [solcTypes.ts:369](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L369)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: solcTypes.ts:369
 
 > `optional` **secondarySourceLocations**: [`SolcSecondarySourceLocation`](SolcSecondarySourceLocation.md)[]
 
-Defined in: solcTypes.ts:354
+Defined in: [solcTypes.ts:354](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L354)
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: solcTypes.ts:354
 
 > **severity**: `"error"` \| `"warning"` \| `"info"`
 
-Defined in: solcTypes.ts:363
+Defined in: [solcTypes.ts:363](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L363)
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: solcTypes.ts:363
 
 > `optional` **sourceLocation**: [`SolcSourceLocation`](SolcSourceLocation.md)
 
-Defined in: solcTypes.ts:351
+Defined in: [solcTypes.ts:351](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L351)
 
 ***
 
@@ -72,4 +72,4 @@ Defined in: solcTypes.ts:351
 
 > **type**: `string`
 
-Defined in: solcTypes.ts:357
+Defined in: [solcTypes.ts:357](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L357)

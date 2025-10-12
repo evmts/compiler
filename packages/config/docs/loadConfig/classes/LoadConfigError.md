@@ -6,7 +6,7 @@
 
 # Class: LoadConfigError
 
-Defined in: packages/config/src/loadConfig.js:16
+Defined in: [packages/config/src/loadConfig.js:16](https://github.com/evmts/compiler/blob/main/packages/config/src/loadConfig.js#L16)
 
 Error class for [loadConfig](../functions/loadConfig.md)
 
@@ -20,7 +20,7 @@ Error class for [loadConfig](../functions/loadConfig.md)
 
 > **new LoadConfigError**(`configFilePath`, `underlyingError`): `LoadConfigError`
 
-Defined in: packages/config/src/loadConfig.js:30
+Defined in: [packages/config/src/loadConfig.js:30](https://github.com/evmts/compiler/blob/main/packages/config/src/loadConfig.js#L30)
 
 #### Parameters
 
@@ -46,7 +46,7 @@ Defined in: packages/config/src/loadConfig.js:30
 
 > **\_tag**: `"FoundryNotFoundError"` \| `"FoundryConfigError"` \| `"InvalidRemappingsError"` \| `"InvalidConfigError"` \| `"FailedToReadConfigError"` \| `"InvalidJsonConfigError"` \| `"ParseJsonError"` \| `"NoPluginInTsConfigFoundError"`
 
-Defined in: packages/config/src/loadConfig.js:25
+Defined in: [packages/config/src/loadConfig.js:25](https://github.com/evmts/compiler/blob/main/packages/config/src/loadConfig.js#L25)
 
 ***
 
@@ -78,7 +78,7 @@ Defined in: node\_modules/.pnpm/typescript@5.9.3/node\_modules/typescript/lib/li
 
 > **name**: `"FoundryNotFoundError"` \| `"FoundryConfigError"` \| `"InvalidRemappingsError"` \| `"InvalidConfigError"` \| `"FailedToReadConfigError"` \| `"InvalidJsonConfigError"` \| `"ParseJsonError"` \| `"NoPluginInTsConfigFoundError"`
 
-Defined in: packages/config/src/loadConfig.js:21
+Defined in: [packages/config/src/loadConfig.js:21](https://github.com/evmts/compiler/blob/main/packages/config/src/loadConfig.js#L21)
 
 #### Overrides
 

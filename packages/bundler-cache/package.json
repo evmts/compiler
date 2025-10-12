@@ -14,8 +14,8 @@
 	],
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/evmts/tevm-monorepo.git",
-		"directory": "bundler-packages/bundler-cache"
+		"url": "git+https://github.com/evmts/compiler.git",
+		"directory": "packages/bundler-cache"
 	},
 	"license": "MIT",
 	"contributors": [

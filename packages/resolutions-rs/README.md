@@ -143,8 +143,8 @@ If you want to build the package from source, you'll need:
 npm install -g @napi-rs/cli
 
 # Clone the repository
-git clone https://github.com/evmts/tevm-monorepo.git
-cd tevm-monorepo/bundler-packages/resolutions-rs
+git clone https://github.com/evmts/compiler.git
+cd compiler/packages/resolutions-rs
 
 # Build the package
 npm run build

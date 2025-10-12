@@ -8,7 +8,7 @@
 
 > **SolcContractOutput** = `object`
 
-Defined in: solcTypes.ts:393
+Defined in: [solcTypes.ts:393](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L393)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: solcTypes.ts:393
 
 > **abi**: `Abi`
 
-Defined in: solcTypes.ts:395
+Defined in: [solcTypes.ts:395](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L395)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: solcTypes.ts:395
 
 > **devdoc**: `any`
 
-Defined in: solcTypes.ts:409
+Defined in: [solcTypes.ts:409](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L409)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: solcTypes.ts:409
 
 > **evm**: [`SolcEVMOutput`](SolcEVMOutput.md)
 
-Defined in: solcTypes.ts:418
+Defined in: [solcTypes.ts:418](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L418)
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: solcTypes.ts:418
 
 > **ewasm**: [`SolcEwasmOutput`](SolcEwasmOutput.md)
 
-Defined in: solcTypes.ts:421
+Defined in: [solcTypes.ts:421](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L421)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: solcTypes.ts:421
 
 > **ir**: `string`
 
-Defined in: solcTypes.ts:412
+Defined in: [solcTypes.ts:412](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L412)
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: solcTypes.ts:412
 
 > **metadata**: `string`
 
-Defined in: solcTypes.ts:398
+Defined in: [solcTypes.ts:398](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L398)
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: solcTypes.ts:398
 
 > **storageLayout**: [`SolcStorageLayout`](SolcStorageLayout.md)
 
-Defined in: solcTypes.ts:415
+Defined in: [solcTypes.ts:415](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L415)
 
 ***
 
@@ -72,7 +72,7 @@ Defined in: solcTypes.ts:415
 
 > **userdoc**: `object`
 
-Defined in: solcTypes.ts:401
+Defined in: [solcTypes.ts:401](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L401)
 
 #### kind
 

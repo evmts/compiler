@@ -8,7 +8,7 @@
 
 > **SolcOutput** = `object`
 
-Defined in: solcTypes.ts:330
+Defined in: [solcTypes.ts:330](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L330)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: solcTypes.ts:330
 
 > **contracts**: `object`
 
-Defined in: solcTypes.ts:342
+Defined in: [solcTypes.ts:342](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L342)
 
 #### Index Signature
 
@@ -28,7 +28,7 @@ Defined in: solcTypes.ts:342
 
 > `optional` **errors**: [`SolcErrorEntry`](SolcErrorEntry.md)[]
 
-Defined in: solcTypes.ts:332
+Defined in: [solcTypes.ts:332](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L332)
 
 ***
 
@@ -36,7 +36,7 @@ Defined in: solcTypes.ts:332
 
 > **sources**: `object`
 
-Defined in: solcTypes.ts:336
+Defined in: [solcTypes.ts:336](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L336)
 
 #### Index Signature
 

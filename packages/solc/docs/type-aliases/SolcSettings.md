@@ -8,7 +8,7 @@
 
 > **SolcSettings** = `object`
 
-Defined in: solcTypes.ts:237
+Defined in: [solcTypes.ts:237](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L237)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: solcTypes.ts:237
 
 > `optional` **debug**: [`SolcDebugSettings`](SolcDebugSettings.md)
 
-Defined in: solcTypes.ts:251
+Defined in: [solcTypes.ts:251](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L251)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: solcTypes.ts:251
 
 > `optional` **evmVersion**: `"byzantium"` \| `"constantinople"` \| `"petersburg"` \| `"istanbul"` \| `"berlin"` \| `"london"` \| `"paris"`
 
-Defined in: solcTypes.ts:246
+Defined in: [solcTypes.ts:246](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L246)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: solcTypes.ts:246
 
 > `optional` **libraries**: `Record`\<`string`, `Record`\<`string`, `string`\>\>
 
-Defined in: solcTypes.ts:260
+Defined in: [solcTypes.ts:260](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L260)
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: solcTypes.ts:260
 
 > `optional` **metadata**: [`SolcMetadataSettings`](SolcMetadataSettings.md)
 
-Defined in: solcTypes.ts:253
+Defined in: [solcTypes.ts:253](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L253)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: solcTypes.ts:253
 
 > `optional` **modelChecker**: [`SolcModelChecker`](SolcModelChecker.md)
 
-Defined in: solcTypes.ts:307
+Defined in: [solcTypes.ts:307](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L307)
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: solcTypes.ts:307
 
 > `optional` **optimizer**: [`SolcOptimizer`](SolcOptimizer.md)
 
-Defined in: solcTypes.ts:242
+Defined in: [solcTypes.ts:242](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L242)
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: solcTypes.ts:242
 
 > **outputSelection**: [`SolcOutputSelection`](SolcOutputSelection.md)
 
-Defined in: solcTypes.ts:305
+Defined in: [solcTypes.ts:305](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L305)
 
 ***
 
@@ -72,7 +72,7 @@ Defined in: solcTypes.ts:305
 
 > `optional` **remappings**: [`SolcRemapping`](SolcRemapping.md)
 
-Defined in: solcTypes.ts:241
+Defined in: [solcTypes.ts:241](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L241)
 
 ***
 
@@ -80,7 +80,7 @@ Defined in: solcTypes.ts:241
 
 > `optional` **stopAfter**: `"parsing"`
 
-Defined in: solcTypes.ts:239
+Defined in: [solcTypes.ts:239](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L239)
 
 ***
 
@@ -88,4 +88,4 @@ Defined in: solcTypes.ts:239
 
 > `optional` **viaIR**: `boolean`
 
-Defined in: solcTypes.ts:249
+Defined in: [solcTypes.ts:249](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L249)

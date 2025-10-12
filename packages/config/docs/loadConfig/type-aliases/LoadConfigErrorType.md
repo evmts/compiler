@@ -8,6 +8,6 @@
 
 > **LoadConfigErrorType**\<\> = `LoadTsConfigError` \| `GetTevmConfigFromTsConfigError` \| `LoadFoundryConfigError` \| `InvalidJsonConfigError`
 
-Defined in: packages/config/src/loadConfig.js:10
+Defined in: [packages/config/src/loadConfig.js:10](https://github.com/evmts/compiler/blob/main/packages/config/src/loadConfig.js#L10)
 
 ## Type Parameters

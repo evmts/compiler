@@ -8,7 +8,7 @@
 
 > **SolcOptimizerDetails** = `object`
 
-Defined in: solcTypes.ts:75
+Defined in: [solcTypes.ts:75](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L75)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: solcTypes.ts:75
 
 > **constantOptimizer**: `boolean`
 
-Defined in: solcTypes.ts:93
+Defined in: [solcTypes.ts:93](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L93)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: solcTypes.ts:93
 
 > **cse**: `boolean`
 
-Defined in: solcTypes.ts:91
+Defined in: [solcTypes.ts:91](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L91)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: solcTypes.ts:91
 
 > **deduplicate**: `boolean`
 
-Defined in: solcTypes.ts:88
+Defined in: [solcTypes.ts:88](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L88)
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: solcTypes.ts:88
 
 > **inliner**: `boolean`
 
-Defined in: solcTypes.ts:81
+Defined in: [solcTypes.ts:81](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L81)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: solcTypes.ts:81
 
 > **jumpdestRemover**: `boolean`
 
-Defined in: solcTypes.ts:84
+Defined in: [solcTypes.ts:84](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L84)
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: solcTypes.ts:84
 
 > **orderLiterals**: `boolean`
 
-Defined in: solcTypes.ts:86
+Defined in: [solcTypes.ts:86](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L86)
 
 ***
 
@@ -64,7 +64,7 @@ Defined in: solcTypes.ts:86
 
 > **peephole**: `boolean`
 
-Defined in: solcTypes.ts:78
+Defined in: [solcTypes.ts:78](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L78)
 
 ***
 
@@ -72,7 +72,7 @@ Defined in: solcTypes.ts:78
 
 > **yul**: `boolean`
 
-Defined in: solcTypes.ts:99
+Defined in: [solcTypes.ts:99](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L99)
 
 ***
 
@@ -80,4 +80,4 @@ Defined in: solcTypes.ts:99
 
 > **yulDetails**: [`SolcYulDetails`](SolcYulDetails.md)
 
-Defined in: solcTypes.ts:100
+Defined in: [solcTypes.ts:100](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L100)

@@ -8,7 +8,7 @@
 
 > **defineConfig**(`configFactory`): `object`
 
-Defined in: packages/config/src/defineConfig.js:48
+Defined in: [packages/config/src/defineConfig.js:48](https://github.com/evmts/compiler/blob/main/packages/config/src/defineConfig.js#L48)
 
 Typesafe way to create an Tevm CompilerConfig
 

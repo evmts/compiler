@@ -8,7 +8,7 @@
 
 > `const` **vitePluginTevm**: (`options?`) => `Plugin$1`
 
-Defined in: packages/vite/src/vitePluginTevm.js:54
+Defined in: [packages/vite/src/vitePluginTevm.js:54](https://github.com/evmts/compiler/blob/main/packages/vite/src/vitePluginTevm.js#L54)
 
 Creates a Vite plugin for Tevm that enables direct Solidity imports in JavaScript
 and TypeScript code.

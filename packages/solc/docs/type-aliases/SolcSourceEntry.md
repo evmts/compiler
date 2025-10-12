@@ -8,7 +8,7 @@
 
 > **SolcSourceEntry** = `object`
 
-Defined in: solcTypes.ts:385
+Defined in: [solcTypes.ts:385](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L385)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: solcTypes.ts:385
 
 > **ast**: `any`
 
-Defined in: solcTypes.ts:390
+Defined in: [solcTypes.ts:390](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L390)
 
 ***
 
@@ -24,4 +24,4 @@ Defined in: solcTypes.ts:390
 
 > **id**: `number`
 
-Defined in: solcTypes.ts:387
+Defined in: [solcTypes.ts:387](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L387)

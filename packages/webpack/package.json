@@ -12,8 +12,8 @@
 	],
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/evmts/tevm-monorepo.git",
-		"directory": "bundler-packages/webpack"
+		"url": "git+https://github.com/evmts/compiler.git",
+		"directory": "packages/webpack"
 	},
 	"license": "MIT",
 	"contributors": [

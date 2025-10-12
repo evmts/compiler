@@ -8,7 +8,7 @@
 
 > `const` **knownChains**: `object`
 
-Defined in: packages/whatsabi/src/knownChains.js:6
+Defined in: [packages/whatsabi/src/knownChains.js:6](https://github.com/evmts/compiler/blob/main/packages/whatsabi/src/knownChains.js#L6)
 
 ## Type Declaration
 

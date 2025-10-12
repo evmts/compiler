@@ -8,7 +8,7 @@
 
 > **parseUri**(`uri`): `undefined` \| [`ParsedUri`](../type-aliases/ParsedUri.md)
 
-Defined in: packages/whatsabi/src/parseUri.js:8
+Defined in: [packages/whatsabi/src/parseUri.js:8](https://github.com/evmts/compiler/blob/main/packages/whatsabi/src/parseUri.js#L8)
 
 ## Parameters
 

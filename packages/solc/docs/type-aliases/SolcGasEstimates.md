@@ -8,7 +8,7 @@
 
 > **SolcGasEstimates** = `object`
 
-Defined in: solcTypes.ts:633
+Defined in: [solcTypes.ts:633](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L633)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: solcTypes.ts:633
 
 > **creation**: `object`
 
-Defined in: solcTypes.ts:634
+Defined in: [solcTypes.ts:634](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L634)
 
 #### codeDepositCost
 
@@ -36,7 +36,7 @@ Defined in: solcTypes.ts:634
 
 > **external**: `object`
 
-Defined in: solcTypes.ts:639
+Defined in: [solcTypes.ts:639](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L639)
 
 #### Index Signature
 
@@ -48,7 +48,7 @@ Defined in: solcTypes.ts:639
 
 > **internal**: `object`
 
-Defined in: solcTypes.ts:642
+Defined in: [solcTypes.ts:642](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L642)
 
 #### Index Signature
 

@@ -8,7 +8,7 @@
 
 > **solcCompile**(`solc`, `input`): [`SolcOutput`](../type-aliases/SolcOutput.md)
 
-Defined in: solc.js:133
+Defined in: [solc.js:133](https://github.com/evmts/compiler/blob/main/packages/solc/src/solc.js#L133)
 
 Typesafe wrapper around solc.compile
 

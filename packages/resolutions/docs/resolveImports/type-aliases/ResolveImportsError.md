@@ -8,6 +8,6 @@
 
 > **ResolveImportsError**\<\> = `ImportDoesNotExistError` \| `CouldNotResolveImportError`
 
-Defined in: resolveImports.js:20
+Defined in: [resolveImports.js:20](https://github.com/evmts/compiler/blob/main/packages/resolutions/src/resolveImports.js#L20)
 
 ## Type Parameters

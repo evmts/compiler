@@ -8,7 +8,7 @@
 
 > **SolcEVMOutput** = `object`
 
-Defined in: solcTypes.ts:558
+Defined in: [solcTypes.ts:558](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L558)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: solcTypes.ts:558
 
 > **assembly**: `string`
 
-Defined in: solcTypes.ts:560
+Defined in: [solcTypes.ts:560](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L560)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: solcTypes.ts:560
 
 > **bytecode**: [`SolcBytecodeOutput`](SolcBytecodeOutput.md)
 
-Defined in: solcTypes.ts:566
+Defined in: [solcTypes.ts:566](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L566)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: solcTypes.ts:566
 
 > **deployedBytecode**: [`SolcBytecodeOutput`](SolcBytecodeOutput.md)
 
-Defined in: solcTypes.ts:569
+Defined in: [solcTypes.ts:569](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L569)
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: solcTypes.ts:569
 
 > **gasEstimates**: [`SolcGasEstimates`](SolcGasEstimates.md)
 
-Defined in: solcTypes.ts:577
+Defined in: [solcTypes.ts:577](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L577)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: solcTypes.ts:577
 
 > **legacyAssembly**: `any`
 
-Defined in: solcTypes.ts:563
+Defined in: [solcTypes.ts:563](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L563)
 
 ***
 
@@ -56,7 +56,7 @@ Defined in: solcTypes.ts:563
 
 > **methodIdentifiers**: `object`
 
-Defined in: solcTypes.ts:572
+Defined in: [solcTypes.ts:572](https://github.com/evmts/compiler/blob/main/packages/solc/src/solcTypes.ts#L572)
 
 #### Index Signature
 
