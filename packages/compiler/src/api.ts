@@ -1,12 +1,12 @@
 // @ts-nocheck
-// import { createCompiler } from '@tevm/compiler'
+// import { Compiler } from '@tevm/compiler'
 import { FunctionVisibility, StateVariableVisibility } from 'solc-typed-ast'
-import { createCompiler } from './createCompiler.js'
+import { Compiler } from './Compiler.js'
 
 /* ------------------------------------ — ----------------------------------- */
 
 // Any option here can be set when creating the compiler and overriden on each method call
-const compiler = createCompiler({
+const compiler = new Compiler({
 	loggingLevel: 'debug',
 	optimizer: { enabled: true, runs: 200 },
 })

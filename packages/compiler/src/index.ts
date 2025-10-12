@@ -15,6 +15,7 @@ export {
 	extractContractsFromSolcOutput,
 	solcSourcesToAstNodes,
 } from './ast/index.js'
+export { Compiler } from './Compiler.js'
 export type { CreateCompilerOptions } from './CreateCompilerOptions.js'
 export type { CreateCompilerResult } from './CreateCompilerResult.js'
 export type {
@@ -34,4 +35,3 @@ export {
 	compileSourcesWithShadow,
 	compileSourceWithShadow,
 } from './compile/index.js'
-export { createCompiler } from './createCompiler.js'

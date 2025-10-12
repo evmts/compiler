@@ -4,7 +4,7 @@ import type { Solc, SolcInputDescription, SolcOutput } from '@tevm/solc'
 import { solcCompile } from '@tevm/solc'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SimpleContract } from '../fixtures/index.js'
-import { createCompiler } from './createCompiler.js'
+import { Compiler } from './Compiler.js'
 import { SolcError } from './internal/errors.js'
 import { readSourceFiles } from './internal/readSourceFiles.js'
 import { readSourceFilesSync } from './internal/readSourceFilesSync.js'
@@ -38,16 +38,16 @@ vi.mock('@tevm/solc', async () => {
 	}
 })
 
-vi.mock('./compiler/internal/readSourceFiles.js', () => ({
+vi.mock('./internal/readSourceFiles.js', () => ({
 	readSourceFiles: vi.fn(),
 }))
 
-vi.mock('./compiler/internal/readSourceFilesSync.js', () => ({
+vi.mock('./internal/readSourceFilesSync.js', () => ({
 	readSourceFilesSync: vi.fn(),
 }))
 
 /**
- * Tests for createCompiler function
+ * Tests for Compiler class
  *
  * This file focuses on what's specific to the compiler instance:
  * 1. Initialization with/without options
@@ -61,7 +61,7 @@ vi.mock('./compiler/internal/readSourceFilesSync.js', () => ({
  * - Solc version loading details (getSolc.spec.ts)
  * - Shadow compilation details (compileSourceWithShadow.spec.ts, etc.)
  */
-describe('createCompiler', () => {
+describe('Compiler', () => {
 	let mockSolc: Solc
 	let mockSolcCompile: ReturnType<typeof vi.fn>
 	let mockReadSourceFiles: ReturnType<typeof vi.fn>
@@ -85,7 +85,7 @@ describe('createCompiler', () => {
 
 	describe('initialization', () => {
 		it('should create compiler instance without options', () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 
 			expect(compiler).toBeDefined()
 			expect(compiler.compileSource).toBeDefined()
@@ -103,7 +103,7 @@ describe('createCompiler', () => {
 
 		it('should create compiler instance with options', () => {
 			const customLogger = createLogger({ name: 'test-logger', level: 'debug' })
-			const compiler = createCompiler({
+			const compiler = new Compiler({
 				logger: customLogger,
 				optimizer: { enabled: true, runs: 200 },
 			})
@@ -114,7 +114,7 @@ describe('createCompiler', () => {
 
 	describe('loadSolc', () => {
 		it('should load solc successfully', async () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 
 			await compiler.loadSolc('0.8.20')
 
@@ -123,7 +123,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should use default version when no version specified', async () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 
 			await compiler.loadSolc()
 
@@ -134,13 +134,13 @@ describe('createCompiler', () => {
 
 	describe('error handling before loadSolc', () => {
 		it('should throw when compileSource called before loadSolc', () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 
 			expect(() => compiler.compileSource(SimpleContract.source, { solcVersion: '0.8.20' })).toThrow(SolcError)
 		})
 
 		it('should throw when compileSourceWithShadow called before loadSolc', () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 
 			expect(() =>
 				compiler.compileSourceWithShadow(SimpleContract.source, 'function test() public { }', {
@@ -150,7 +150,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should throw when compileFiles called before loadSolc', async () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 
 			await expect(
 				compiler.compileFiles([join(__dirname, 'fixtures', 'SimpleContract.sol')], { solcVersion: '0.8.20' }),
@@ -158,7 +158,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should throw when compileFilesSync called before loadSolc', () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 
 			expect(() =>
 				compiler.compileFilesSync([join(__dirname, 'fixtures', 'SimpleContract.sol')], { solcVersion: '0.8.20' }),
@@ -166,7 +166,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should throw when compileFilesWithShadow called before loadSolc', async () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 
 			await expect(
 				compiler.compileFilesWithShadow(
@@ -178,7 +178,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should throw when compileFilesWithShadowSync called before loadSolc', () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 
 			expect(() =>
 				compiler.compileFilesWithShadowSync(
@@ -190,7 +190,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should allow extractContractsFromSolcOutput without loadSolc', () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 
 			// This should work without solc loaded
 			expect(() =>
@@ -199,13 +199,13 @@ describe('createCompiler', () => {
 		})
 
 		it('should allow extractContractsFromAstNodes without loadSolc', () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 			const sourceUnits = compiler.solcSourcesToAstNodes(SimpleContract.solcOutput.sources!)
 			expect(() => compiler.extractContractsFromAstNodes(sourceUnits, { solcVersion: '0.8.20' })).not.toThrow()
 		})
 
 		it('should allow solcSourcesToAstNodes without loadSolc', () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 
 			// This should work without solc loaded
 			expect(() => compiler.solcSourcesToAstNodes(SimpleContract.solcOutput.sources!)).not.toThrow()
@@ -214,7 +214,7 @@ describe('createCompiler', () => {
 
 	describe('compileSource', () => {
 		it('should compile Solidity source', async () => {
-			const compiler = createCompiler({ solc: mockSolc })
+			const compiler = new Compiler({ solc: mockSolc })
 
 			const result = compiler.compileSource(SimpleContract.source, {
 				language: 'Solidity',
@@ -226,7 +226,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should compile AST source', async () => {
-			const compiler = createCompiler({ solc: mockSolc })
+			const compiler = new Compiler({ solc: mockSolc })
 
 			const result = compiler.compileSource(SimpleContract.ast, {
 				language: 'SolidityAST',
@@ -238,7 +238,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should apply factory default options', () => {
-			const compiler = createCompiler({
+			const compiler = new Compiler({
 				solc: mockSolc,
 				optimizer: { enabled: true, runs: 200 },
 				hardfork: 'cancun',
@@ -261,7 +261,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should override factory options with per-call options', () => {
-			const compiler = createCompiler({
+			const compiler = new Compiler({
 				solc: mockSolc,
 				optimizer: { enabled: true, runs: 200 },
 			})
@@ -285,7 +285,7 @@ describe('createCompiler', () => {
 
 	describe('compileSourceWithShadow', () => {
 		it('should compile source with shadow code', () => {
-			const compiler = createCompiler({ solc: mockSolc })
+			const compiler = new Compiler({ solc: mockSolc })
 
 			const result = compiler.compileSourceWithShadow(
 				SimpleContract.source,
@@ -303,7 +303,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should apply factory defaults to shadow compilation', () => {
-			const compiler = createCompiler({
+			const compiler = new Compiler({
 				solc: mockSolc,
 				optimizer: { enabled: true, runs: 200 },
 			})
@@ -326,7 +326,7 @@ describe('createCompiler', () => {
 
 	describe('compileFiles', () => {
 		it('should compile single file', async () => {
-			const compiler = createCompiler({ solc: mockSolc })
+			const compiler = new Compiler({ solc: mockSolc })
 			const filePath = join(__dirname, 'fixtures', 'SimpleContract.sol')
 
 			mockReadSourceFiles.mockResolvedValue({
@@ -344,7 +344,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should compile multiple files', async () => {
-			const compiler = createCompiler({ solc: mockSolc })
+			const compiler = new Compiler({ solc: mockSolc })
 			const filePaths = [
 				join(__dirname, 'fixtures', 'SimpleContract.sol'),
 				join(__dirname, 'fixtures', 'SimpleContract2.sol'),
@@ -366,7 +366,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should apply factory options to file compilation', async () => {
-			const compiler = createCompiler({
+			const compiler = new Compiler({
 				solc: mockSolc,
 				optimizer: { enabled: true, runs: 200 },
 			})
@@ -384,7 +384,7 @@ describe('createCompiler', () => {
 
 	describe('compileFilesSync', () => {
 		it('should compile files synchronously', () => {
-			const compiler = createCompiler({ solc: mockSolc })
+			const compiler = new Compiler({ solc: mockSolc })
 			const filePath = join(__dirname, 'fixtures', 'SimpleContract.sol')
 
 			mockReadSourceFilesSync.mockReturnValue({
@@ -402,7 +402,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should apply factory options to sync compilation', () => {
-			const compiler = createCompiler({
+			const compiler = new Compiler({
 				solc: mockSolc,
 				optimizer: { enabled: true, runs: 200 },
 			})
@@ -420,7 +420,7 @@ describe('createCompiler', () => {
 
 	describe('compileFilesWithShadow', () => {
 		it('should compile files with shadow code', async () => {
-			const compiler = createCompiler({ solc: mockSolc })
+			const compiler = new Compiler({ solc: mockSolc })
 			const sourcePath = 'SimpleContract.sol'
 
 			mockReadSourceFiles.mockResolvedValue({
@@ -447,7 +447,7 @@ describe('createCompiler', () => {
 
 	describe('compileFilesWithShadowSync', () => {
 		it('should compile files with shadow code synchronously', () => {
-			const compiler = createCompiler({ solc: mockSolc })
+			const compiler = new Compiler({ solc: mockSolc })
 			const sourcePath = 'SimpleContract.sol'
 
 			mockReadSourceFilesSync.mockReturnValue({
@@ -474,7 +474,7 @@ describe('createCompiler', () => {
 
 	describe('extractContractsFromSolcOutput', () => {
 		it('should extract contracts from solc output', () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 
 			const sources = compiler.extractContractsFromSolcOutput(SimpleContract.solcOutput, { solcVersion: '0.8.20' })
 
@@ -484,7 +484,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should work without factory options', () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 
 			const sources = compiler.extractContractsFromSolcOutput(SimpleContract.solcOutput, { solcVersion: '0.8.20' })
 
@@ -492,7 +492,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should merge factory options with per-call options', () => {
-			const compiler = createCompiler({
+			const compiler = new Compiler({
 				hardfork: 'cancun',
 			})
 
@@ -507,7 +507,7 @@ describe('createCompiler', () => {
 		// TODO: Fix validateBaseOptions to handle arrays of SourceUnits
 
 		it('should extract contracts from AST nodes', () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 			const sourceUnits = compiler.solcSourcesToAstNodes(SimpleContract.solcOutput.sources!)
 
 			const result = compiler.extractContractsFromAstNodes(sourceUnits, { solcVersion: '0.8.20' })
@@ -518,7 +518,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should return source maps when requested', () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 			const sourceUnits = compiler.solcSourcesToAstNodes(SimpleContract.solcOutput.sources!)
 
 			const result = compiler.extractContractsFromAstNodes(sourceUnits, { solcVersion: '0.8.20', withSourceMap: true })
@@ -528,7 +528,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should not return source maps by default', () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 			const sourceUnits = compiler.solcSourcesToAstNodes(SimpleContract.solcOutput.sources!)
 
 			const result = compiler.extractContractsFromAstNodes(sourceUnits, { solcVersion: '0.8.20' })
@@ -539,7 +539,7 @@ describe('createCompiler', () => {
 
 	describe('solcSourcesToAstNodes', () => {
 		it('should convert solc sources to AST nodes', () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 
 			const sourceUnits = compiler.solcSourcesToAstNodes(SimpleContract.solcOutput.sources!)
 
@@ -549,7 +549,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should preserve cross-references between source units', () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 
 			const sourceUnits = compiler.solcSourcesToAstNodes(SimpleContract.solcOutput.sources!)
 
@@ -560,7 +560,7 @@ describe('createCompiler', () => {
 
 	describe('options merging', () => {
 		it('should use factory options as defaults', () => {
-			const compiler = createCompiler({
+			const compiler = new Compiler({
 				solc: mockSolc,
 				optimizer: { enabled: true, runs: 200 },
 				hardfork: 'cancun',
@@ -583,7 +583,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should override factory options with per-call options', () => {
-			const compiler = createCompiler({
+			const compiler = new Compiler({
 				solc: mockSolc,
 				optimizer: { enabled: true, runs: 200 },
 				hardfork: 'cancun',
@@ -608,7 +608,7 @@ describe('createCompiler', () => {
 		})
 
 		it('should merge factory and per-call options correctly', () => {
-			const compiler = createCompiler({
+			const compiler = new Compiler({
 				solc: mockSolc,
 				optimizer: { enabled: true, runs: 200 },
 			})
@@ -632,14 +632,14 @@ describe('createCompiler', () => {
 
 	describe('clearCache', () => {
 		it('should have clearCache method', () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 
 			expect(compiler.clearCache).toBeDefined()
 			expect(typeof compiler.clearCache).toBe('function')
 		})
 
 		it('should be callable without throwing', async () => {
-			const compiler = createCompiler()
+			const compiler = new Compiler()
 
 			await expect(compiler.clearCache()).resolves.not.toThrow()
 		})
