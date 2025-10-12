@@ -26,7 +26,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Solidity',
-				compilationOutput: ['ast', 'abi', 'evm.bytecode'],
+				compilationOutput: ['ast', 'abi', 'bytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -53,7 +53,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Solidity',
-				compilationOutput: ['abi', 'evm.bytecode'],
+				compilationOutput: ['abi', 'bytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -77,7 +77,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Solidity',
-				compilationOutput: ['ast', 'abi', 'evm.bytecode'],
+				compilationOutput: ['ast', 'abi', 'bytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -102,7 +102,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Solidity',
-				compilationOutput: ['ast', 'abi', 'evm.bytecode'],
+				compilationOutput: ['ast', 'abi', 'bytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -205,7 +205,7 @@ describe('compileContracts', () => {
 
 			const options = {
 				language: 'Solidity',
-				compilationOutput: ['evm.bytecode', 'evm.deployedBytecode'],
+				compilationOutput: ['bytecode', 'deployedBytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -246,7 +246,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Solidity',
-				compilationOutput: ['abi', 'evm.bytecode'],
+				compilationOutput: ['abi', 'bytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -269,7 +269,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Solidity',
-				compilationOutput: ['abi', 'evm.bytecode'],
+				compilationOutput: ['abi', 'bytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -300,7 +300,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Solidity',
-				compilationOutput: ['abi', 'evm.bytecode'],
+				compilationOutput: ['abi', 'bytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -320,7 +320,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Solidity',
-				compilationOutput: ['abi', 'evm.bytecode'],
+				compilationOutput: ['abi', 'bytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -342,7 +342,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Solidity',
-				compilationOutput: ['abi', 'evm.bytecode'],
+				compilationOutput: ['abi', 'bytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -364,7 +364,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Solidity',
-				compilationOutput: ['abi', 'evm.bytecode'],
+				compilationOutput: ['abi', 'bytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -388,7 +388,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Solidity',
-				compilationOutput: ['abi', 'evm.bytecode'],
+				compilationOutput: ['abi', 'bytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -417,7 +417,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Solidity',
-				compilationOutput: ['abi', 'evm.bytecode'],
+				compilationOutput: ['abi', 'bytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -439,7 +439,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Solidity',
-				compilationOutput: ['abi', 'evm.bytecode'],
+				compilationOutput: ['abi', 'bytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -461,7 +461,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Solidity',
-				compilationOutput: ['abi', 'evm.bytecode'],
+				compilationOutput: ['abi', 'bytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -485,7 +485,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Yul',
-				compilationOutput: ['evm.bytecode'],
+				compilationOutput: ['bytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -504,7 +504,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Yul',
-				compilationOutput: ['ast', 'evm.bytecode', 'evm.deployedBytecode'],
+				compilationOutput: ['ast', 'bytecode', 'deployedBytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -535,7 +535,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'SolidityAST',
-				compilationOutput: ['abi', 'evm.bytecode'],
+				compilationOutput: ['abi', 'bytecode'],
 				hardfork: 'cancun',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,
@@ -582,7 +582,7 @@ describe('compileContracts', () => {
 
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Solidity',
-				compilationOutput: ['abi', 'evm.bytecode'],
+				compilationOutput: ['abi', 'bytecode'],
 				hardfork: 'shanghai',
 				solcVersion: '0.8.28',
 				throwOnVersionMismatch: false,

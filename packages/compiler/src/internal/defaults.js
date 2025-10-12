@@ -9,7 +9,7 @@ if (!latestSolcVersion) throw new Error('No Solc versions found')
  */
 export const defaults = {
 	language: 'Solidity',
-	compilationOutput: ['abi', 'ast', 'evm.bytecode', 'evm.deployedBytecode', 'storageLayout'],
+	compilationOutput: ['abi', 'ast', 'bytecode', 'deployedBytecode', 'storageLayout'],
 	hardfork: 'cancun',
 	solcVersion: latestSolcVersion,
 	throwOnVersionMismatch: true,

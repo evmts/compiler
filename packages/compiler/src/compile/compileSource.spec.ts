@@ -180,7 +180,7 @@ describe('compileSource', () => {
 			const options: ValidatedCompileBaseOptions = {
 				language: 'Solidity',
 				hardfork: 'cancun',
-				compilationOutput: ['abi', 'ast', 'evm.bytecode', 'evm.deployedBytecode', 'storageLayout'],
+				compilationOutput: ['abi', 'ast', 'bytecode', 'deployedBytecode', 'storageLayout'],
 				solcVersion: '0.8.20',
 				throwOnVersionMismatch: true,
 				throwOnCompilationError: false,

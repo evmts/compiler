@@ -188,7 +188,7 @@ describe('compileSources', () => {
 				{
 					language: 'Solidity',
 					solcVersion: '0.8.20',
-					compilationOutput: ['abi', 'evm.bytecode', 'ast'],
+					compilationOutput: ['abi', 'bytecode', 'ast'],
 				},
 			)
 

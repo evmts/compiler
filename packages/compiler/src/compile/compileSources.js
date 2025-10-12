@@ -27,7 +27,7 @@ import { validateBaseOptions } from '../internal/validateBaseOptions.js'
  * }, {
  *   language: 'Solidity',
  *   solcVersion: '0.8.20',
- *   compilationOutput: ['abi', 'evm.bytecode']
+ *   compilationOutput: ['abi', 'bytecode']
  * })
  *
  * const tokenAbi = result.compilationResult['contracts/Token.sol'].contract['Token'].abi

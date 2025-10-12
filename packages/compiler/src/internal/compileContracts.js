@@ -1,4 +1,5 @@
 import { solcCompile } from '@tevm/solc'
+import { compilationOutputToSolcOutputSelection } from './compilationOutputToSolcOutputSelection.js'
 import { CompilerOutputError } from './errors.js'
 
 /**
@@ -21,7 +22,7 @@ export const compileContracts = (solc, sources, options, logger) => {
 			outputSelection: {
 				'*': {
 					'': ['ast'],
-					'*': options.compilationOutput,
+					'*': compilationOutputToSolcOutputSelection(options.compilationOutput),
 				},
 			},
 		},

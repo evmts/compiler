@@ -98,8 +98,8 @@ describe('defaults', () => {
 			expect(defaults.compilationOutput).toEqual([
 				'abi',
 				'ast',
-				'evm.bytecode',
-				'evm.deployedBytecode',
+				'bytecode',
+				'deployedBytecode',
 				'storageLayout',
 			])
 		})
@@ -107,8 +107,8 @@ describe('defaults', () => {
 		it('should have all expected compilationOutput items', () => {
 			expect(defaults.compilationOutput).toContain('abi')
 			expect(defaults.compilationOutput).toContain('ast')
-			expect(defaults.compilationOutput).toContain('evm.bytecode')
-			expect(defaults.compilationOutput).toContain('evm.deployedBytecode')
+			expect(defaults.compilationOutput).toContain('bytecode')
+			expect(defaults.compilationOutput).toContain('deployedBytecode')
 			expect(defaults.compilationOutput).toContain('storageLayout')
 			expect(defaults.compilationOutput).toHaveLength(5)
 		})
@@ -213,8 +213,8 @@ describe('defaults', () => {
 			const validOutputs = [
 				'abi',
 				'ast',
-				'evm.bytecode',
-				'evm.deployedBytecode',
+				'bytecode',
+				'deployedBytecode',
 				'storageLayout',
 				'userdoc',
 				'devdoc',

@@ -250,7 +250,7 @@ export interface CreateCompilerResult {
 	 * // ... manipulate the SourceUnit
 	 *
 	 * // 3. Compile the manipulated AST directly
-	 * const instrumentedResult = await compiler.compileSource(sourceUnits[0], { language: 'SolidityAST', compilationOutput: ['evm.bytecode'] })
+	 * const instrumentedResult = await compiler.compileSource(sourceUnits[0], { language: 'SolidityAST', compilationOutput: ['bytecode'] })
 	 */
 	extractContractsFromSolcOutput: (
 		solcOutput: SolcOutput,

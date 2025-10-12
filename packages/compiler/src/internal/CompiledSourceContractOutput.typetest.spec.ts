@@ -73,13 +73,13 @@ describe('CompiledSourceContractOutput type tests', () => {
 	})
 
 	describe('multiple selections', () => {
-		it("['abi', 'evm.bytecode'] compilationOutput: should have both abi and evm fields", () => {
-			const result = mockCompileSource('contract Test {}', { compilationOutput: ['abi', 'evm.bytecode'] })
+		it("['abi', 'bytecode'] compilationOutput: should have both abi and evm fields", () => {
+			const result = mockCompileSource('contract Test {}', { compilationOutput: ['abi', 'bytecode'] })
 			const contract = result.compilationResult.contract['Test']!
 
 			// Should have these fields
 			expectTypeOf(contract.abi).toEqualTypeOf<Abi>()
-			expectTypeOf(contract.evm).toEqualTypeOf<SolcContractOutput['evm']>()
+			expectTypeOf(contract.evm).toEqualTypeOf<{ bytecode: SolcContractOutput['evm']['bytecode'] }>()
 
 			// Should not have other fields
 			// @ts-expect-error - metadata should not exist
@@ -107,15 +107,18 @@ describe('CompiledSourceContractOutput type tests', () => {
 		expectTypeOf(contract.userdoc).toBeNever()
 	})
 
-	it("['abi', 'evm.bytecode', 'evm.deployedBytecode'] multiple nested paths: should have abi and evm fields", () => {
+	it("['abi', 'bytecode', 'deployedBytecode'] multiple nested paths: should have abi and evm fields", () => {
 		const result = mockCompileSource('contract Test {}', {
-			compilationOutput: ['abi', 'evm.bytecode', 'evm.deployedBytecode'],
+			compilationOutput: ['abi', 'bytecode', 'deployedBytecode'],
 		})
 		const contract = result.compilationResult.contract['Test']!
 
 		// Should have these fields
 		expectTypeOf(contract.abi).toEqualTypeOf<Abi>()
-		expectTypeOf(contract.evm).toEqualTypeOf<SolcContractOutput['evm']>()
+		expectTypeOf(contract.evm).toExtend<{
+			bytecode: SolcContractOutput['evm']['bytecode']
+			deployedBytecode: SolcContractOutput['evm']['deployedBytecode']
+		}>()
 	})
 
 	describe("['*', 'abi'] compilationOutput (star takes precedence)", () => {
@@ -135,16 +138,7 @@ describe('CompiledSourceContractOutput type tests', () => {
 	describe('all output selections combined', () => {
 		it('should have all specified fields when multiple selections are provided', () => {
 			const result = mockCompileSource('contract Test {}', {
-				compilationOutput: [
-					'abi',
-					'metadata',
-					'userdoc',
-					'devdoc',
-					'ir',
-					'storageLayout',
-					'evm.bytecode',
-					'ewasm.wasm',
-				],
+				compilationOutput: ['abi', 'metadata', 'userdoc', 'devdoc', 'ir', 'storageLayout', 'bytecode', 'ewasm'],
 			})
 			const contract = result.compilationResult.contract['Test']!
 
@@ -155,7 +149,7 @@ describe('CompiledSourceContractOutput type tests', () => {
 			expectTypeOf(contract.devdoc).toEqualTypeOf<SolcContractOutput['devdoc']>()
 			expectTypeOf(contract.ir).toEqualTypeOf<string>()
 			expectTypeOf(contract.storageLayout).toEqualTypeOf<SolcContractOutput['storageLayout']>()
-			expectTypeOf(contract.evm).toEqualTypeOf<SolcContractOutput['evm']>()
+			expectTypeOf(contract.evm).toEqualTypeOf<{ bytecode: SolcContractOutput['evm']['bytecode'] }>()
 			expectTypeOf(contract.ewasm).toEqualTypeOf<SolcContractOutput['ewasm']>()
 		})
 	})

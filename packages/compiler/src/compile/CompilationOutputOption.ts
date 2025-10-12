@@ -1,3 +1,17 @@
-import type { SolcOutputSelection } from '@tevm/solc'
-
-export type CompilationOutputOption = SolcOutputSelection[string][string][number]
+export type CompilationOutputOption =
+	| '*'
+	| 'ast'
+	| 'abi'
+	| 'bytecode'
+	| 'deployedBytecode'
+	| 'storageLayout'
+	| 'gasEstimates'
+	| 'methodIdentifiers'
+	| 'assembly'
+	| 'legacyAssembly'
+	| 'ewasm'
+	| 'ir'
+	| 'irOptimized'
+	| 'metadata'
+	| 'userdoc'
+	| 'devdoc'

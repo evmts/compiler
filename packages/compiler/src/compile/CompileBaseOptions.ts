@@ -29,7 +29,7 @@ export interface CompileBaseOptions<
 	 *
 	 * Use '*' to select all outputs
 	 *
-	 * default: ['ast', 'abi', 'evm.bytecode', 'evm.deployedBytecode', 'storageLayout']
+	 * default: ['ast', 'abi', 'bytecode', 'deployedBytecode', 'storageLayout']
 	 */
 	compilationOutput?: TCompilationOutput | undefined
 	/**

@@ -53,7 +53,7 @@ describe('validateBaseOptions', () => {
 
 			const result = validateBaseOptions(source, options, mockLogger)
 
-			expect(result.compilationOutput).toEqual(['abi', 'ast', 'evm.bytecode', 'evm.deployedBytecode', 'storageLayout'])
+			expect(result.compilationOutput).toEqual(['abi', 'ast', 'bytecode', 'deployedBytecode', 'storageLayout'])
 			expect(mockLogger.debug).toHaveBeenCalledWith(
 				expect.stringContaining('No compilation output selection, using default fields:'),
 			)
@@ -364,11 +364,11 @@ describe('validateBaseOptions', () => {
 
 		it('should accept multiple output selections', () => {
 			const source = 'pragma solidity ^0.8.0; contract Test {}'
-			const options = { compilationOutput: ['abi', 'ast', 'evm.bytecode'] } as const satisfies CompileBaseOptions
+			const options = { compilationOutput: ['abi', 'ast', 'bytecode'] } as const satisfies CompileBaseOptions
 
 			const result = validateBaseOptions(source, options, mockLogger)
 
-			expect(result.compilationOutput).toEqual(['abi', 'ast', 'evm.bytecode'])
+			expect(result.compilationOutput).toEqual(['abi', 'ast', 'bytecode'])
 		})
 
 		it('should accept all output selections', () => {
@@ -377,8 +377,8 @@ describe('validateBaseOptions', () => {
 				compilationOutput: [
 					'abi',
 					'ast',
-					'evm.bytecode',
-					'evm.deployedBytecode',
+					'bytecode',
+					'deployedBytecode',
 					'storageLayout',
 					'userdoc',
 					'devdoc',
@@ -391,8 +391,8 @@ describe('validateBaseOptions', () => {
 			expect(result.compilationOutput).toEqual([
 				'abi',
 				'ast',
-				'evm.bytecode',
-				'evm.deployedBytecode',
+				'bytecode',
+				'deployedBytecode',
 				'storageLayout',
 				'userdoc',
 				'devdoc',
@@ -596,7 +596,7 @@ describe('validateBaseOptions', () => {
 
 			expect(result.language).toBe('Solidity')
 			expect(result.hardfork).toBe('cancun')
-			expect(result.compilationOutput).toEqual(['abi', 'ast', 'evm.bytecode', 'evm.deployedBytecode', 'storageLayout'])
+			expect(result.compilationOutput).toEqual(['abi', 'ast', 'bytecode', 'deployedBytecode', 'storageLayout'])
 		})
 
 		it('should handle falsy boolean values correctly', () => {

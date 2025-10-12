@@ -20,7 +20,7 @@ const { compilationResult, errors, solcInput, solcOutput } = compiler.compileSou
     contract Counter { uint256 public count; function increment() public { count++; } }
   `,
 	{
-		compilationOutput: ['abi', 'ast', 'evm.bytecode', 'evm.deployedBytecode', 'storageLayout'], // these are the default outputs if not specified
+		compilationOutput: ['abi', 'ast', 'bytecode', 'deployedBytecode', 'storageLayout'], // these are the default outputs if not specified
 	},
 )
 // Compile files
