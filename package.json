@@ -4,11 +4,13 @@
   "license": "MIT",
   "scripts": {},
   "private": true,
-  "dependencies": {
-    "@monodon/rust": "2.3.0"
-  },
   "devDependencies": {
+    "@monodon/rust": "2.3.0",
+    "@napi-rs/cli": "3.0.0-alpha.63",
+    "@napi-rs/wasm-runtime": "^0.2.4",
     "@nx/workspace": "21.6.4",
+    "emnapi": "^1.1.0",
     "nx": "21.6.4"
-  }
+  },
+  "dependencies": {}
 }
