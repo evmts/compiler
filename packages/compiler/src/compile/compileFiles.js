@@ -4,6 +4,7 @@ import { defaults } from '../internal/defaults.js'
 import { getSolc } from '../internal/getSolc.js'
 import { readSourceFiles } from '../internal/readSourceFiles.js'
 import { validateBaseOptions } from '../internal/validateBaseOptions.js'
+import { createDefaultFao } from '../resolutions/createDefaultFao.js'
 
 /**
  * Compile source files from the filesystem
@@ -36,7 +37,12 @@ import { validateBaseOptions } from '../internal/validateBaseOptions.js'
  */
 export const compileFiles = async (filePaths, options) => {
 	const logger = createLogger({ name: '@tevm/compiler', level: options?.loggingLevel ?? defaults.loggingLevel })
-	const sources = await readSourceFiles(filePaths, options?.language, logger)
+	const sources = await readSourceFiles(
+		options?.fileAccessObject ?? createDefaultFao(),
+		filePaths,
+		options?.language,
+		logger,
+	)
 	const validatedOptions = validateBaseOptions(
 		// We can simply aggregate the sources regardless of path as this will be used for validating the solc version for compiling the entire set
 		Object.values(sources),

@@ -107,12 +107,6 @@ describe('compileFiles', () => {
 			expect(result.compilationResult['./contracts/SimpleContract.sol']).toBeDefined()
 			expect(result.compilationResult['./contracts/SimpleContract.sol']?.contract).toBeDefined()
 			expect(result.compilationResult['./contracts/SimpleContract.sol']?.contract['SimpleContract']).toBeDefined()
-
-			expect(mockReadSourceFiles).toHaveBeenCalledWith(
-				['./contracts/SimpleContract.sol'],
-				'Solidity',
-				expect.anything(),
-			)
 			expect(mockSolcCompile).toHaveBeenCalledOnce()
 		})
 

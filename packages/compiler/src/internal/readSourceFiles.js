@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { FileReadError } from './errors.js'
 import { validateFiles } from './validateFiles.js'
@@ -6,12 +5,13 @@ import { validateFiles } from './validateFiles.js'
 /**
  * Read and parse source files from the filesystem
  *
+ * @param {import('../resolutions/FileAccessObject.js').FileAccessObject} fao - File access object
  * @param {string[]} filePaths - Array of file paths to read
  * @param {import('@tevm/solc').SolcLanguage | undefined} language - Language to determine parsing strategy
  * @param {import('@tevm/logger').Logger} logger - Logger instance
  * @returns {Promise<{[filePath: string]: string | object}>} Sources keyed by file path
  */
-export const readSourceFiles = async (filePaths, language, logger) => {
+export const readSourceFiles = async ({ readFile }, filePaths, language, logger) => {
 	const validatedPaths = validateFiles(filePaths, language, logger)
 	logger.debug(`Preparing to read ${validatedPaths.length} files`)
 

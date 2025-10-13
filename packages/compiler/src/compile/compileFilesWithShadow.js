@@ -3,6 +3,7 @@ import { defaults } from '../internal/defaults.js'
 import { getSolc } from '../internal/getSolc.js'
 import { readSourceFiles } from '../internal/readSourceFiles.js'
 import { validateBaseOptions } from '../internal/validateBaseOptions.js'
+import { createDefaultFao } from '../resolutions/createDefaultFao.js'
 import { compileSourcesWithShadowInternal } from './compileSourcesWithShadow.js'
 
 /**
@@ -47,7 +48,12 @@ export const compileFilesWithShadow = async (filePaths, shadow, options) => {
 	const { sourceLanguage, shadowLanguage, injectIntoContractPath, injectIntoContractName, ...baseOptions } =
 		options ?? {}
 
-	const sources = await readSourceFiles(filePaths, sourceLanguage, logger)
+	const sources = await readSourceFiles(
+		baseOptions?.fileAccessObject ?? createDefaultFao(),
+		filePaths,
+		sourceLanguage,
+		logger,
+	)
 	const validatedOptions = validateBaseOptions(
 		Object.values(sources),
 		{ ...baseOptions, language: sourceLanguage },

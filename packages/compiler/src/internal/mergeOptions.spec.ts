@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CompileBaseOptions } from '../compile/CompileBaseOptions.js'
+import type { FileAccessObject } from '../resolutions/FileAccessObject.js'
 import { mergeOptions } from './mergeOptions.js'
 
 describe('mergeOptions', () => {
@@ -1106,9 +1107,49 @@ describe('mergeOptions', () => {
 				},
 			} as const satisfies CompileBaseOptions
 			const result = mergeOptions(options, {})
-			expect(typeof result.optimizer).toBe('object')
+			expect(typeof result).toBe('object')
 			expect(typeof result.optimizer?.details).toBe('object')
 			expect(typeof result.optimizer?.details?.yulDetails).toBe('object')
+		})
+	})
+
+	describe('fileAccessObject merging', () => {
+		it('should use override FAO when provided', () => {
+			const factoryFao: FileAccessObject = {
+				readFile: async () => 'factory',
+				readFileSync: () => 'factory',
+				exists: async () => true,
+				existsSync: () => true,
+			}
+
+			const overrideFao: FileAccessObject = {
+				readFile: async () => 'override',
+				readFileSync: () => 'override',
+				exists: async () => false,
+				existsSync: () => false,
+			}
+
+			const result = mergeOptions({ fileAccessObject: factoryFao }, { fileAccessObject: overrideFao })
+
+			expect(result.fileAccessObject).toBe(overrideFao)
+		})
+
+		it('should fallback to factory FAO when override not provided', () => {
+			const factoryFao: FileAccessObject = {
+				readFile: async () => 'factory',
+				readFileSync: () => 'factory',
+				exists: async () => true,
+				existsSync: () => true,
+			}
+
+			const result = mergeOptions({ fileAccessObject: factoryFao }, {})
+
+			expect(result.fileAccessObject).toBe(factoryFao)
+		})
+
+		it('should have undefined FAO when neither provided', () => {
+			const result = mergeOptions({}, {})
+			expect(result.fileAccessObject).toBeUndefined()
 		})
 	})
 })

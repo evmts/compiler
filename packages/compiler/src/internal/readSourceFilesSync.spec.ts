@@ -1,7 +1,10 @@
 import { createLogger } from '@tevm/logger'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createDefaultFao } from '../resolutions/createDefaultFao.js'
 import { FileReadError } from './errors.js'
 import { readSourceFilesSync } from './readSourceFilesSync.js'
+
+const defaultFao = createDefaultFao()
 
 vi.mock('node:fs', () => ({
 	readFileSync: vi.fn(),
@@ -50,7 +53,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue(content)
 
-			const result = readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(result).toEqual({
 				'Contract.sol': content,
@@ -69,7 +72,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue(content)
 
-			const result = readSourceFilesSync(filePaths, 'Yul', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'Yul', mockLogger)
 
 			expect(result).toEqual({
 				'Contract.yul': content,
@@ -93,7 +96,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue(jsonContent)
 
-			const result = readSourceFilesSync(filePaths, 'SolidityAST', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'SolidityAST', mockLogger)
 
 			expect(result).toEqual({
 				'Contract.json': astObject,
@@ -109,7 +112,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue(content)
 
-			const result = readSourceFilesSync(filePaths, undefined, mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, undefined, mockLogger)
 
 			expect(result).toEqual({
 				'Contract.sol': content,
@@ -133,7 +136,7 @@ describe('readSourceFilesSync', () => {
 				.mockReturnValueOnce(contents[1])
 				.mockReturnValueOnce(contents[2])
 
-			const result = readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(result).toEqual({
 				'Contract1.sol': contents[0],
@@ -171,7 +174,7 @@ describe('readSourceFilesSync', () => {
 				.mockReturnValueOnce(JSON.stringify(astObjects[0]))
 				.mockReturnValueOnce(JSON.stringify(astObjects[1]))
 
-			const result = readSourceFilesSync(filePaths, 'SolidityAST', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'SolidityAST', mockLogger)
 
 			expect(result).toEqual({
 				'Contract1.json': astObjects[0],
@@ -186,7 +189,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue('content')
 
-			readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+			readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(mockLogger.debug).toHaveBeenCalledWith('Preparing to read 2 files')
 			expect(mockLogger.debug).toHaveBeenCalledWith('Reading file: /absolute/File1.sol')
@@ -206,11 +209,11 @@ describe('readSourceFilesSync', () => {
 			})
 
 			expect(() => {
-				readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+				readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 			}).toThrow(FileReadError)
 
 			try {
-				readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+				readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 			} catch (error) {
 				expect(error).toBeInstanceOf(FileReadError)
 				expect((error as FileReadError).message).toBe('Failed to read file NonExistent.sol')
@@ -233,11 +236,11 @@ describe('readSourceFilesSync', () => {
 			})
 
 			expect(() => {
-				readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+				readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 			}).toThrow(FileReadError)
 
 			try {
-				readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+				readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 			} catch (error) {
 				const fileError = error as FileReadError
 				expect(fileError.meta?.code).toBe('read_failed')
@@ -259,11 +262,11 @@ describe('readSourceFilesSync', () => {
 			})
 
 			expect(() => {
-				readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+				readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 			}).toThrow(FileReadError)
 
 			try {
-				readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+				readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 			} catch (error) {
 				expect(error).toBeInstanceOf(FileReadError)
 				expect((error as FileReadError).message).toBe('Failed to read file ProtectedFile.sol')
@@ -285,7 +288,7 @@ describe('readSourceFilesSync', () => {
 			})
 
 			expect(() => {
-				readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+				readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 			}).toThrow(FileReadError)
 		})
 	})
@@ -300,7 +303,7 @@ describe('readSourceFilesSync', () => {
 			})
 
 			expect(() => {
-				readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+				readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 			}).toThrow(validationError)
 
 			expect(mockValidateFiles).toHaveBeenCalledWith(filePaths, 'Solidity', mockLogger)
@@ -316,7 +319,7 @@ describe('readSourceFilesSync', () => {
 			})
 
 			expect(() => {
-				readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+				readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 			}).toThrow(validationError)
 
 			expect(mockReadFileSync).not.toHaveBeenCalled()
@@ -332,7 +335,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue(content)
 
-			const result = readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(result).not.toBeInstanceOf(Promise)
 			expect(result).toEqual({
@@ -354,7 +357,7 @@ describe('readSourceFilesSync', () => {
 				return 'content'
 			})
 
-			readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+			readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(callOrder).toEqual([
 				'resolve:File1.sol',
@@ -373,7 +376,7 @@ describe('readSourceFilesSync', () => {
 			mockReadFileSync.mockReturnValue('content')
 
 			const startTime = Date.now()
-			const result = readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 			const endTime = Date.now()
 
 			expect(result).toBeDefined()
@@ -393,7 +396,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue(JSON.stringify(astObject))
 
-			const result = readSourceFilesSync(filePaths, 'SolidityAST', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'SolidityAST', mockLogger)
 
 			expect(result['Contract.json']).toEqual(astObject)
 		})
@@ -421,7 +424,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue(JSON.stringify(complexAst))
 
-			const result = readSourceFilesSync(filePaths, 'SolidityAST', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'SolidityAST', mockLogger)
 
 			expect(result['Complex.json']).toEqual(complexAst)
 		})
@@ -433,7 +436,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue(JSON.stringify(emptyAst))
 
-			const result = readSourceFilesSync(filePaths, 'SolidityAST', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'SolidityAST', mockLogger)
 
 			expect(result['Empty.json']).toEqual(emptyAst)
 		})
@@ -445,7 +448,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue(JSON.stringify(arrayAst))
 
-			const result = readSourceFilesSync(filePaths, 'SolidityAST', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'SolidityAST', mockLogger)
 
 			expect(result['Array.json']).toEqual(arrayAst)
 		})
@@ -460,11 +463,11 @@ describe('readSourceFilesSync', () => {
 			mockReadFileSync.mockReturnValue(invalidJson)
 
 			expect(() => {
-				readSourceFilesSync(filePaths, 'SolidityAST', mockLogger)
+				readSourceFilesSync(defaultFao, filePaths, 'SolidityAST', mockLogger)
 			}).toThrow(FileReadError)
 
 			try {
-				readSourceFilesSync(filePaths, 'SolidityAST', mockLogger)
+				readSourceFilesSync(defaultFao, filePaths, 'SolidityAST', mockLogger)
 			} catch (error) {
 				expect(error).toBeInstanceOf(FileReadError)
 				expect((error as FileReadError).message).toBe('Failed to parse JSON file Invalid.json')
@@ -484,7 +487,7 @@ describe('readSourceFilesSync', () => {
 			mockReadFileSync.mockReturnValue(malformedJson)
 
 			expect(() => {
-				readSourceFilesSync(filePaths, 'SolidityAST', mockLogger)
+				readSourceFilesSync(defaultFao, filePaths, 'SolidityAST', mockLogger)
 			}).toThrow(FileReadError)
 		})
 
@@ -496,7 +499,7 @@ describe('readSourceFilesSync', () => {
 			mockReadFileSync.mockReturnValue(truncatedJson)
 
 			expect(() => {
-				readSourceFilesSync(filePaths, 'SolidityAST', mockLogger)
+				readSourceFilesSync(defaultFao, filePaths, 'SolidityAST', mockLogger)
 			}).toThrow(FileReadError)
 		})
 
@@ -507,7 +510,7 @@ describe('readSourceFilesSync', () => {
 			mockReadFileSync.mockReturnValue('')
 
 			expect(() => {
-				readSourceFilesSync(filePaths, 'SolidityAST', mockLogger)
+				readSourceFilesSync(defaultFao, filePaths, 'SolidityAST', mockLogger)
 			}).toThrow(FileReadError)
 		})
 
@@ -519,7 +522,7 @@ describe('readSourceFilesSync', () => {
 			mockReadFileSync.mockReturnValue(badJson)
 
 			try {
-				readSourceFilesSync(filePaths, 'SolidityAST', mockLogger)
+				readSourceFilesSync(defaultFao, filePaths, 'SolidityAST', mockLogger)
 			} catch (error) {
 				expect(error).toBeInstanceOf(FileReadError)
 				expect((error as FileReadError).cause).toBeInstanceOf(Error)
@@ -535,7 +538,7 @@ describe('readSourceFilesSync', () => {
 			mockReadFileSync.mockReturnValue('content')
 			mockResolve.mockReturnValue('/absolute/resolved/path/Contract.sol')
 
-			readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+			readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(mockResolve).toHaveBeenCalledWith('relative/path/Contract.sol')
 			expect(mockReadFileSync).toHaveBeenCalledWith('/absolute/resolved/path/Contract.sol', 'utf-8')
@@ -548,7 +551,7 @@ describe('readSourceFilesSync', () => {
 			mockReadFileSync.mockReturnValue('content')
 			mockResolve.mockReturnValue('/absolute/path with spaces/Contract.sol')
 
-			readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+			readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(mockResolve).toHaveBeenCalledWith('path with spaces/Contract.sol')
 		})
@@ -560,7 +563,7 @@ describe('readSourceFilesSync', () => {
 			mockReadFileSync.mockReturnValue('content')
 			mockResolve.mockReturnValue('/custom/absolute/path/Contract.sol')
 
-			readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+			readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(mockLogger.debug).toHaveBeenCalledWith('Reading file: /custom/absolute/path/Contract.sol')
 		})
@@ -577,7 +580,7 @@ describe('readSourceFilesSync', () => {
 			})
 
 			expect(() => {
-				readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+				readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 			}).toThrow(FileReadError)
 
 			expect(mockReadFileSync).toHaveBeenCalledTimes(1)
@@ -593,7 +596,7 @@ describe('readSourceFilesSync', () => {
 			})
 
 			expect(() => {
-				readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+				readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 			}).toThrow(FileReadError)
 
 			expect(mockReadFileSync).toHaveBeenCalledTimes(2)
@@ -612,7 +615,7 @@ describe('readSourceFilesSync', () => {
 			let result: any = null
 
 			try {
-				result = readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+				result = readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 			} catch (error) {
 				caughtError = error as Error
 			}
@@ -630,7 +633,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue(jsonLikeContent)
 
-			const result = readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(result['Contract.sol']).toBe(jsonLikeContent)
 			expect(typeof result['Contract.sol']).toBe('string')
@@ -643,7 +646,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue(jsonLikeContent)
 
-			const result = readSourceFilesSync(filePaths, 'Yul', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'Yul', mockLogger)
 
 			expect(result['Contract.yul']).toBe(jsonLikeContent)
 			expect(typeof result['Contract.yul']).toBe('string')
@@ -656,7 +659,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue(jsonLikeContent)
 
-			const result = readSourceFilesSync(filePaths, undefined, mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, undefined, mockLogger)
 
 			expect(result['Contract.sol']).toBe(jsonLikeContent)
 			expect(typeof result['Contract.sol']).toBe('string')
@@ -670,7 +673,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue('content')
 
-			const result = readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(Object.keys(result)).toEqual(['File1.sol', 'File2.sol'])
 		})
@@ -682,7 +685,7 @@ describe('readSourceFilesSync', () => {
 			mockReadFileSync.mockReturnValue('content')
 			mockResolve.mockReturnValue('/absolute/relative/Contract.sol')
 
-			const result = readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(Object.keys(result)).toEqual(['relative/Contract.sol'])
 			expect(result['relative/Contract.sol']).toBe('content')
@@ -691,7 +694,7 @@ describe('readSourceFilesSync', () => {
 		it('should return empty object when validated paths is empty', () => {
 			mockValidateFiles.mockReturnValue([])
 
-			const result = readSourceFilesSync(['Contract.sol'], 'Solidity', mockLogger)
+			const result = readSourceFilesSync(defaultFao, ['Contract.sol'], 'Solidity', mockLogger)
 
 			expect(result).toEqual({})
 			expect(Object.keys(result)).toHaveLength(0)
@@ -706,7 +709,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue(largeContent)
 
-			const result = readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(result['LargeFile.sol']).toBe(largeContent)
 			expect((result['LargeFile.sol'] as string).length).toBe(10_000_000)
@@ -719,7 +722,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue(unicodeContent)
 
-			const result = readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(result['Unicode.sol']).toBe(unicodeContent)
 		})
@@ -731,7 +734,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue(specialContent)
 
-			const result = readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(result['Special.sol']).toBe(specialContent)
 		})
@@ -742,7 +745,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue('')
 
-			const result = readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(result['Empty.sol']).toBe('')
 		})
@@ -753,7 +756,7 @@ describe('readSourceFilesSync', () => {
 			mockValidateFiles.mockReturnValue(filePaths)
 			mockReadFileSync.mockReturnValue('content')
 
-			const result = readSourceFilesSync(filePaths, 'Solidity', mockLogger)
+			const result = readSourceFilesSync(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(result['../parent/Contract.sol']).toBe('content')
 		})

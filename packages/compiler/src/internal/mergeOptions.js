@@ -16,6 +16,7 @@ export const mergeOptions = (options = {}, overrides = {}) => {
 			loggingLevel: overrides.loggingLevel ?? options.loggingLevel,
 			exposeInternalFunctions: overrides.exposeInternalFunctions ?? options.exposeInternalFunctions,
 			exposeInternalVariables: overrides.exposeInternalVariables ?? options.exposeInternalVariables,
+			fileAccessObject: overrides.fileAccessObject ?? options.fileAccessObject,
 			// solc settings
 			compilationOutput: overrides.compilationOutput ?? options.compilationOutput,
 			hardfork: overrides.hardfork ?? options.hardfork,

@@ -13,12 +13,7 @@ import { mergeOptions } from './internal/mergeOptions.js'
 import { readSourceFiles } from './internal/readSourceFiles.js'
 import { readSourceFilesSync } from './internal/readSourceFilesSync.js'
 import { validateBaseOptions } from './internal/validateBaseOptions.js'
-
-// TODO: return missing fields + contract (from @tevm/contract) in output
-
-// TODO: bundler;
-// from what I understand anything we do with the compiler here the bundler can do and provide a typed API locally
-// i.e. using imported contract(s) as source, and writing direct solidity as shadow code, which is exactly the purpose of the "sol``" API
+import { createDefaultFao } from './resolutions/createDefaultFao.js'
 
 /**
  * A stateful compiler instance with pre-configured defaults.
@@ -50,21 +45,37 @@ import { validateBaseOptions } from './internal/validateBaseOptions.js'
  * })
  */
 export class Compiler {
+	static defaultFao = createDefaultFao()
+	/**
+	 * @type {import('./CreateCompilerOptions.js').CreateCompilerOptions | undefined}
+	 */
+	options
+	/**
+	 * @type {import('@tevm/logger').Logger}
+	 * @private
+	 */
+	logger
+	/**
+	 * @type {import('@tevm/solc').Solc | undefined}
+	 * @private
+	 */
+	solcInstance
+
 	/**
 	 * @param {import('./CreateCompilerOptions.js').CreateCompilerOptions} [options] - Default options for all compiler operations
 	 */
 	constructor(options) {
+		this.options = options
+		this.solcInstance = options?.solc
 		this.logger =
 			options?.logger ?? createLogger({ name: '@tevm/compiler', level: options?.loggingLevel ?? defaults.loggingLevel })
-		this._solcInstance = options?.solc
-		this.options = options
 	}
 
 	/**
 	 * @returns {import('@tevm/solc').Solc}
 	 */
 	requireSolcLoaded() {
-		if (this._solcInstance) return this._solcInstance
+		if (this.solcInstance) return this.solcInstance
 
 		const err = new SolcError('No version of solc loaded, call loadSolc before any compilation', {
 			meta: { code: 'not_loaded' },
@@ -235,7 +246,12 @@ export class Compiler {
 	async compileFiles(filePaths, compileOptions) {
 		const solc = this.requireSolcLoaded()
 		const mergedOptions = mergeOptions(this.options, compileOptions)
-		const sources = await readSourceFiles(filePaths, mergedOptions?.language, this.logger)
+		const sources = await readSourceFiles(
+			mergedOptions.fileAccessObject ?? Compiler.defaultFao,
+			filePaths,
+			mergedOptions.language,
+			this.logger,
+		)
 		const validatedOptions = validateBaseOptions(Object.values(sources), mergedOptions, this.logger)
 		return /** @type {any} */ (compileContracts(solc, /** @type {any} */ (sources), validatedOptions, this.logger))
 	}
@@ -265,7 +281,12 @@ export class Compiler {
 	compileFilesSync(filePaths, compileOptions) {
 		const solc = this.requireSolcLoaded()
 		const mergedOptions = mergeOptions(this.options, compileOptions)
-		const sources = readSourceFilesSync(filePaths, mergedOptions?.language, this.logger)
+		const sources = readSourceFilesSync(
+			mergedOptions.fileAccessObject ?? Compiler.defaultFao,
+			filePaths,
+			mergedOptions.language,
+			this.logger,
+		)
 		const validatedOptions = validateBaseOptions(Object.values(sources), mergedOptions, this.logger)
 		return /** @type {any} */ (compileContracts(solc, /** @type {any} */ (sources), validatedOptions, this.logger))
 	}
@@ -288,10 +309,16 @@ export class Compiler {
 		const solc = this.requireSolcLoaded()
 		const { sourceLanguage, shadowLanguage, injectIntoContractPath, injectIntoContractName, ...baseOptions } =
 			compileOptions ?? {}
-		const sources = await readSourceFiles(filePaths, sourceLanguage, this.logger)
+		const mergedOptions = mergeOptions(this.options, baseOptions)
+		const sources = await readSourceFiles(
+			mergedOptions.fileAccessObject ?? Compiler.defaultFao,
+			filePaths,
+			sourceLanguage,
+			this.logger,
+		)
 		const validatedOptions = validateBaseOptions(
 			/** @type {any} */ (Object.values(sources)),
-			{ ...mergeOptions(this.options, baseOptions), language: sourceLanguage },
+			{ ...mergedOptions, language: sourceLanguage },
 			this.logger,
 		)
 		return /** @type {any} */ (
@@ -324,10 +351,16 @@ export class Compiler {
 		const solc = this.requireSolcLoaded()
 		const { sourceLanguage, shadowLanguage, injectIntoContractPath, injectIntoContractName, ...baseOptions } =
 			compileOptions ?? {}
-		const sources = readSourceFilesSync(filePaths, sourceLanguage, this.logger)
+		const mergedOptions = mergeOptions(this.options, baseOptions)
+		const sources = readSourceFilesSync(
+			mergedOptions.fileAccessObject ?? Compiler.defaultFao,
+			filePaths,
+			sourceLanguage,
+			this.logger,
+		)
 		const validatedOptions = validateBaseOptions(
 			/** @type {any} */ (Object.values(sources)),
-			{ ...mergeOptions(this.options, baseOptions), language: sourceLanguage },
+			{ ...mergedOptions, language: sourceLanguage },
 			this.logger,
 		)
 		return /** @type {any} */ (
@@ -460,7 +493,7 @@ export class Compiler {
 	 * @returns {Promise<void>}
 	 */
 	async loadSolc(version) {
-		this._solcInstance = await getSolc(version ?? defaults.solcVersion, this.logger)
+		this.solcInstance = await getSolc(version ?? defaults.solcVersion, this.logger)
 	}
 
 	/**

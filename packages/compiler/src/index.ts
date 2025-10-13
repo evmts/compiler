@@ -35,3 +35,4 @@ export {
 	compileSourcesWithShadow,
 	compileSourceWithShadow,
 } from './compile/index.js'
+export type { FileAccessObject } from './resolutions/FileAccessObject.js'

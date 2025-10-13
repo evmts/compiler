@@ -1,17 +1,17 @@
-import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { FileReadError } from './errors.js'
 import { validateFiles } from './validateFiles.js'
 
 /**
- * Read and parse source files from the filesystem
+ * Read and parse source files from the filesystem (synchronous)
  *
+ * @param {import('../resolutions/FileAccessObject.js').FileAccessObject} fao - File access object
  * @param {string[]} filePaths - Array of file paths to read
  * @param {import('@tevm/solc').SolcLanguage | undefined} language - Language to determine parsing strategy
  * @param {import('@tevm/logger').Logger} logger - Logger instance
  * @returns {{[filePath: string]: string | object}} Sources keyed by file path
  */
-export const readSourceFilesSync = (filePaths, language, logger) => {
+export const readSourceFilesSync = ({ readFileSync }, filePaths, language, logger) => {
 	const validatedPaths = validateFiles(filePaths, language, logger)
 	logger.debug(`Preparing to read ${validatedPaths.length} files`)
 

@@ -1,7 +1,10 @@
 import { createLogger } from '@tevm/logger'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createDefaultFao } from '../resolutions/createDefaultFao.js'
 import { FileReadError } from './errors.js'
 import { readSourceFiles } from './readSourceFiles.js'
+
+const defaultFao = createDefaultFao()
 
 vi.mock('node:fs/promises', () => ({
 	readFile: vi.fn(),
@@ -41,7 +44,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue(fileContent)
 
-			const result = await readSourceFiles([filePath], 'Solidity', mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)
 
 			expect(result[filePath]).toBe(fileContent)
 			expect(mockValidateFiles).toHaveBeenCalledWith([filePath], 'Solidity', mockLogger)
@@ -56,7 +59,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue(fileContent)
 
-			const result = await readSourceFiles([filePath], 'Yul', mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], 'Yul', mockLogger)
 
 			expect(result[filePath]).toBe(fileContent)
 			expect(mockValidateFiles).toHaveBeenCalledWith([filePath], 'Yul', mockLogger)
@@ -73,7 +76,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue(fileContent)
 
-			const result = await readSourceFiles([filePath], 'SolidityAST', mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], 'SolidityAST', mockLogger)
 
 			expect(result[filePath]).toEqual(astData)
 			expect(mockValidateFiles).toHaveBeenCalledWith([filePath], 'SolidityAST', mockLogger)
@@ -85,7 +88,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue(fileContent)
 
-			const result = await readSourceFiles([filePath], undefined, mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], undefined, mockLogger)
 
 			expect(result[filePath]).toBe(fileContent)
 			expect(mockValidateFiles).toHaveBeenCalledWith([filePath], undefined, mockLogger)
@@ -106,7 +109,7 @@ describe('readSourceFiles', () => {
 				.mockResolvedValueOnce(fileContents[1])
 				.mockResolvedValueOnce(fileContents[2])
 
-			const result = await readSourceFiles(filePaths, 'Solidity', mockLogger)
+			const result = await readSourceFiles(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(result['Contract1.sol']).toBe(fileContents[0])
 			expect(result['Contract2.sol']).toBe(fileContents[1])
@@ -122,7 +125,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValueOnce(JSON.stringify(astData1)).mockResolvedValueOnce(JSON.stringify(astData2))
 
-			const result = await readSourceFiles(filePaths, 'SolidityAST', mockLogger)
+			const result = await readSourceFiles(defaultFao, filePaths, 'SolidityAST', mockLogger)
 
 			expect(result['Contract1.json']).toEqual(astData1)
 			expect(result['Contract2.json']).toEqual(astData2)
@@ -137,7 +140,7 @@ describe('readSourceFiles', () => {
 				.mockResolvedValueOnce('content B')
 				.mockResolvedValueOnce('content C')
 
-			const result = await readSourceFiles(filePaths, 'Solidity', mockLogger)
+			const result = await readSourceFiles(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			const keys = Object.keys(result)
 			expect(keys).toEqual(filePaths)
@@ -152,9 +155,9 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockRejectedValue(error)
 
-			await expect(readSourceFiles([filePath], 'Solidity', mockLogger)).rejects.toThrow(FileReadError)
+			await expect(readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)).rejects.toThrow(FileReadError)
 
-			await expect(readSourceFiles([filePath], 'Solidity', mockLogger)).rejects.toThrow(
+			await expect(readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)).rejects.toThrow(
 				`Failed to read file ${filePath}`,
 			)
 		})
@@ -166,7 +169,7 @@ describe('readSourceFiles', () => {
 			mockReadFile.mockRejectedValue(error)
 
 			try {
-				await readSourceFiles([filePath], 'Solidity', mockLogger)
+				await readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)
 				expect.fail('Should have thrown FileReadError')
 			} catch (err) {
 				expect(err).toBeInstanceOf(FileReadError)
@@ -182,7 +185,7 @@ describe('readSourceFiles', () => {
 			const filePath = 'Missing.sol'
 			mockReadFile.mockRejectedValue(new Error('File not found'))
 
-			await expect(readSourceFiles([filePath], 'Solidity', mockLogger)).rejects.toThrow(FileReadError)
+			await expect(readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)).rejects.toThrow(FileReadError)
 
 			expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to read file'))
 		})
@@ -196,7 +199,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockRejectedValue(error)
 
-			await expect(readSourceFiles([filePath], 'Solidity', mockLogger)).rejects.toThrow(FileReadError)
+			await expect(readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)).rejects.toThrow(FileReadError)
 		})
 
 		it('should include cause in FileReadError for permission errors', async () => {
@@ -207,7 +210,7 @@ describe('readSourceFiles', () => {
 			mockReadFile.mockRejectedValue(permissionError)
 
 			try {
-				await readSourceFiles([filePath], 'Solidity', mockLogger)
+				await readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)
 				expect.fail('Should have thrown FileReadError')
 			} catch (err) {
 				expect(err).toBeInstanceOf(FileReadError)
@@ -227,7 +230,7 @@ describe('readSourceFiles', () => {
 				throw validationError
 			})
 
-			await expect(readSourceFiles(filePaths, 'Solidity', mockLogger)).rejects.toThrow(validationError)
+			await expect(readSourceFiles(defaultFao, filePaths, 'Solidity', mockLogger)).rejects.toThrow(validationError)
 		})
 
 		it('should call validateFiles before attempting to read', async () => {
@@ -236,7 +239,7 @@ describe('readSourceFiles', () => {
 				throw new Error('Validation failed')
 			})
 
-			await expect(readSourceFiles(filePaths, 'Solidity', mockLogger)).rejects.toThrow()
+			await expect(readSourceFiles(defaultFao, filePaths, 'Solidity', mockLogger)).rejects.toThrow()
 
 			expect(mockValidateFiles).toHaveBeenCalledWith(filePaths, 'Solidity', mockLogger)
 			expect(mockReadFile).not.toHaveBeenCalled()
@@ -255,7 +258,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue(JSON.stringify(astData))
 
-			const result = await readSourceFiles([filePath], 'SolidityAST', mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], 'SolidityAST', mockLogger)
 
 			expect(result[filePath]).toEqual(astData)
 			expect(typeof result[filePath]).toBe('object')
@@ -267,9 +270,9 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue(invalidJson)
 
-			await expect(readSourceFiles([filePath], 'SolidityAST', mockLogger)).rejects.toThrow(FileReadError)
+			await expect(readSourceFiles(defaultFao, [filePath], 'SolidityAST', mockLogger)).rejects.toThrow(FileReadError)
 
-			await expect(readSourceFiles([filePath], 'SolidityAST', mockLogger)).rejects.toThrow(
+			await expect(readSourceFiles(defaultFao, [filePath], 'SolidityAST', mockLogger)).rejects.toThrow(
 				`Failed to parse JSON file ${filePath}`,
 			)
 		})
@@ -281,7 +284,7 @@ describe('readSourceFiles', () => {
 			mockReadFile.mockResolvedValue(invalidJson)
 
 			try {
-				await readSourceFiles([filePath], 'SolidityAST', mockLogger)
+				await readSourceFiles(defaultFao, [filePath], 'SolidityAST', mockLogger)
 				expect.fail('Should have thrown FileReadError')
 			} catch (err) {
 				expect(err).toBeInstanceOf(FileReadError)
@@ -297,7 +300,7 @@ describe('readSourceFiles', () => {
 			const filePath = 'Invalid.json'
 			mockReadFile.mockResolvedValue('{ invalid }')
 
-			await expect(readSourceFiles([filePath], 'SolidityAST', mockLogger)).rejects.toThrow(FileReadError)
+			await expect(readSourceFiles(defaultFao, [filePath], 'SolidityAST', mockLogger)).rejects.toThrow(FileReadError)
 
 			expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to parse JSON'))
 		})
@@ -308,7 +311,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue(jsonLikeContent)
 
-			const result = await readSourceFiles([filePath], 'Solidity', mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)
 
 			expect(result[filePath]).toBe(jsonLikeContent)
 			expect(typeof result[filePath]).toBe('string')
@@ -320,7 +323,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue(emptyJson)
 
-			const result = await readSourceFiles([filePath], 'SolidityAST', mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], 'SolidityAST', mockLogger)
 
 			expect(result[filePath]).toEqual({})
 		})
@@ -347,7 +350,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue(JSON.stringify(complexAst))
 
-			const result = await readSourceFiles([filePath], 'SolidityAST', mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], 'SolidityAST', mockLogger)
 
 			expect(result[filePath]).toEqual(complexAst)
 		})
@@ -365,7 +368,7 @@ describe('readSourceFiles', () => {
 					}),
 			)
 
-			const resultPromise = readSourceFiles([filePath], 'Solidity', mockLogger)
+			const resultPromise = readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)
 
 			expect(resultPromise).toBeInstanceOf(Promise)
 
@@ -383,7 +386,7 @@ describe('readSourceFiles', () => {
 				return Promise.resolve('content')
 			})
 
-			await readSourceFiles(filePaths, 'Solidity', mockLogger)
+			await readSourceFiles(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(callOrder.length).toBe(2)
 			expect(callOrder[0]).toContain('A.sol')
@@ -395,7 +398,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockRejectedValue(new Error('Read error'))
 
-			await expect(readSourceFiles([filePath], 'Solidity', mockLogger)).rejects.toThrow(FileReadError)
+			await expect(readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)).rejects.toThrow(FileReadError)
 		})
 	})
 
@@ -405,7 +408,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue('content')
 
-			await readSourceFiles([filePath], 'Solidity', mockLogger)
+			await readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)
 
 			const callArg = mockReadFile.mock.calls[0]?.[0]
 			expect(callArg).toContain(filePath)
@@ -417,7 +420,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue('content')
 
-			const result = await readSourceFiles([filePath], 'Solidity', mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)
 
 			expect(result[filePath]).toBe('content')
 			expect(mockReadFile).toHaveBeenCalledWith(expect.stringContaining('contracts'), 'utf-8')
@@ -428,7 +431,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue('content')
 
-			const result = await readSourceFiles([filePath], 'Solidity', mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)
 
 			expect(result[filePath]).toBe('content')
 		})
@@ -440,7 +443,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue('content')
 
-			await readSourceFiles(filePaths, 'Solidity', mockLogger)
+			await readSourceFiles(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(mockLogger.debug).toHaveBeenCalledWith('Preparing to read 3 files')
 		})
@@ -450,7 +453,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue('content')
 
-			await readSourceFiles(filePaths, 'Solidity', mockLogger)
+			await readSourceFiles(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('Reading file:'))
 			expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('A.sol'))
@@ -462,7 +465,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue('content')
 
-			await readSourceFiles([filePath], 'Solidity', mockLogger)
+			await readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)
 
 			expect(mockLogger.error).not.toHaveBeenCalled()
 		})
@@ -474,7 +477,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue('')
 
-			const result = await readSourceFiles([filePath], 'Solidity', mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)
 
 			expect(result[filePath]).toBe('')
 		})
@@ -485,7 +488,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue(largeContent)
 
-			const result = await readSourceFiles([filePath], 'Solidity', mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)
 
 			expect(result[filePath]).toBe(largeContent)
 			expect((result[filePath] as string).length).toBe(1000000)
@@ -497,7 +500,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue(specialContent)
 
-			const result = await readSourceFiles([filePath], 'Solidity', mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)
 
 			expect(result[filePath]).toBe(specialContent)
 		})
@@ -508,7 +511,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue(JSON.stringify(unicodeData))
 
-			const result = await readSourceFiles([filePath], 'SolidityAST', mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], 'SolidityAST', mockLogger)
 
 			expect(result[filePath]).toEqual(unicodeData)
 		})
@@ -518,7 +521,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue('content')
 
-			const result = await readSourceFiles([filePath], 'Solidity', mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)
 
 			expect(result[filePath]).toBe('content')
 		})
@@ -526,7 +529,7 @@ describe('readSourceFiles', () => {
 		it('should return empty object for zero validated files', async () => {
 			mockValidateFiles.mockReturnValue([])
 
-			const result = await readSourceFiles(['any.sol'], 'Solidity', mockLogger)
+			const result = await readSourceFiles(defaultFao, ['any.sol'], 'Solidity', mockLogger)
 
 			expect(result).toEqual({})
 			expect(mockReadFile).not.toHaveBeenCalled()
@@ -537,7 +540,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValueOnce('content').mockRejectedValueOnce(new Error('Read failed'))
 
-			await expect(readSourceFiles(filePaths, 'Solidity', mockLogger)).rejects.toThrow(FileReadError)
+			await expect(readSourceFiles(defaultFao, filePaths, 'Solidity', mockLogger)).rejects.toThrow(FileReadError)
 
 			expect(mockReadFile).toHaveBeenCalledTimes(2)
 		})
@@ -549,7 +552,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue('content')
 
-			await readSourceFiles([filePath], 'Solidity', mockLogger)
+			await readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)
 
 			expect(mockReadFile).toHaveBeenCalledWith(expect.anything(), 'utf-8')
 		})
@@ -560,7 +563,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue(utf8Content)
 
-			const result = await readSourceFiles([filePath], 'Solidity', mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)
 
 			expect(result[filePath]).toBe(utf8Content)
 		})
@@ -572,7 +575,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue('content')
 
-			const result = await readSourceFiles(filePaths, 'Solidity', mockLogger)
+			const result = await readSourceFiles(defaultFao, filePaths, 'Solidity', mockLogger)
 
 			expect(typeof result).toBe('object')
 			expect(Object.keys(result)).toEqual(filePaths)
@@ -583,7 +586,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue('content')
 
-			const result = await readSourceFiles([filePath], 'Solidity', mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], 'Solidity', mockLogger)
 
 			expect(typeof result[filePath]).toBe('string')
 		})
@@ -594,7 +597,7 @@ describe('readSourceFiles', () => {
 
 			mockReadFile.mockResolvedValue(JSON.stringify(astData))
 
-			const result = await readSourceFiles([filePath], 'SolidityAST', mockLogger)
+			const result = await readSourceFiles(defaultFao, [filePath], 'SolidityAST', mockLogger)
 
 			expect(typeof result[filePath]).toBe('object')
 			expect(result[filePath]).not.toBeInstanceOf(String)

@@ -9,6 +9,7 @@ import type {
 	SolcOptimizer,
 	SolcRemapping,
 } from '@tevm/solc'
+import type { FileAccessObject } from '../resolutions/FileAccessObject.js'
 import type { CompilationOutputOption } from './CompilationOutputOption.js'
 
 // All of the below options can be overridden on a per-compilation basis
@@ -122,12 +123,41 @@ export interface CompileBaseOptions<
 	 */
 	loggingLevel?: LogOptions['level'] | undefined
 
-	// TODO: implement
+	/**
+	 * File Access Object for abstracting filesystem operations
+	 *
+	 * Provides a pluggable interface for reading files, enabling:
+	 * - Virtual filesystems for testing
+	 * - Custom resolution strategies (HTTP, database, etc.)
+	 * - Instrumentation and logging
+	 * - Platform-specific implementations
+	 *
+	 * If not provided, defaults to Node.js `fs` module.
+	 *
+	 * @default createDefaultFao()
+	 * @example
+	 * ```typescript
+	 * // Virtual filesystem
+	 * const virtualFs = {
+	 *   'contract.sol': 'contract Foo { ... }'
+	 * }
+	 *
+	 * const fao = {
+	 *   readFile: async (path) => virtualFs[path],
+	 *   readFileSync: (path) => virtualFs[path],
+	 *   existsSync: (path) => path in virtualFs,
+	 *   exists: async (path) => path in virtualFs
+	 * }
+	 *
+	 * await compiler.compileFiles(['contract.sol'], { fileAccessObject: fao })
+	 * ```
+	 */
+	fileAccessObject?: FileAccessObject | undefined
+
 	/**
 	 * Expose all internal and private functions (change their visibility to public)
 	 */
 	exposeInternalFunctions?: boolean | undefined
-	// TODO: implement
 	/**
 	 * Expose all internal and private variables (change their visibility to public)
 	 */
