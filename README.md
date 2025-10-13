@@ -1,76 +1,138 @@
-# Compiler
+# Compiler Monorepo
 
-<a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
+A monorepo containing Solidity compiler tooling with a focus on pure syntax parsing and AST manipulation.
 
-✨ Your new, shiny [Nx workspace](https://nx.dev) is almost ready ✨.
+## Projects
 
-Run `npx nx graph` to visually explore what got created. Now, let's get you up to speed!
+### Shadow - Pure Syntax Parser for Solidity
 
-## Finish your CI setup
+Shadow is a Zig wrapper around the Solidity Parser that demonstrates **the parser is a pure syntax parser** - it creates ASTs without requiring semantic validity. See [SHADOW_README.md](./SHADOW_README.md) for detailed documentation.
 
-[Click here to finish setting up your workspace!](https://cloud.nx.app/connect/K15Npyzd6k)
+#### Key Features
 
+- ✅ Parse Solidity functions with undefined variables
+- ✅ Parse functions with type mismatches
+- ✅ Parse functions calling non-existent functions
+- ✅ Get full ASTs for code that will never compile
+- ✅ Stitch shadow functions into valid contracts
+- ✅ Export to WASM for browser use
 
-## Run tasks
+#### Quick Start
 
-To run tasks with Nx use:
+```bash
+# Build everything
+zig build
 
-```sh
-npx nx <target> <project-name>
+# Run demo (shows AST stitching)
+zig build run
+
+# Run tests
+zig build test
+
+# Build WASM
+zig build wasm
 ```
 
-For example:
+### Compiler Library (Rust/NAPI)
 
-```sh
-npx nx build myproject
+Located in `packages/compiler` - a comprehensive NAPI-rs wrapper for foundry-compilers with Bun test suite.
+
+## Repository Structure
+
+```
+compiler/
+├── solidity/              # Solidity compiler source (submodule)
+├── shadow.zig            # Shadow parser implementation
+├── shadow_test.zig       # Test suite
+├── solidity-parser-wrapper.{h,cpp}  # C++ wrapper for parser
+├── build.zig             # Build system
+├── packages/
+│   └── compiler/         # Rust NAPI library
+└── apps/                 # Applications
 ```
 
-These targets are either [inferred automatically](https://nx.dev/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
+## What Shadow Proves
 
-[More about running tasks in the docs &raquo;](https://nx.dev/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+The Solidity compiler has two distinct phases:
 
-## Add new projects
+1. **Parsing** (syntax-only) - Creates AST from tokens
+2. **Analysis** (semantic) - Type checking, variable resolution, etc.
 
-While you could add new projects to your workspace manually, you might want to leverage [Nx plugins](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) and their [code generation](https://nx.dev/features/generate-code?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) feature.
+Shadow uses **only the parser**, bypassing all semantic analysis. The parser at [`libsolidity/parsing/Parser.cpp:1112`](https://github.com/argotorg/solidity/blob/a6945de0b/libsolidity/parsing/Parser.cpp#L1112-L1118) just creates `Identifier` nodes without resolution:
 
-To install a new plugin you can use the `nx add` command. Here's an example of adding the React plugin:
-```sh
-npx nx add @nx/react
+```cpp
+ASTPointer<Identifier> Parser::parseIdentifier() {
+    return nodeFactory.createNode<Identifier>(expectIdentifierToken());
+}
 ```
 
-Use the plugin's generator to create new projects. For example, to create a new React app or library:
+**No variable resolution. No type checking. No semantic analysis.**
 
-```sh
-# Generate an app
-npx nx g @nx/react:app demo
+That all happens later in [`CompilerStack::analyze()`](https://github.com/argotorg/solidity/blob/a6945de0b/libsolidity/interface/CompilerStack.cpp#L106-L185) which Shadow bypasses completely!
 
-# Generate a library
-npx nx g @nx/react:lib some-lib
+## Use Cases
+
+- **IDE Features** - Syntax highlighting, structure view without compilation
+- **AST Manipulation** - Add functions to contracts without semantic checks
+- **Code Analysis** - Analyze structure of invalid/incomplete code
+- **Testing** - Parse test fixtures that don't need to compile
+- **Browser Tools** - WASM-based Solidity AST explorer
+
+## Building
+
+### Prerequisites
+
+- Zig 0.11+
+- C++ compiler (for Solidity parser)
+- Node.js (for Rust/NAPI library)
+
+### Build Commands
+
+```bash
+# Build native
+zig build
+
+# Run Shadow demo
+zig build run
+
+# Run tests
+zig build test
+
+# Build WASM module
+zig build wasm
+
+# Build Rust library
+cd packages/compiler
+npm install
+npm run build
 ```
 
-You can use `npx nx list` to get a list of installed plugins. Then, run `npx nx list <plugin-name>` to learn about more specific capabilities of a particular plugin. Alternatively, [install Nx Console](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) to browse plugins and generators in your IDE.
+## Development
 
-[Learn more about Nx plugins &raquo;](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) | [Browse the plugin registry &raquo;](https://nx.dev/plugin-registry?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+This is an Nx monorepo. Use Nx commands to manage projects:
 
+```bash
+# Build specific project
+npx nx build <project>
 
-[Learn more about Nx on CI](https://nx.dev/ci/intro/ci-with-nx#ready-get-started-with-your-provider?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+# Run tests
+npx nx test <project>
 
-## Install Nx Console
+# See dependency graph
+npx nx graph
+```
 
-Nx Console is an editor extension that enriches your developer experience. It lets you run tasks, generate code, and improves code autocompletion in your IDE. It is available for VSCode and IntelliJ.
+## Contributing
 
-[Install Nx Console &raquo;](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+This repository demonstrates compiler internals and parser capabilities. Contributions welcome!
 
-## Useful links
+## License
 
-Learn more:
+- Shadow: GPL-3.0 (same as Solidity)
+- Compiler library: See packages/compiler/LICENSE
 
-- [Learn about Nx on CI](https://nx.dev/ci/intro/ci-with-nx?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Releasing Packages with Nx release](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [What are Nx plugins?](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+## Learn More
 
-And join the Nx community:
-- [Discord](https://go.nx.dev/community)
-- [Follow us on X](https://twitter.com/nxdevtools) or [LinkedIn](https://www.linkedin.com/company/nrwl)
-- [Our Youtube channel](https://www.youtube.com/@nxdevtools)
-- [Our blog](https://nx.dev/blog?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+- [Shadow Documentation](./SHADOW_README.md)
+- [Solidity Parser Source](https://github.com/argotorg/solidity)
+- [Nx Documentation](https://nx.dev)
