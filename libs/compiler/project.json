@@ -46,6 +46,15 @@
       "options": {
         "target-dir": "dist/target/compiler"
       }
+    },
+    "test-bun": {
+      "cache": true,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bun test",
+        "cwd": "libs/compiler"
+      },
+      "dependsOn": ["build"]
     }
   }
 }
