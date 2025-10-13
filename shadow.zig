@@ -3,25 +3,57 @@ const c = @cImport({
     @cInclude("solidity-parser-wrapper.h");
 });
 
-/// Shadow wraps inline Solidity function definitions and parses them into ASTs
-/// without requiring them to be semantically valid or compilable.
+/// Shadow wraps Solidity code fragments (functions, variables, etc.) and parses
+/// them into ASTs without requiring semantic validity.
 ///
-/// This demonstrates that the Solidity parser itself is a pure syntax parser
-/// that doesn't perform semantic analysis (like checking if variables are defined).
+/// Demonstrates that the Solidity parser performs pure syntax analysis without
+/// semantic validation (e.g., doesn't check if variables are defined).
 pub const Shadow = struct {
     allocator: std.mem.Allocator,
-    function_source: []const u8,
+    source: []const u8,
     ctx: *c.SolParserContext,
 
     const Self = @This();
 
+    pub const Error = error{
+        /// C parser context creation failed
+        ParserInitFailed,
+
+        /// Syntax error during parsing
+        ParseFailed,
+
+        /// AST contains no extractable nodes
+        NoNodesFound,
+
+        /// Target AST has unexpected structure
+        InvalidContractStructure,
+
+        /// Memory allocation failed
+        OutOfMemory,
+
+        /// JSON parsing errors
+        Overflow,
+        InvalidCharacter,
+        UnexpectedToken,
+        InvalidNumber,
+        InvalidEnumTag,
+        DuplicateField,
+        UnknownField,
+        MissingField,
+        LengthMismatch,
+        SyntaxError,
+        UnexpectedEndOfInput,
+        BufferUnderrun,
+        ValueTooLong,
+    };
+
     /// Initialize a new Shadow with a function definition string
-    pub fn init(allocator: std.mem.Allocator, function_source: []const u8) !Self {
-        const ctx = c.sol_parser_create() orelse return error.ParserInitFailed;
+    pub fn init(allocator: std.mem.Allocator, source: []const u8) Error!Self {
+        const ctx = c.sol_parser_create() orelse return Error.ParserInitFailed;
 
         return Self{
             .allocator = allocator,
-            .function_source = function_source,
+            .source = source,
             .ctx = ctx,
         };
     }
@@ -30,8 +62,8 @@ pub const Shadow = struct {
         c.sol_parser_destroy(self.ctx);
     }
 
-    /// Wrap the function in minimal boilerplate to make it parseable
-    fn wrapFunction(self: *Self, allocator: std.mem.Allocator) ![]u8 {
+    /// Wrap the shadow source in minimal boilerplate to make it parseable
+    fn wrapShadowSource(self: *Self, allocator: std.mem.Allocator) ![]u8 {
         // Create minimal boilerplate that makes it syntactically valid
         // Note: This code won't COMPILE due to semantic errors, but it will PARSE!
         const wrapped = try std.fmt.allocPrint(
@@ -44,7 +76,7 @@ pub const Shadow = struct {
             \\}}
             \\
         ,
-            .{self.function_source},
+            .{self.source},
         );
         return wrapped;
     }
@@ -52,70 +84,19 @@ pub const Shadow = struct {
     /// Parse the function into an AST
     /// Returns JSON representation of the AST
     /// This works even if the function has undefined variables!
-    pub fn parseToAST(self: *Self) ![]const u8 {
-        const wrapped = try self.wrapFunction(self.allocator);
+    pub fn toWrappedAst(self: *Self) Error![]const u8 {
+        const wrapped = try self.wrapShadowSource(self.allocator);
         defer self.allocator.free(wrapped);
 
-        // Add null terminator for C
-        const wrapped_cstr = try self.allocator.dupeZ(u8, wrapped);
-        defer self.allocator.free(wrapped_cstr);
-
-        const source_name = "Shadow.sol";
-        const result = c.sol_parser_parse(
-            self.ctx,
-            wrapped_cstr.ptr,
-            source_name.ptr,
-        );
-
-        if (result == null) {
-            // Check for errors
-            const errors = c.sol_parser_get_errors(self.ctx);
-            if (errors != null) {
-                defer c.sol_free_string(errors);
-                const error_str = std.mem.span(errors);
-                std.debug.print("Parser errors:\n{s}\n", .{error_str});
-            }
-            return error.ParseFailed;
-        }
-
-        // Copy the result since we need to free it
-        const result_str = std.mem.span(result);
-        const owned = try self.allocator.dupe(u8, result_str);
-        c.sol_free_string(result);
-
-        return owned;
-    }
-
-    /// Parse and extract just the first function node from the full contract AST
-    pub fn extractFunctionAST(self: *Self, allocator: std.mem.Allocator) !std.json.Value {
-        const ast_json = try self.parseToAST();
-        defer self.allocator.free(ast_json);
-
-        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, ast_json, .{});
-        defer parsed.deinit();
-
-        // Navigate to the function definition node
-        // Structure: root -> nodes[1] (contract) -> nodes[0] (function)
-        if (parsed.value.object.get("nodes")) |nodes_value| {
-            if (nodes_value.array.items.len > 1) {
-                const contract = nodes_value.array.items[1];
-                if (contract.object.get("nodes")) |contract_nodes| {
-                    if (contract_nodes.array.items.len > 0) {
-                        return contract_nodes.array.items[0];
-                    }
-                }
-            }
-        }
-
-        return error.FunctionNotFound;
+        return try parseSourceAst(self.allocator, wrapped, "Shadow.sol");
     }
 
     /// Parse and extract all function nodes from the full contract AST as JSON strings
-    pub fn extractAllFunctionASTs(self: *Self, allocator: std.mem.Allocator) ![][]const u8 {
-        const ast_json = try self.parseToAST();
+    pub fn toAstNodes(self: *Self) Error![][]const u8 {
+        const ast_json = try self.toWrappedAst();
         defer self.allocator.free(ast_json);
 
-        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, ast_json, .{});
+        var parsed = try std.json.parseFromSlice(std.json.Value, self.allocator, ast_json, .{});
         defer parsed.deinit();
 
         // Navigate to contract nodes
@@ -124,31 +105,32 @@ pub const Shadow = struct {
             if (nodes_value.array.items.len > 1) {
                 const contract = nodes_value.array.items[1];
                 if (contract.object.get("nodes")) |contract_nodes| {
-                    const function_count = contract_nodes.array.items.len;
-                    if (function_count == 0) return error.NoFunctionsFound;
+                    const node_count = contract_nodes.array.items.len;
+                    if (node_count == 0) return Error.NoNodesFound;
 
-                    var functions = try allocator.alloc([]const u8, function_count);
+                    var nodes = try self.allocator.alloc([]const u8, node_count);
                     for (contract_nodes.array.items, 0..) |node, i| {
-                        functions[i] = try std.fmt.allocPrint(allocator, "{f}", .{std.json.fmt(node, .{})});
+                        nodes[i] = try std.fmt.allocPrint(self.allocator, "{f}", .{std.json.fmt(node, .{})});
                     }
-                    return functions;
+                    return nodes;
                 }
             }
         }
 
-        return error.NoFunctionsFound;
+        return Error.NoNodesFound;
     }
 
-    /// Parse a full contract (not just a function)
-    pub fn parseFullContract(allocator: std.mem.Allocator, contract_source: []const u8) ![]const u8 {
-        const ctx = c.sol_parser_create() orelse return error.ParserInitFailed;
+    /// Parse complete Solidity source code to AST.
+    /// Used internally by stitchIntoSource(), but also available for general use.
+    pub fn parseSourceAst(allocator: std.mem.Allocator, source: []const u8, name: ?[]const u8) Error![]const u8 {
+        const ctx = c.sol_parser_create() orelse return Error.ParserInitFailed;
         defer c.sol_parser_destroy(ctx);
 
-        const source_cstr = try allocator.dupeZ(u8, contract_source);
+        const source_cstr = try allocator.dupeZ(u8, source);
         defer allocator.free(source_cstr);
 
-        const name = "Contract.sol";
-        const result = c.sol_parser_parse(ctx, source_cstr.ptr, name.ptr);
+        const source_name = name orelse "Contract.sol";
+        const result = c.sol_parser_parse(ctx, source_cstr.ptr, source_name.ptr);
 
         if (result == null) {
             const errors = c.sol_parser_get_errors(ctx);
@@ -156,7 +138,7 @@ pub const Shadow = struct {
                 defer c.sol_free_string(errors);
                 std.debug.print("Parse errors:\n{s}\n", .{std.mem.span(errors)});
             }
-            return error.ParseFailed;
+            return Error.ParseFailed;
         }
 
         const result_str = std.mem.span(result);
@@ -167,53 +149,61 @@ pub const Shadow = struct {
 
     /// Stitch shadow function(s) into an existing contract's AST
     /// Handles both single and multiple functions from shadow AST
-    pub fn stitchIntoContract(
-        allocator: std.mem.Allocator,
-        original_contract_ast: []const u8,
-        shadow_function_ast: []const u8,
-    ) ![]const u8 {
-        var original_parsed = try std.json.parseFromSlice(std.json.Value, allocator, original_contract_ast, .{});
-        defer original_parsed.deinit();
+    pub fn stitchIntoAst(self: *Self, target_ast: []const u8) Error![]const u8 {
+        var target_parsed = try std.json.parseFromSlice(std.json.Value, self.allocator, target_ast, .{});
+        defer target_parsed.deinit();
 
-        var shadow_parsed = try std.json.parseFromSlice(std.json.Value, allocator, shadow_function_ast, .{});
+        const shadow_ast = try self.toWrappedAst();
+        defer self.allocator.free(shadow_ast);
+
+        var shadow_parsed = try std.json.parseFromSlice(std.json.Value, self.allocator, shadow_ast, .{});
         defer shadow_parsed.deinit();
 
-        // Extract all shadow function nodes
-        const shadow_function_nodes = blk: {
-            if (shadow_parsed.value.object.get("nodes")) |nodes| {
-                if (nodes.array.items.len > 1) {
-                    const contract = nodes.array.items[1];
-                    if (contract.object.get("nodes")) |contract_nodes| {
-                        if (contract_nodes.array.items.len > 0) {
-                            break :blk contract_nodes.array.items;
+        // Extract all shadow nodes
+        const shadow_nodes = blk: {
+            if (shadow_parsed.value.object.get("nodes")) |root_nodes| {
+                if (root_nodes.array.items.len > 1) {
+                    const contract = root_nodes.array.items[1];
+                    if (contract.object.get("nodes")) |nodes| {
+                        if (nodes.array.items.len > 0) {
+                            break :blk nodes.array.items;
                         }
                     }
                 }
             }
-            return error.ShadowFunctionNotFound;
+            return Error.NoNodesFound;
         };
 
-        // Get the contract node from original
-        var contract_node = blk: {
-            if (original_parsed.value.object.get("nodes")) |nodes| {
-                if (nodes.array.items.len > 1) {
-                    break :blk &nodes.array.items[1];
+        // Get the contract node from target
+        var target_contract = blk: {
+            if (target_parsed.value.object.get("nodes")) |root_nodes| {
+                if (root_nodes.array.items.len > 1) {
+                    break :blk &root_nodes.array.items[1];
                 }
             }
-            return error.OriginalContractNotFound;
+            return Error.InvalidContractStructure;
         };
 
-        // Add all shadow functions to contract's nodes
-        if (contract_node.object.getPtr("nodes")) |contract_nodes_ptr| {
-            for (shadow_function_nodes) |shadow_node| {
-                try contract_nodes_ptr.array.append(shadow_node);
+        // Add all shadow nodes to contract's nodes
+        if (target_contract.object.getPtr("nodes")) |target_nodes_ptr| {
+            for (shadow_nodes) |node| {
+                try target_nodes_ptr.array.append(node);
             }
         } else {
-            return error.ContractNodesNotFound;
+            return Error.InvalidContractStructure;
         }
 
-        // Serialize back to JSON using Zig 0.15 API
-        return try std.fmt.allocPrint(allocator, "{f}", .{std.json.fmt(original_parsed.value, .{})});
+        // Serialize back to JSON
+        return try std.fmt.allocPrint(self.allocator, "{f}", .{std.json.fmt(target_parsed.value, .{})});
+    }
+
+    /// Stitch shadow function(s) into an existing contract's source code
+    /// Convenience wrapper that parses the source first
+    pub fn stitchIntoSource(self: *Self, target_source: []const u8) Error![]const u8 {
+        const target_ast = try parseSourceAst(self.allocator, target_source, null);
+        defer self.allocator.free(target_ast);
+
+        return try self.stitchIntoAst(target_ast);
     }
 };
 
@@ -233,7 +223,7 @@ test "parse function with undefined variable" {
     var shadow = try Shadow.init(allocator, bad_function);
     defer shadow.deinit();
 
-    const ast = try shadow.parseToAST();
+    const ast = try shadow.toWrappedAst();
     defer allocator.free(ast);
 
     try std.testing.expect(ast.len > 0);
@@ -252,7 +242,7 @@ test "parse function with type mismatch" {
     var shadow = try Shadow.init(allocator, type_error_function);
     defer shadow.deinit();
 
-    const ast = try shadow.parseToAST();
+    const ast = try shadow.toWrappedAst();
     defer allocator.free(ast);
 
     try std.testing.expect(ast.len > 0);
@@ -271,7 +261,7 @@ test "parse function calling non-existent function" {
     var shadow = try Shadow.init(allocator, missing_func);
     defer shadow.deinit();
 
-    const ast = try shadow.parseToAST();
+    const ast = try shadow.toWrappedAst();
     defer allocator.free(ast);
 
     try std.testing.expect(ast.len > 0);
@@ -293,7 +283,7 @@ test "parse function with multiple undefined variables" {
     var shadow = try Shadow.init(allocator, multi_undefined);
     defer shadow.deinit();
 
-    const ast = try shadow.parseToAST();
+    const ast = try shadow.toWrappedAst();
     defer allocator.free(ast);
 
     try std.testing.expect(ast.len > 0);
@@ -316,7 +306,7 @@ test "parse function with invalid struct access" {
     var shadow = try Shadow.init(allocator, invalid_struct);
     defer shadow.deinit();
 
-    const ast = try shadow.parseToAST();
+    const ast = try shadow.toWrappedAst();
     defer allocator.free(ast);
 
     try std.testing.expect(ast.len > 0);
@@ -336,7 +326,7 @@ test "parse valid function for comparison" {
     var shadow = try Shadow.init(allocator, valid_function);
     defer shadow.deinit();
 
-    const ast = try shadow.parseToAST();
+    const ast = try shadow.toWrappedAst();
     defer allocator.free(ast);
 
     try std.testing.expect(ast.len > 0);
@@ -354,8 +344,8 @@ test "parse function with syntax error should fail" {
     var shadow = try Shadow.init(allocator, syntax_error);
     defer shadow.deinit();
 
-    const result = shadow.parseToAST();
-    try std.testing.expectError(error.ParseFailed, result);
+    const result = shadow.toWrappedAst();
+    try std.testing.expectError(Shadow.Error.ParseFailed, result);
 }
 
 test "Shadow init and deinit" {
@@ -391,15 +381,13 @@ test "stitch shadow function into valid contract" {
         \\}
     ;
 
-    const original_ast = try Shadow.parseFullContract(allocator, original_contract);
+    const original_ast = try Shadow.parseSourceAst(allocator, original_contract, null);
     defer allocator.free(original_ast);
 
     var shadow = try Shadow.init(allocator, shadow_function);
     defer shadow.deinit();
-    const shadow_ast = try shadow.parseToAST();
-    defer allocator.free(shadow_ast);
 
-    const stitched_ast = try Shadow.stitchIntoContract(allocator, original_ast, shadow_ast);
+    const stitched_ast = try shadow.stitchIntoAst(original_ast);
     defer allocator.free(stitched_ast);
 
     try std.testing.expect(std.mem.indexOf(u8, stitched_ast, "getSecret") != null);
@@ -419,7 +407,7 @@ test "parse full contract directly" {
         \\}
     ;
 
-    const ast = try Shadow.parseFullContract(allocator, contract);
+    const ast = try Shadow.parseSourceAst(allocator, contract, null);
     defer allocator.free(ast);
 
     try std.testing.expect(ast.len > 0);
@@ -447,7 +435,7 @@ test "parse multiple valid functions" {
     var shadow = try Shadow.init(allocator, multi_functions);
     defer shadow.deinit();
 
-    const ast = try shadow.parseToAST();
+    const ast = try shadow.toWrappedAst();
     defer allocator.free(ast);
 
     try std.testing.expect(std.mem.indexOf(u8, ast, "first") != null);
@@ -475,7 +463,7 @@ test "parse multiple functions with semantic errors" {
     var shadow = try Shadow.init(allocator, bad_functions);
     defer shadow.deinit();
 
-    const ast = try shadow.parseToAST();
+    const ast = try shadow.toWrappedAst();
     defer allocator.free(ast);
 
     try std.testing.expect(std.mem.indexOf(u8, ast, "useUndefined") != null);
@@ -497,7 +485,7 @@ test "extractAllFunctionASTs returns all functions" {
     var shadow = try Shadow.init(allocator, multi_functions);
     defer shadow.deinit();
 
-    const functions = try shadow.extractAllFunctionASTs(allocator);
+    const functions = try shadow.toAstNodes();
     defer {
         for (functions) |func| {
             allocator.free(func);
@@ -528,7 +516,7 @@ test "extractAllFunctionASTs with mixed semantic validity" {
     var shadow = try Shadow.init(allocator, mixed_functions);
     defer shadow.deinit();
 
-    const functions = try shadow.extractAllFunctionASTs(allocator);
+    const functions = try shadow.toAstNodes();
     defer {
         for (functions) |func| {
             allocator.free(func);
@@ -565,15 +553,13 @@ test "stitch multiple shadow functions into contract" {
         \\}
     ;
 
-    const original_ast = try Shadow.parseFullContract(allocator, original_contract);
+    const original_ast = try Shadow.parseSourceAst(allocator, original_contract, null);
     defer allocator.free(original_ast);
 
     var shadow = try Shadow.init(allocator, shadow_functions);
     defer shadow.deinit();
-    const shadow_ast = try shadow.parseToAST();
-    defer allocator.free(shadow_ast);
 
-    const stitched_ast = try Shadow.stitchIntoContract(allocator, original_ast, shadow_ast);
+    const stitched_ast = try shadow.stitchIntoAst(original_ast);
     defer allocator.free(stitched_ast);
 
     try std.testing.expect(std.mem.indexOf(u8, stitched_ast, "getData") != null);
@@ -590,7 +576,7 @@ test "single line function should parse" {
     var shadow = try Shadow.init(allocator, single_line);
     defer shadow.deinit();
 
-    const ast = try shadow.parseToAST();
+    const ast = try shadow.toWrappedAst();
     defer allocator.free(ast);
 
     try std.testing.expect(ast.len > 0);
@@ -617,7 +603,7 @@ test "complex multi-function with state variables access" {
     var shadow = try Shadow.init(allocator, complex_functions);
     defer shadow.deinit();
 
-    const functions = try shadow.extractAllFunctionASTs(allocator);
+    const functions = try shadow.toAstNodes();
     defer {
         for (functions) |func| {
             allocator.free(func);
@@ -627,7 +613,7 @@ test "complex multi-function with state variables access" {
 
     try std.testing.expectEqual(@as(usize, 3), functions.len);
 
-    const ast = try shadow.parseToAST();
+    const ast = try shadow.toWrappedAst();
     defer allocator.free(ast);
 
     try std.testing.expect(std.mem.indexOf(u8, ast, "accessPrivate") != null);
