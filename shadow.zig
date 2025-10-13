@@ -18,19 +18,14 @@ pub const Shadow = struct {
     pub const Error = error{
         /// C parser context creation failed
         ParserInitFailed,
-
         /// Syntax error during parsing
         ParseFailed,
-
         /// AST contains no extractable nodes
         NoNodesFound,
-
         /// Target AST has unexpected structure
         InvalidContractStructure,
-
         /// Memory allocation failed
         OutOfMemory,
-
         /// JSON parsing errors
         Overflow,
         InvalidCharacter,
@@ -50,7 +45,6 @@ pub const Shadow = struct {
     /// Initialize a new Shadow with a function definition string
     pub fn init(allocator: std.mem.Allocator, source: []const u8) Error!Self {
         const ctx = c.sol_parser_create() orelse return Error.ParserInitFailed;
-
         return Self{
             .allocator = allocator,
             .source = source,
@@ -87,7 +81,6 @@ pub const Shadow = struct {
     pub fn toWrappedAst(self: *Self) Error![]const u8 {
         const wrapped = try self.wrapShadowSource(self.allocator);
         defer self.allocator.free(wrapped);
-
         return try parseSourceAst(self.allocator, wrapped, "Shadow.sol");
     }
 
@@ -202,7 +195,6 @@ pub const Shadow = struct {
     pub fn stitchIntoSource(self: *Self, target_source: []const u8) Error![]const u8 {
         const target_ast = try parseSourceAst(self.allocator, target_source, null);
         defer self.allocator.free(target_ast);
-
         return try self.stitchIntoAst(target_ast);
     }
 };
