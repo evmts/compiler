@@ -3,12 +3,10 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "all": "pnpm nx run-many -t lint test build",
-    "lint": "zig fmt --check .",
-    "test": "zig build test",
-    "build": "bun build:native && bun build:wasm",
-    "build:native": "zig build",
-    "build:wasm": "zig build wasm",
+    "all": "bun build:zig && bun test:zig && bun lint:zig && nx run-many -t lint test build",
+    "lint:zig": "zig fmt --check .",
+    "test:zig": "zig build test",
+    "build:zig": "zig build && zig build wasm",
     "build:ts": "node scripts/generate-ts-bindings.js"
   },
   "private": true,
