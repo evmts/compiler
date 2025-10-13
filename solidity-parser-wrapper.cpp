@@ -2,10 +2,12 @@
 #include "libsolidity/parsing/Parser.h"
 #include "libsolidity/ast/AST.h"
 #include "libsolidity/ast/ASTJsonExporter.h"
+#include "libsolidity/interface/CompilerStack.h"
 #include "liblangutil/ErrorReporter.h"
 #include "liblangutil/Exceptions.h"
 #include "liblangutil/CharStream.h"
 #include "liblangutil/Scanner.h"
+#include "libsolutil/JSON.h"
 #include <memory>
 #include <sstream>
 #include <vector>
@@ -64,22 +66,11 @@ char* sol_parser_parse(SolParserContext* ctx, const char* source, const char* so
         std::map<std::string, unsigned> sourceIndices;
         sourceIndices[nameStr] = 0;
 
-        bool exportFormatted = true;
-        ASTJsonExporter exporter(sourceIndices);
-        Json::Value json = exporter.toJson(*ast);
+        ASTJsonExporter exporter(CompilerStack::State::Parsed, sourceIndices);
+        Json json = exporter.toJson(*ast);
 
-        // Convert JSON to string
-        std::ostringstream oss;
-        if (exportFormatted) {
-            oss << json;
-        } else {
-            Json::StreamWriterBuilder builder;
-            builder["indentation"] = "";
-            std::unique_ptr<Json::StreamWriter> writer(builder.newStreamWriter());
-            writer->write(json, &oss);
-        }
-
-        std::string result = oss.str();
+        // Convert JSON to string using Solidity's utility functions
+        std::string result = solidity::util::jsonPrettyPrint(json);
         char* cResult = (char*)malloc(result.length() + 1);
         if (cResult) {
             std::strcpy(cResult, result.c_str());
@@ -108,7 +99,7 @@ char* sol_parser_get_errors(SolParserContext* ctx) {
 
     std::ostringstream oss;
     for (const auto& error : ctx->errorList) {
-        oss << error->typeName() << ": " << error->what() << "\n";
+        oss << langutil::Error::formatErrorType(error->type()) << ": " << error->what() << "\n";
     }
 
     std::string result = oss.str();
