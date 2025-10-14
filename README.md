@@ -1,138 +1,102 @@
-# Compiler Monorepo
+# Shadow - Solidity AST Parser
 
-A monorepo containing Solidity compiler tooling with a focus on pure syntax parsing and AST manipulation.
+Zig-based tool for parsing Solidity code fragments and stitching them into existing contracts with full semantic analysis.
 
-## Projects
-
-### Shadow - Pure Syntax Parser for Solidity
-
-Shadow is a Zig wrapper around the Solidity Parser that demonstrates **the parser is a pure syntax parser** - it creates ASTs without requiring semantic validity. See [SHADOW_README.md](./SHADOW_README.md) for detailed documentation.
-
-#### Key Features
-
-- ✅ Parse Solidity functions with undefined variables
-- ✅ Parse functions with type mismatches
-- ✅ Parse functions calling non-existent functions
-- ✅ Get full ASTs for code that will never compile
-- ✅ Stitch shadow functions into valid contracts
-- ✅ Export to WASM for browser use
-
-#### Quick Start
+## Quick Start
 
 ```bash
-# Build everything
-zig build
-
-# Run demo (shows AST stitching)
-zig build run
-
-# Run tests
-zig build test
-
-# Build WASM
-zig build wasm
+zig build test    # Run full test suite
+zig build         # Build native library
+zig build wasm    # Build WASM module
 ```
 
-### Compiler Library (Rust/NAPI)
+**Requirements:** Zig 0.15+, C++ compiler, Boost libraries
 
-Located in `packages/compiler` - a comprehensive NAPI-rs wrapper for foundry-compilers with Bun test suite.
+## What It Does
 
-## Repository Structure
+Shadow separates Solidity compilation into two phases:
+
+1. **Parse** - Pure syntax analysis (no semantic checks)
+2. **Analyze** - Full semantic validation (13-step pipeline)
+
+This enables:
+
+- Parse Solidity fragments without full contracts
+- Stitch parsed functions into existing contracts
+- Manipulate ASTs at JSON level
+- Run semantic analysis on stitched code
+
+## Project Structure
 
 ```
-compiler/
-├── solidity/              # Solidity compiler source (submodule)
-├── shadow.zig            # Shadow parser implementation
-├── shadow_test.zig       # Test suite
-├── solidity-parser-wrapper.{h,cpp}  # C++ wrapper for parser
-├── build.zig             # Build system
-├── packages/
-│   └── compiler/         # Rust NAPI library
-└── apps/                 # Applications
+src/
+├── shadow.zig                    # Main API
+├── utils.zig                     # AST utilities
+├── solidity-parser-wrapper.{h,cpp}  # C++ FFI
+└── test/
+    ├── root.zig
+    └── shadow_test.zig           # 30 tests
 ```
 
-## What Shadow Proves
+## API Example
 
-The Solidity compiler has two distinct phases:
+```zig
+const Shadow = @import("shadow").Shadow;
 
-1. **Parsing** (syntax-only) - Creates AST from tokens
-2. **Analysis** (semantic) - Type checking, variable resolution, etc.
+// Parse shadow function
+var shadow = try Shadow.init(allocator,
+    "function exploit() public view returns (uint) { return secretValue * 2; }"
+);
+defer shadow.deinit();
 
-Shadow uses **only the parser**, bypassing all semantic analysis. The parser at [`libsolidity/parsing/Parser.cpp:1112`](https://github.com/argotorg/solidity/blob/a6945de0b/libsolidity/parsing/Parser.cpp#L1112-L1118) just creates `Identifier` nodes without resolution:
-
-```cpp
-ASTPointer<Identifier> Parser::parseIdentifier() {
-    return nodeFactory.createNode<Identifier>(expectIdentifierToken());
-}
+// Stitch into contract
+const contract = "contract Vault { uint private secretValue; }";
+const analyzed_ast = try shadow.stitchIntoSource(contract, null);
+defer allocator.free(analyzed_ast);
 ```
 
-**No variable resolution. No type checking. No semantic analysis.**
+See [SHADOW_README.md](./SHADOW_README.md) for complete API documentation.
 
-That all happens later in [`CompilerStack::analyze()`](https://github.com/argotorg/solidity/blob/a6945de0b/libsolidity/interface/CompilerStack.cpp#L106-L185) which Shadow bypasses completely!
+## Build Commands
+
+```bash
+zig build           # Native library
+zig build test      # Run tests
+zig build wasm      # WASM module
+zig build typescript  # TypeScript bindings
+zig build all       # Everything
+zig build clean     # Clean artifacts
+```
 
 ## Use Cases
 
-- **IDE Features** - Syntax highlighting, structure view without compilation
-- **AST Manipulation** - Add functions to contracts without semantic checks
-- **Code Analysis** - Analyze structure of invalid/incomplete code
-- **Testing** - Parse test fixtures that don't need to compile
-- **Browser Tools** - WASM-based Solidity AST explorer
+- IDE features (syntax highlighting without compilation)
+- AST manipulation before semantic validation
+- Security analysis (inject test functions)
+- Code analysis tools
+- WASM-based Solidity parser for browsers
 
-## Building
+## Technical Details
 
-### Prerequisites
+**C++ Wrapper:** Clean FFI with 4 functions - create/destroy context, parse, analyze
 
-- Zig 0.11+
-- C++ compiler (for Solidity parser)
-- Node.js (for Rust/NAPI library)
+**Custom Analysis Pipeline:** Runs only the 13 semantic analysis steps from CompilerStack (no codegen/optimization)
 
-### Build Commands
-
-```bash
-# Build native
-zig build
-
-# Run Shadow demo
-zig build run
-
-# Run tests
-zig build test
-
-# Build WASM module
-zig build wasm
-
-# Build Rust library
-cd packages/compiler
-npm install
-npm run build
-```
-
-## Development
-
-This is an Nx monorepo. Use Nx commands to manage projects:
-
-```bash
-# Build specific project
-npx nx build <project>
-
-# Run tests
-npx nx test <project>
-
-# See dependency graph
-npx nx graph
-```
+**JSON Manipulation:** Zig handles AST stitching (ID renumbering, node appending) before passing to C++ analyzer
 
 ## Contributing
 
-This repository demonstrates compiler internals and parser capabilities. Contributions welcome!
+Key areas:
+
+1. Optimize JSON manipulation
+2. WASM improvements
+3. Documentation & examples
 
 ## License
 
-- Shadow: GPL-3.0 (same as Solidity)
-- Compiler library: See packages/compiler/LICENSE
+GPL-3.0 (same as Solidity)
 
-## Learn More
+## Documentation
 
-- [Shadow Documentation](./SHADOW_README.md)
-- [Solidity Parser Source](https://github.com/argotorg/solidity)
-- [Nx Documentation](https://nx.dev)
+- [SHADOW_README.md](./SHADOW_README.md) - Complete API reference
+- [src/test/shadow_test.zig](./src/test/shadow_test.zig) - Test examples

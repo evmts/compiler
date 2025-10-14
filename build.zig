@@ -1,6 +1,6 @@
 const std = @import("std");
 
-// All Solidity sources for parser
+// All Solidity sources for parser and semantic analysis
 const solidity_sources = [_][]const u8{
     "solidity/liblangutil/CharStream.cpp",
     "solidity/liblangutil/DebugInfoSelection.cpp",
@@ -17,11 +17,33 @@ const solidity_sources = [_][]const u8{
     "solidity/libsolidity/ast/AST.cpp",
     "solidity/libsolidity/ast/ASTAnnotations.cpp",
     "solidity/libsolidity/ast/ASTJsonExporter.cpp",
+    "solidity/libsolidity/ast/ASTJsonImporter.cpp",
     "solidity/libsolidity/ast/ASTUtils.cpp",
+    "solidity/libsolidity/ast/CallGraph.cpp",
     "solidity/libsolidity/ast/Types.cpp",
     "solidity/libsolidity/ast/TypeProvider.cpp",
     "solidity/libsolidity/interface/Version.cpp",
     "solidity/libsolidity/analysis/ConstantEvaluator.cpp",
+    "solidity/libsolidity/analysis/ContractLevelChecker.cpp",
+    "solidity/libsolidity/analysis/ControlFlowAnalyzer.cpp",
+    "solidity/libsolidity/analysis/ControlFlowBuilder.cpp",
+    "solidity/libsolidity/analysis/ControlFlowGraph.cpp",
+    "solidity/libsolidity/analysis/FunctionCallGraph.cpp",
+    "solidity/libsolidity/analysis/DeclarationContainer.cpp",
+    "solidity/libsolidity/analysis/DeclarationTypeChecker.cpp",
+    "solidity/libsolidity/analysis/DocStringAnalyser.cpp",
+    "solidity/libsolidity/analysis/DocStringTagParser.cpp",
+    "solidity/libsolidity/analysis/GlobalContext.cpp",
+    "solidity/libsolidity/analysis/ImmutableValidator.cpp",
+    "solidity/libsolidity/analysis/NameAndTypeResolver.cpp",
+    "solidity/libsolidity/analysis/PostTypeChecker.cpp",
+    "solidity/libsolidity/analysis/PostTypeContractLevelChecker.cpp",
+    "solidity/libsolidity/analysis/ReferencesResolver.cpp",
+    "solidity/libsolidity/analysis/Scoper.cpp",
+    "solidity/libsolidity/analysis/StaticAnalyzer.cpp",
+    "solidity/libsolidity/analysis/SyntaxChecker.cpp",
+    "solidity/libsolidity/analysis/TypeChecker.cpp",
+    "solidity/libsolidity/analysis/ViewPureChecker.cpp",
     "solidity/libsolutil/CommonData.cpp",
     "solidity/libsolutil/CommonIO.cpp", // Excluded for WASM
     "solidity/libsolutil/Exceptions.cpp",
@@ -42,6 +64,14 @@ const solidity_sources = [_][]const u8{
     "solidity/libyul/backends/evm/EVMDialect.cpp",
     "solidity/libyul/backends/evm/EVMBuiltins.cpp",
     "solidity/libyul/backends/evm/EVMObjectCompiler.cpp",
+    "solidity/libyul/AsmAnalysis.cpp",
+    "solidity/libyul/AsmJsonImporter.cpp",
+    "solidity/libyul/optimiser/ASTWalker.cpp",
+    "solidity/libyul/optimiser/Semantics.cpp",
+    "solidity/libyul/optimiser/CallGraphGenerator.cpp",
+    "solidity/libyul/Scope.cpp",
+    "solidity/libyul/ScopeFiller.cpp",
+    "solidity/libsolidity/analysis/OverrideChecker.cpp",
     "solidity/libevmasm/Instruction.cpp",
     "solidity/libevmasm/SemanticInformation.cpp",
     "solidity/libsolidity/codegen/ContractCompiler.cpp", // Excluded for WASM
@@ -108,7 +138,7 @@ pub fn build(b: *std.Build) void {
     });
     native_wrapper.step.dependOn(&init_submodules.step);
     native_wrapper.step.dependOn(&gen_buildinfo.step);
-    native_wrapper.addCSourceFile(.{ .file = b.path("solidity-parser-wrapper.cpp"), .flags = cpp_flags });
+    native_wrapper.addCSourceFile(.{ .file = b.path("src/solidity-parser-wrapper.cpp"), .flags = cpp_flags });
     for (solidity_sources) |src| {
         native_wrapper.addCSourceFile(.{ .file = b.path(src), .flags = cpp_flags });
     }
@@ -120,27 +150,28 @@ pub fn build(b: *std.Build) void {
         .name = "shadow-parser",
         .linkage = .static,
         .root_module = b.createModule(.{
-            .root_source_file = b.path("shadow.zig"),
+            .root_source_file = b.path("src/shadow.zig"),
             .target = target,
             .optimize = optimize,
         }),
     });
     native_parser.linkLibrary(native_wrapper);
     native_parser.linkLibCpp();
-    native_parser.addIncludePath(b.path("."));
+    native_parser.addIncludePath(b.path("src"));
     b.getInstallStep().dependOn(&b.addInstallArtifact(native_parser, .{}).step);
 
-    // Tests (inline in shadow.zig)
+    // Tests
     const tests = b.addTest(.{
         .root_module = b.createModule(.{
-            .root_source_file = b.path("shadow.zig"),
+            .root_source_file = b.path("src/test/root.zig"),
             .target = target,
             .optimize = optimize,
         }),
     });
+    tests.root_module.addImport("shadow", native_parser.root_module);
     tests.linkLibrary(native_wrapper);
     tests.linkLibCpp();
-    tests.addIncludePath(b.path("."));
+    tests.addIncludePath(b.path("src"));
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&b.addRunArtifact(tests).step);
 
@@ -172,7 +203,7 @@ pub fn build(b: *std.Build) void {
     wasm_wrapper.step.dependOn(&init_submodules.step);
     wasm_wrapper.step.dependOn(&gen_buildinfo.step);
     wasm_wrapper.step.dependOn(&wasm_headers.step);
-    wasm_wrapper.addCSourceFile(.{ .file = b.path("solidity-parser-wrapper.cpp"), .flags = cpp_flags });
+    wasm_wrapper.addCSourceFile(.{ .file = b.path("src/solidity-parser-wrapper.cpp"), .flags = cpp_flags });
     for (solidity_sources) |src| {
         if (!isExcludedForWasm(src)) {
             wasm_wrapper.addCSourceFile(.{ .file = b.path(src), .flags = cpp_flags });
@@ -187,13 +218,13 @@ pub fn build(b: *std.Build) void {
         .name = "shadow-parser-wasm",
         .linkage = .static,
         .root_module = b.createModule(.{
-            .root_source_file = b.path("shadow.zig"),
+            .root_source_file = b.path("src/shadow.zig"),
             .target = wasm_target,
             .optimize = .ReleaseSmall,
         }),
     });
     wasm_parser.linkLibrary(wasm_wrapper);
-    wasm_parser.addIncludePath(b.path("."));
+    wasm_parser.addIncludePath(b.path("src"));
     const wasm_step = b.step("wasm", "Build WASM parser");
     wasm_step.dependOn(&b.addInstallArtifact(wasm_parser, .{}).step);
 
