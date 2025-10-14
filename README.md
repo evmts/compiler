@@ -1,5 +1,25 @@
 # Shadow - Solidity AST Parser
 
+**TLDR:**
+
+Solidity compiler toolchain with three components:
+
+1. `libs/compiler`
+
+- rust wrapper around Foundry's compiler API with NAPI-generated TypeScript bindings for Node.js/Bun.
+
+2. `libs/shadow`
+
+- zig business logic wrapping Solidity's C++ parser (from ethereum/solidity);
+- compiled to WASM via Emscripten, which is required because the C++ parser throws exceptions which needs Emscripten's JavaScript runtime and support—wasm32-freestanding and wasm32-wasi lack C++ exception handling;
+- currently we pre-build for a specific solc version so it can't be set dynamically.
+
+3. `libs/shadow-ts`
+
+- TypeScript API consuming the WASM module and Emscripten's auto-generated JavaScript glue code + TypeScript types.
+
+---
+
 Zig-based tool for parsing Solidity code fragments and stitching them into existing contracts with full semantic analysis.
 
 ## Quick Start
@@ -10,7 +30,9 @@ zig build         # Build native library
 zig build wasm    # Build WASM module
 ```
 
-**Requirements:** Zig 0.15+, C++ compiler, Boost libraries
+**Requirements:** Zig 0.15+, C++ compiler, Boost libraries, Emscripten, ccache
+
+**Note:** ccache is required for fast incremental WASM builds. Install with `brew install ccache` (macOS) or your system's package manager.
 
 ## What It Does
 

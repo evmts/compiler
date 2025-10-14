@@ -37,9 +37,16 @@ public:
             source.c_str(), source.length(),
             name.empty() ? nullptr : name.c_str(), name.length()
         );
-        if (!result) return "";
+        if (!result) throw std::runtime_error("Parse failed: null result");
+
         std::string output(result);
         shadow_free_string(result);
+
+        // Check if result is an error (starts with "ERROR:")
+        if (output.substr(0, 6) == "ERROR:") {
+            throw std::runtime_error("Parse failed: " + output.substr(6));
+        }
+
         return output;
     }
 
@@ -50,9 +57,15 @@ public:
             sourceName.empty() ? nullptr : sourceName.c_str(), sourceName.length(),
             contractName.empty() ? nullptr : contractName.c_str(), contractName.length()
         );
-        if (!result) return "";
+        if (!result) throw std::runtime_error("Stitch failed: null result");
+
         std::string output(result);
         shadow_free_string(result);
+
+        if (output.substr(0, 6) == "ERROR:") {
+            throw std::runtime_error("Stitch failed: " + output.substr(6));
+        }
+
         return output;
     }
 
@@ -62,9 +75,15 @@ public:
             targetAst.c_str(), targetAst.length(),
             contractName.empty() ? nullptr : contractName.c_str(), contractName.length()
         );
-        if (!result) return "";
+        if (!result) throw std::runtime_error("Stitch failed: null result");
+
         std::string output(result);
         shadow_free_string(result);
+
+        if (output.substr(0, 6) == "ERROR:") {
+            throw std::runtime_error("Stitch failed: " + output.substr(6));
+        }
+
         return output;
     }
 };

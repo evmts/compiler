@@ -46,7 +46,7 @@ const c = @cImport({
 
 pub const Shadow = struct {
     allocator: std.mem.Allocator,
-    source: []const u8,
+    source: []const u8, // owned copy of the source
     ctx: *c.SolParserContext,
 
     const Self = @This();
@@ -83,14 +83,24 @@ pub const Shadow = struct {
     /// Initialize a new Shadow with a function definition string
     pub fn init(allocator: std.mem.Allocator, source: []const u8) Error!Self {
         const ctx = c.sol_parser_create() orelse return Error.ParserInitFailed;
+
+        // IMPORTANT: Make a copy of the source string so we own the memory
+        // The source pointer from JavaScript is temporary and gets reused
+        const source_copy = allocator.dupe(u8, source) catch |err| {
+            c.sol_parser_destroy(ctx);
+            return err;
+        };
+
         return Self{
             .allocator = allocator,
-            .source = source,
+            .source = source_copy,
             .ctx = ctx,
         };
     }
 
     pub fn deinit(self: *Self) void {
+        // Free the owned source copy
+        self.allocator.free(self.source);
         c.sol_parser_destroy(self.ctx);
     }
 
@@ -104,15 +114,35 @@ pub const Shadow = struct {
 
         // Navigate to contract nodes
         // Structure: root -> nodes[1] (contract) -> nodes[...] (functions)
-        if (parsed.value.object.get("nodes")) |nodes_value| {
-            if (nodes_value.array.items.len > 1) {
-                const contract = nodes_value.array.items[1];
-                if (contract.object.get("nodes")) |contract_nodes| {
-                    const node_count = contract_nodes.array.items.len;
+        const root_object = switch (parsed.value) {
+            .object => |obj| obj,
+            else => return Error.InvalidContractStructure,
+        };
+
+        if (root_object.get("nodes")) |nodes_value| {
+            const nodes_array = switch (nodes_value) {
+                .array => |arr| arr,
+                else => return Error.InvalidContractStructure,
+            };
+
+            if (nodes_array.items.len > 1) {
+                const contract = nodes_array.items[1];
+                const contract_object = switch (contract) {
+                    .object => |obj| obj,
+                    else => return Error.InvalidContractStructure,
+                };
+
+                if (contract_object.get("nodes")) |contract_nodes| {
+                    const contract_nodes_array = switch (contract_nodes) {
+                        .array => |arr| arr,
+                        else => return Error.InvalidContractStructure,
+                    };
+
+                    const node_count = contract_nodes_array.items.len;
                     if (node_count == 0) return Error.NoNodesFound;
 
                     var nodes = try self.allocator.alloc([]const u8, node_count);
-                    for (contract_nodes.array.items, 0..) |node, i| {
+                    for (contract_nodes_array.items, 0..) |node, i| {
                         nodes[i] = try std.fmt.allocPrint(self.allocator, "{f}", .{std.json.fmt(node, .{})});
                     }
                     return nodes;
@@ -139,18 +169,20 @@ pub const Shadow = struct {
         const ctx = c.sol_parser_create() orelse return Error.ParserInitFailed;
         defer c.sol_parser_destroy(ctx);
 
-        const source_cstr = try allocator.dupeZ(u8, source);
+        const source_cstr = allocator.allocSentinel(u8, source.len, 0) catch |err| {
+            c.sol_parser_destroy(ctx);
+            return err;
+        };
         defer allocator.free(source_cstr);
+        @memcpy(source_cstr[0..source.len], source);
 
-        const source_name = name orelse "Contract.sol";
-        const result = c.sol_parser_parse(ctx, source_cstr.ptr, source_name.ptr);
+        const source_name_raw = name orelse "Contract.sol";
+        const source_name_cstr = try allocator.dupeZ(u8, source_name_raw);
+        defer allocator.free(source_name_cstr);
+
+        const result = c.sol_parser_parse(ctx, source_cstr.ptr, source_name_cstr.ptr);
 
         if (result == null) {
-            const errors = c.sol_parser_get_errors(ctx);
-            if (errors != null) {
-                defer c.sol_free_string(errors);
-                std.debug.print("Parse errors:\n{s}\n", .{std.mem.span(errors)});
-            }
             return Error.ParseFailed;
         }
 
@@ -180,11 +212,19 @@ pub const Shadow = struct {
         defer shadow_parsed.deinit();
 
         // Find contract and stitch
-        const nodes = target_parsed.value.object.get("nodes") orelse return Error.InvalidContractStructure;
+        const target_object = switch (target_parsed.value) {
+            .object => |obj| obj,
+            else => return Error.InvalidContractStructure,
+        };
+        const nodes = target_object.get("nodes") orelse return Error.InvalidContractStructure;
         const max_target_id = Utils.findMaxId(target_parsed.value);
         const contract_idx = try Self.findTargetContractIndex(nodes, target_contract_name);
 
-        const target_contract = &nodes.array.items[contract_idx];
+        const nodes_array = switch (nodes) {
+            .array => |arr| arr,
+            else => return Error.InvalidContractStructure,
+        };
+        const target_contract = &nodes_array.items[contract_idx];
         try Self.stitchShadowNodesIntoContract(target_contract, shadow_parsed.value, max_target_id);
 
         // Analyze and return
@@ -239,7 +279,10 @@ pub const Shadow = struct {
     /// Find the index of the target contract in the AST nodes array
     /// Returns the index, or error if not found
     fn findTargetContractIndex(nodes: std.json.Value, contract_name: ?[]const u8) Error!usize {
-        const nodes_array = nodes.array;
+        const nodes_array = switch (nodes) {
+            .array => |arr| arr,
+            else => return Error.InvalidContractStructure,
+        };
 
         if (contract_name) |name| {
             // Explicit: Find contract by name
@@ -249,7 +292,6 @@ pub const Shadow = struct {
                     if (std.mem.eql(u8, node_name, name)) return i;
                 }
             }
-            std.debug.print("Contract '{s}' not found in target AST\n", .{name});
             return Error.InvalidContractStructure;
         } else {
             // Heuristic: Use last ContractDefinition
@@ -258,10 +300,7 @@ pub const Shadow = struct {
             for (nodes_array.items, 0..) |node, i| {
                 if (isContractDefinition(node)) last_idx = i;
             }
-            return last_idx orelse {
-                std.debug.print("No ContractDefinition found in target AST\n", .{});
-                return Error.InvalidContractStructure;
-            };
+            return last_idx orelse return Error.InvalidContractStructure;
         }
     }
 
@@ -272,22 +311,50 @@ pub const Shadow = struct {
         shadow_parsed: std.json.Value,
         max_target_id: i64,
     ) Error!void {
-        const shadow_nodes = shadow_parsed.object.get("nodes") orelse return Error.InvalidContractStructure;
+        const shadow_object = switch (shadow_parsed) {
+            .object => |obj| obj,
+            else => return Error.InvalidContractStructure,
+        };
+        const shadow_nodes = shadow_object.get("nodes") orelse return Error.InvalidContractStructure;
 
-        if (shadow_nodes.array.items.len <= 1) return Error.NoNodesFound;
+        const shadow_nodes_array = switch (shadow_nodes) {
+            .array => |arr| arr,
+            else => return Error.InvalidContractStructure,
+        };
 
-        var shadow_contract = &shadow_nodes.array.items[1];
+        if (shadow_nodes_array.items.len <= 1) return Error.NoNodesFound;
+
+        const shadow_contract = &shadow_nodes_array.items[1];
 
         // Renumber IDs to avoid collisions
         Utils.renumberIds(shadow_contract, max_target_id);
 
         // Get the nodes arrays
-        const target_nodes = target_contract.object.getPtr("nodes") orelse return Error.InvalidContractStructure;
-        const shadow_contract_nodes = shadow_contract.object.get("nodes") orelse return Error.NoNodesFound;
+        const target_contract_object = switch (target_contract.*) {
+            .object => |*obj| obj,
+            else => return Error.InvalidContractStructure,
+        };
+        const target_nodes = target_contract_object.getPtr("nodes") orelse return Error.InvalidContractStructure;
+
+        const target_nodes_array = switch (target_nodes.*) {
+            .array => |*arr| arr,
+            else => return Error.InvalidContractStructure,
+        };
+
+        const shadow_contract_object = switch (shadow_contract.*) {
+            .object => |obj| obj,
+            else => return Error.NoNodesFound,
+        };
+        const shadow_contract_nodes = shadow_contract_object.get("nodes") orelse return Error.NoNodesFound;
+
+        const shadow_contract_nodes_array = switch (shadow_contract_nodes) {
+            .array => |arr| arr,
+            else => return Error.NoNodesFound,
+        };
 
         // Append each shadow node to target
-        for (shadow_contract_nodes.array.items) |shadow_node| {
-            try target_nodes.array.append(shadow_node);
+        for (shadow_contract_nodes_array.items) |shadow_node| {
+            try target_nodes_array.append(shadow_node);
         }
     }
 
@@ -306,25 +373,21 @@ pub const Shadow = struct {
         );
         defer self.allocator.free(json_str);
 
-        // Convert to C string
+        // Convert to C strings
         const json_cstr = try self.allocator.dupeZ(u8, json_str);
         defer self.allocator.free(json_cstr);
+
+        const source_name_cstr = try self.allocator.dupeZ(u8, source_name);
+        defer self.allocator.free(source_name_cstr);
 
         // Analyze via C++
         const result = c.sol_analyze_parsed_ast_json(
             self.ctx,
             json_cstr.ptr,
-            source_name.ptr,
+            source_name_cstr.ptr,
         );
 
         if (result == null) {
-            const errors = c.sol_parser_get_errors(self.ctx);
-            if (errors != null) {
-                defer c.sol_free_string(errors);
-                std.debug.print("Analysis errors:\n{s}\n", .{std.mem.span(errors)});
-            } else {
-                std.debug.print("Analysis failed but no error message available\n", .{});
-            }
             return Error.AnalysisFailed;
         }
 
@@ -336,16 +399,30 @@ pub const Shadow = struct {
 
     /// Check if a JSON node is a ContractDefinition
     fn isContractDefinition(node: std.json.Value) bool {
-        if (node.object.get("nodeType")) |node_type| {
-            return std.mem.eql(u8, node_type.string, "ContractDefinition");
+        const node_object = switch (node) {
+            .object => |obj| obj,
+            else => return false,
+        };
+        if (node_object.get("nodeType")) |node_type| {
+            switch (node_type) {
+                .string => |s| return std.mem.eql(u8, s, "ContractDefinition"),
+                else => return false,
+            }
         }
         return false;
     }
 
     /// Get the name of a contract node
     fn getContractName(node: std.json.Value) ?[]const u8 {
-        if (node.object.get("name")) |name| {
-            return name.string;
+        const node_object = switch (node) {
+            .object => |obj| obj,
+            else => return null,
+        };
+        if (node_object.get("name")) |name| {
+            switch (name) {
+                .string => |s| return s,
+                else => return null,
+            }
         }
         return null;
     }

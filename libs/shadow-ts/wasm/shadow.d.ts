@@ -5,7 +5,7 @@ declare namespace RuntimeExports {
      * @param {Array=} argTypes
      * @param {Object=} opts
      */
-    function cwrap(ident: any, returnType?: string | undefined, argTypes?: any[] | undefined, opts?: any | undefined): any;
+    function cwrap(ident: any, returnType?: string | undefined, argTypes?: any[] | undefined, opts?: any | undefined): (...args: any[]) => any;
     /**
      * @param {string|null=} returnType
      * @param {Array=} argTypes

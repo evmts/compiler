@@ -202,29 +202,19 @@ pub fn build(b: *std.Build) void {
     const copy_buildinfo = b.addSystemCommand(&.{ "sh", "-c", "echo '#pragma once\n#define ETH_PROJECT_VERSION \"0.8.31\"\n#define ETH_PROJECT_VERSION_MAJOR 0\n#define ETH_PROJECT_VERSION_MINOR 8\n#define ETH_PROJECT_VERSION_PATCH 31\n#define ETH_COMMIT_HASH \"zig-build\"\n#define ETH_BUILD_TYPE \"Release\"\n#define ETH_BUILD_PLATFORM \"zig\"\n#define SOL_VERSION_PRERELEASE \"\"\n#define SOL_VERSION_BUILDINFO \"\"\n#define SOL_VERSION_COMMIT \"\"' > " ++ wasm_buildinfo_dir ++ "/solidity/BuildInfo.h" });
     copy_buildinfo.step.dependOn(&mkdir_buildinfo.step);
 
-    // WASM: Emscripten build (compiles C++ + links Zig objects)
-    // This uses Emscripten to handle C++ exceptions and generate browser-compatible WASM
-    const emscripten_build = b.addSystemCommand(&.{
+    // WASM: Incremental compilation - compile each C++ file to .o separately
+    const wasm_obj_dir = "zig-out/wasm-obj";
+    const mkdir_obj = b.addSystemCommand(&.{ "mkdir", "-p", wasm_obj_dir });
+    mkdir_obj.step.dependOn(&init_submodules.step);
+    mkdir_obj.step.dependOn(&copy_buildinfo.step);
+
+    // Common emcc compile flags with ccache wrapper for incremental build caching
+    const emcc_compile_flags = [_][]const u8{
+        "ccache",
         "emcc",
+        "-c",
         "-std=c++20",
         "-O3",
-        "-s",
-        "WASM=1",
-        "-s",
-        "MODULARIZE=1",
-        "-s",
-        "EXPORT_ES6=1",
-        "-s",
-        "ALLOW_MEMORY_GROWTH=1",
-        "-s",
-        "EXPORTED_RUNTIME_METHODS=['cwrap','ccall']",
-        "-s",
-        "ERROR_ON_UNDEFINED_SYMBOLS=0",
-        "-s",
-        "STANDALONE_WASM=0",
-        "--bind",
-        "--emit-tsd",
-        "shadow.d.ts",
         "-I",
         "libs/shadow/src",
         "-I",
@@ -247,36 +237,50 @@ pub fn build(b: *std.Build) void {
         "/opt/homebrew/opt/boost/include",
         "-I",
         wasm_buildinfo_dir,
+    };
+
+    // Compile Emscripten wrapper
+    const api_emscripten_obj = b.fmt("{s}/api_emscripten.o", .{wasm_obj_dir});
+    const compile_api_emscripten = b.addSystemCommand(&emcc_compile_flags);
+    compile_api_emscripten.step.dependOn(&mkdir_obj.step);
+    compile_api_emscripten.addArgs(&.{ "libs/shadow/api_emscripten.cpp", "-o", api_emscripten_obj });
+
+    // Compile C++ wrapper
+    const wrapper_obj = b.fmt("{s}/solidity-parser-wrapper.o", .{wasm_obj_dir});
+    const compile_wrapper = b.addSystemCommand(&emcc_compile_flags);
+    compile_wrapper.step.dependOn(&mkdir_obj.step);
+    compile_wrapper.addArgs(&.{ "libs/shadow/src/solidity-parser-wrapper.cpp", "-o", wrapper_obj });
+
+    // WASM: Link all object files using shell glob
+    const emscripten_link = b.addSystemCommand(&.{
+        "sh",
+        "-c",
+        b.fmt("emcc -std=c++20 -O3 -s WASM=1 -s MODULARIZE=1 -s EXPORT_ES6=1 -s ALLOW_MEMORY_GROWTH=1 -s INITIAL_MEMORY=16MB -s MAXIMUM_MEMORY=256MB -s \"EXPORTED_RUNTIME_METHODS=['cwrap','ccall']\" -s ERROR_ON_UNDEFINED_SYMBOLS=0 -s NO_DISABLE_EXCEPTION_CATCHING=1 -s STANDALONE_WASM=0 -sASSERTIONS=1 --bind --emit-tsd shadow.d.ts zig-out/lib/libshadow-wasm.a {s}/*.o -o {s}/shadow.js", .{ wasm_obj_dir, DIST_WASM }),
     });
-    emscripten_build.step.dependOn(&init_submodules.step);
-    emscripten_build.step.dependOn(&copy_buildinfo.step);
-    emscripten_build.step.dependOn(&install_zig_lib.step);
-    emscripten_build.step.dependOn(&mkdir_dist_wasm.step);
+    emscripten_link.step.dependOn(&install_zig_lib.step);
+    emscripten_link.step.dependOn(&mkdir_dist_wasm.step);
+    emscripten_link.step.dependOn(&compile_api_emscripten.step);
+    emscripten_link.step.dependOn(&compile_wrapper.step);
 
-    // Add Zig WASM library
-    emscripten_build.addArg("zig-out/lib/libshadow-wasm.a");
-
-    // Add Emscripten wrapper
-    emscripten_build.addArg("libs/shadow/api_emscripten.cpp");
-
-    // Add C++ wrapper
-    emscripten_build.addArg("libs/shadow/src/solidity-parser-wrapper.cpp");
-
-    // Add Solidity sources (excluding files that need Boost.Filesystem)
+    // Compile each Solidity source file separately and make link depend on each
     for (solidity_sources) |src| {
-        if (!isExcludedForWasm(src)) {
-            emscripten_build.addArg(src);
-        }
+        if (isExcludedForWasm(src)) continue;
+
+        // Create unique object file name by replacing path separators and removing extension
+        const src_normalized = std.mem.replaceOwned(u8, b.allocator, src, "/", "_") catch @panic("OOM");
+        // Remove file extension (.cpp, .cc, etc.)
+        const last_dot = std.mem.lastIndexOfScalar(u8, src_normalized, '.') orelse src_normalized.len;
+        const obj_name = b.fmt("{s}/{s}.o", .{ wasm_obj_dir, src_normalized[0..last_dot] });
+        const compile_step = b.addSystemCommand(&emcc_compile_flags);
+        compile_step.step.dependOn(&mkdir_obj.step);
+        compile_step.addArgs(&.{ src, "-o", obj_name });
+
+        // Make link step depend on this compilation
+        emscripten_link.step.dependOn(&compile_step.step);
     }
 
-    // Output files
-    emscripten_build.addArgs(&.{
-        "-o",
-        b.fmt("{s}/shadow.js", .{DIST_WASM}),
-    });
-
     const wasm_step = b.step("wasm", "Build WASM module with Emscripten");
-    wasm_step.dependOn(&emscripten_build.step);
+    wasm_step.dependOn(&emscripten_link.step);
 
     // All
     const all_step = b.step("all", "Build everything");

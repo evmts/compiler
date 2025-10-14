@@ -23,10 +23,10 @@ bun add @tevm/shadow
 ## Quick Start
 
 ```typescript
-import { loadShadow, Shadow } from "@tevm/shadow";
+import { Shadow } from "@tevm/shadow";
 
 // Initialize WASM module (do this once at startup)
-await loadShadow();
+await Shadow.init();
 
 // Parse Solidity source to AST
 const ast = Shadow.parseSource("contract Foo {}", "Foo.sol");
@@ -35,7 +35,7 @@ const parsed = JSON.parse(ast);
 // Create shadow contract and stitch into target
 const shadow = Shadow.create("contract Shadow {}");
 const result = shadow.stitchIntoSource("contract Target {}");
-shadow.dispose(); // Clean up WASM memory
+shadow.destroy(); // Clean up WASM memory
 ```
 
 ## Usage
@@ -45,13 +45,13 @@ shadow.dispose(); // Clean up WASM memory
 The WASM module must be loaded before using any parsing or stitching operations:
 
 ```typescript
-import { loadShadow } from "@tevm/shadow";
+import { Shadow } from "@tevm/shadow";
 
 // Load once at application startup
-await loadShadow();
+await Shadow.init();
 
 // Subsequent calls return the same cached module
-const module = await loadShadow();
+const module = await Shadow.init();
 ```
 
 ### Parse Solidity source
@@ -69,7 +69,7 @@ const source = `
   }
 `;
 
-// parseSource is synchronous after loadShadow()
+// parseSource is synchronous after Shadow.init()
 const ast = Shadow.parseSource(source, "HelloWorld.sol");
 const parsed = JSON.parse(ast);
 
@@ -106,7 +106,7 @@ const result = shadow.stitchIntoSource(target, "Counter.sol", "Counter");
 console.log(result);
 
 // Clean up (important to prevent memory leaks!)
-shadow.dispose();
+shadow.destroy();
 ```
 
 ### Using explicit resource management (TypeScript 5.2+)
@@ -115,7 +115,7 @@ shadow.dispose();
 {
   using shadow = Shadow.create('contract Foo {}');
   const result = shadow.stitchIntoSource('contract Bar {}');
-  // shadow is automatically disposed at end of block
+  // shadow is automatically destroyed at end of block
 }
 ```
 
@@ -123,7 +123,7 @@ shadow.dispose();
 
 ### Module Loading
 
-#### `loadShadow(): Promise<MainModule>`
+#### `Shadow.init(): Promise<MainModule>`
 
 Initializes the WASM module. Must be called before using any Shadow operations.
 
@@ -132,7 +132,7 @@ Initializes the WASM module. Must be called before using any Shadow operations.
 **Example:**
 
 ```typescript
-const module = await loadShadow();
+const module = await Shadow.init();
 // Module is now cached, subsequent calls return same instance
 ```
 
@@ -149,12 +149,12 @@ Parse Solidity source code and return the AST as a JSON string. This is a **sync
 
 **Returns:** JSON string containing the Solidity AST
 
-**Throws:** Error if WASM module not loaded via `loadShadow()`
+**Throws:** Error if WASM module not loaded via `Shadow.init()`
 
 **Example:**
 
 ```typescript
-await loadShadow();
+await Shadow.init();
 const ast = Shadow.parseSource(
   `
   contract ERC20 {
@@ -207,7 +207,7 @@ Stitch the shadow contract into target source code.
 
 **Returns:** Modified source code with shadow contract stitched in
 
-**Throws:** Error if instance disposed or target has syntax errors
+**Throws:** Error if instance destroyed or target has syntax errors
 
 **Example:**
 
@@ -227,7 +227,7 @@ Stitch the shadow contract into a target AST (JSON format).
 
 **Returns:** Modified AST as JSON string
 
-**Throws:** Error if instance disposed or AST is invalid
+**Throws:** Error if instance destroyed or AST is invalid
 
 **Example:**
 
@@ -238,7 +238,7 @@ const stitchedAst = shadow.stitchIntoAst(targetAst, "Target");
 const result = JSON.parse(stitchedAst);
 ```
 
-#### `shadow.dispose(): void`
+#### `shadow.destroy(): void`
 
 Free WASM memory associated with this Shadow instance. **Always call this** when done to prevent memory leaks.
 
@@ -249,7 +249,7 @@ const shadow = Shadow.create("contract Foo {}");
 try {
   const result = shadow.stitchIntoSource("contract Bar {}");
 } finally {
-  shadow.dispose(); // Clean up even if operation fails
+  shadow.destroy(); // Clean up even if operation fails
 }
 ```
 
@@ -307,12 +307,12 @@ TypeScript types are **automatically generated** from C++ Emscripten bindings us
 
 ### Memory Management
 
-Shadow instances hold WASM memory and must be manually disposed:
+Shadow instances hold WASM memory and must be manually destroyed:
 
 ```typescript
 const shadow = Shadow.create("contract Foo {}");
 shadow.stitchIntoSource("contract Bar {}");
-shadow.dispose(); // Free WASM memory
+shadow.destroy(); // Free WASM memory
 ```
 
 Alternatively, use explicit resource management (TS 5.2+):
@@ -320,7 +320,7 @@ Alternatively, use explicit resource management (TS 5.2+):
 ```typescript
 {
   using shadow = Shadow.create('contract Foo {}');
-  // Automatically disposed at block end
+  // Automatically destroyed at block end
 }
 ```
 

@@ -6,27 +6,11 @@
  */
 
 // Import the Emscripten module factory and generated types
+import { SourceUnit } from 'solidity-ast';
 import createShadowModule, { type MainModule, type Shadow as ShadowNative } from '../wasm/shadow.js';
 
 let wasmModule: MainModule | null = null;
 let initPromise: Promise<MainModule> | null = null;
-
-/**
- * Initialize and load the Shadow WASM module
- * @returns Promise that resolves to the initialized WASM module
- */
-export async function loadShadow(): Promise<MainModule> {
-  if (wasmModule) return wasmModule;
-  if (initPromise) return initPromise;
-
-  const promise = createShadowModule().then((module) => {
-    wasmModule = module;
-    return module;
-  });
-
-  initPromise = promise;
-  return promise;
-}
 
 /**
  * Shadow instance wrapper that manages the lifecycle of a native Shadow object
@@ -42,25 +26,26 @@ export class Shadow {
   }
 
   /**
-   * Create a Shadow instance from source code
-   *
-   * @param source - Shadow contract source code
-   * @returns Promise that resolves to a Shadow instance
+   * Initialize and load the Shadow WASM module
+   * @returns Promise that resolves to the initialized WASM module
    *
    * @example
    * ```typescript
-   * await loadShadow();
-   * const shadow = await Shadow.create(`
-   *   contract ShadowFoo {
-   *     function bar() public {}
-   *   }
-   * `);
+   * await Shadow.init();
+   * const shadow = Shadow.create('contract Foo {}');
    * ```
    */
-  static create(source: string): Shadow {
-    if (!wasmModule) throw new Error('Shadow module not loaded');
-    const native = new wasmModule.Shadow(source);
-    return new Shadow(native);
+  static async init(): Promise<MainModule> {
+    if (wasmModule) return wasmModule;
+    if (initPromise) return initPromise;
+
+    const promise = createShadowModule().then((module) => {
+      wasmModule = module;
+      return module;
+    });
+
+    initPromise = promise;
+    return promise;
   }
 
   /**
@@ -72,14 +57,37 @@ export class Shadow {
    *
    * @example
    * ```typescript
-   * await loadShadow();
-   * const ast = await Shadow.parseSource('contract Foo {}', 'Foo.sol');
+   * await Shadow.init();
+   * const ast = Shadow.parseSource('contract Foo {}', 'Foo.sol');
    * const parsed = JSON.parse(ast);
    * ```
    */
-  static parseSource(source: string, name: string = ''): string {
-    if (!wasmModule) throw new Error('Shadow module not loaded');
-    return wasmModule.Shadow.parseSource(source, name);
+  static parseSource(source: string, name: string = ''): SourceUnit {
+    if (!wasmModule) throw new Error('Shadow module not loaded. Call await Shadow.init() first.');
+    const ast = wasmModule.Shadow.parseSource(source, name);
+    return JSON.parse(ast);
+  }
+
+  /**
+   * Create a Shadow instance from source code
+   *
+   * @param source - Shadow contract source code
+   * @returns Shadow instance
+   *
+   * @example
+   * ```typescript
+   * await Shadow.init();
+   * const shadow = Shadow.create(`
+   *   contract ShadowFoo {
+   *     function bar() public {}
+   *   }
+   * `);
+   * ```
+   */
+  static create(source: string): Shadow {
+    if (!wasmModule) throw new Error('Shadow module not loaded. Call await Shadow.init() first.');
+    const native = new wasmModule.Shadow(source);
+    return new Shadow(native);
   }
 
 
@@ -104,9 +112,10 @@ export class Shadow {
     target: string,
     sourceName: string = '',
     contractName: string = ''
-  ): string {
-    if (!this.native) throw new Error('Shadow instance has been disposed');
-    return this.native.stitchIntoSource(target, sourceName, contractName);
+  ): SourceUnit {
+    if (!this.native) throw new Error('Shadow instance has been destroyed');
+    const ast = this.native.stitchIntoSource(target, sourceName, contractName);
+    return JSON.parse(ast);
   }
 
   /**
@@ -123,18 +132,27 @@ export class Shadow {
    * const modifiedAst = JSON.parse(result);
    * ```
    */
-  stitchIntoAst(targetAst: string, contractName: string = ''): string {
-    if (!this.native) throw new Error('Shadow instance has been disposed');
-    return this.native.stitchIntoAst(targetAst, contractName);
+  stitchIntoAst(targetAst: string, contractName: string = ''): SourceUnit {
+    if (!this.native) throw new Error('Shadow instance has been destroyed');
+    const ast = this.native.stitchIntoAst(targetAst, contractName);
+    return JSON.parse(ast);
   }
 
   /**
-   * Dispose of the native Shadow instance and free WASM memory
+   * Destroy the native Shadow instance and free WASM memory
    *
    * Call this when you're done with the Shadow instance to prevent memory leaks.
-   * After calling dispose(), the instance can no longer be used.
+   * After calling destroy(), the instance can no longer be used.
+   *
+   * @example
+   * ```typescript
+   * await Shadow.init();
+   * const shadow = Shadow.create('contract Foo {}');
+   * // ... use shadow ...
+   * shadow.destroy();
+   * ```
    */
-  dispose(): void {
+  destroy(): void {
     if (this.native) {
       this.native.delete();
       this.native = null;
@@ -148,15 +166,16 @@ export class Shadow {
    *
    * @example
    * ```typescript
+   * await Shadow.init();
    * {
-   *   using shadow = await Shadow.create('contract Foo {}');
+   *   using shadow = Shadow.create('contract Foo {}');
    *   shadow.stitchIntoSource('contract Bar {}');
-   *   // Automatically disposed at end of block
+   *   // Automatically destroyed at end of block
    * }
    * ```
    */
   // Commented out to maintain compatibility - uncomment if using TS 5.2+ with esnext
   // [Symbol.dispose](): void {
-  //   this.dispose();
+  //   this.destroy();
   // }
 }
