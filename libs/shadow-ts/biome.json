@@ -1,0 +1,141 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": false
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/.vscode",
+      "!**/.idea",
+      "!**/.cursor",
+      "!**/dist",
+      "!**/build",
+      "!**/types",
+      "!**/docs",
+      "!**/coverage",
+      "!**/.nx",
+      "!**/.tevm",
+      "!**/tmp",
+      "!**/out-tsc",
+      "!**/cache",
+      "!**/.zig-cache",
+      "!**/zig-out",
+      "!**/forge-artifacts",
+      "!**/broadcast",
+      "!**/output",
+      "!**/target",
+      "!**/*.min.js",
+      "!**/*.min.jsx",
+      "!**/*.min.ts",
+      "!**/*.min.tsx",
+      "!**/*.min.json",
+      "!**/vendor",
+      "!**/generated",
+      "!**/lib",
+      "!**/alloy",
+      "!**/evmone",
+      "!**/revm",
+      "!**/go-ethereum",
+      "!**/ethereumjs-monorepo",
+      "!**/reth",
+      "!**/erigon",
+      "!**/execution-specs",
+      "!**/*.d.ts.map",
+      "!**/*.js.map",
+      "!**/*.cjs.map",
+      "!**/*.mjs.map",
+      "!**/tsconfig.tsbuildinfo",
+      "!**/.turbo",
+      "!**/.next",
+      "!**/.nuxt",
+      "!**/.vercel",
+      "!**/.svelte-kit",
+      "!**/*.wasm",
+      "!**/*.node",
+      "!**/*.dylib",
+      "!**/*.so",
+      "!**/*.dll",
+      "!**/*.lock",
+      "!**/pnpm-lock.yaml",
+      "!**/package-lock.json",
+      "!**/yarn.lock",
+      "!**/bun.lockb",
+      "!**/.git",
+      "!**/.DS_Store",
+      "!**/Thumbs.db",
+      "!**/.env",
+      "!**/.env.*",
+      "!**/lcov.info",
+      "!**/*.log",
+      "!**/debuglogs.txt",
+      "!**/tevm",
+      "!**/fixtures",
+      "!**/tevm.json",
+      "!**/fixtures/*",
+      "!**/__rpc_snapshots__"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "formatWithErrors": false,
+    "indentStyle": "tab",
+    "indentWidth": 2,
+    "lineWidth": 120
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "style": {
+        "useImportType": "off",
+        "noNonNullAssertion": "off"
+      },
+      "performance": {
+        "noDelete": "off",
+        "noAccumulatingSpread": "off"
+      },
+      "complexity": {
+        "noForEach": "off",
+        "noBannedTypes": "off",
+        "useLiteralKeys": "off"
+      },
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noGlobalAssign": "off",
+        "noArrayIndexKey": "off",
+        "noConfusingVoidType": "off",
+        "noAssignInExpressions": "off",
+        "noRedeclare": "off",
+        "noImplicitAnyLet": "off"
+      },
+      "a11y": {
+        "useKeyWithClickEvents": "off",
+        "useSemanticElements": "off",
+        "useFocusableInteractive": "off"
+      },
+      "correctness": {
+        "useExhaustiveDependencies": "off"
+      },
+      "security": {
+        "noDangerouslySetInnerHtml": "off"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "trailingCommas": "all",
+      "semicolons": "asNeeded"
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  }
+}

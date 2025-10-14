@@ -8,7 +8,7 @@ import {
   findSourceDir,
   findLibs,
   sum,
-} from "../index.js";
+} from "../build/index.js";
 
 const FIXTURES_DIR = join(__dirname, "fixtures");
 const HARDHAT_PROJECT = join(FIXTURES_DIR, "hardhat-project");

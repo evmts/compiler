@@ -29,13 +29,35 @@ This enables:
 ## Project Structure
 
 ```
-src/
-├── shadow.zig                    # Main API
-├── utils.zig                     # AST utilities
-├── solidity-parser-wrapper.{h,cpp}  # C++ FFI
-└── test/
-    ├── root.zig
-    └── shadow_test.zig           # 30 tests
+libs/
+├── shadow/                       # Shadow parser (Zig)
+│   ├── src/
+│   │   ├── shadow.zig            # Core parser logic
+│   │   ├── utils.zig             # AST utilities
+│   │   └── solidity-parser-wrapper.{h,cpp}  # C++ FFI
+│   ├── api.zig                   # Native API
+│   ├── api_wasm.zig              # WASM API
+│   ├── api_emscripten.cpp     # Emscripten bindings
+│   └── test/
+│       ├── root.zig
+│       └── shadow_test.zig       # 30 tests
+│
+└── compiler/                     # Compiler package (publishable)
+    ├── src/lib.rs                # Rust/NAPI source
+    ├── build/                    # Generated bindings (committed)
+    │   ├── index.js              # Auto-generated loader
+    │   ├── index.d.ts            # Auto-generated types
+    │   ├── compiler.*.node       # Native binaries
+    │   └── npm/                  # Platform packages
+    ├── target/                   # Cargo build artifacts (gitignored)
+    ├── package.json              # Points to ./build/index.js
+    ├── project.json              # Nx build config
+    └── test/                     # Tests
+
+dist/wasm/                        # WASM outputs (gitignored)
+    ├── shadow.js
+    ├── shadow.wasm
+    └── shadow.{ts,d.ts}
 ```
 
 ## API Example

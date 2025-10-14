@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const DIST_WASM = "libs/shadow-ts/wasm";
+
 // All Solidity sources for parser and semantic analysis
 const solidity_sources = [_][]const u8{
     "solidity/liblangutil/CharStream.cpp",
@@ -138,7 +140,7 @@ pub fn build(b: *std.Build) void {
     });
     native_wrapper.step.dependOn(&init_submodules.step);
     native_wrapper.step.dependOn(&gen_buildinfo.step);
-    native_wrapper.addCSourceFile(.{ .file = b.path("src/solidity-parser-wrapper.cpp"), .flags = cpp_flags });
+    native_wrapper.addCSourceFile(.{ .file = b.path("libs/shadow/src/solidity-parser-wrapper.cpp"), .flags = cpp_flags });
     for (solidity_sources) |src| {
         native_wrapper.addCSourceFile(.{ .file = b.path(src), .flags = cpp_flags });
     }
@@ -150,20 +152,20 @@ pub fn build(b: *std.Build) void {
         .name = "shadow-parser",
         .linkage = .static,
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/shadow.zig"),
+            .root_source_file = b.path("libs/shadow/api.zig"),
             .target = target,
             .optimize = optimize,
         }),
     });
     native_parser.linkLibrary(native_wrapper);
     native_parser.linkLibCpp();
-    native_parser.addIncludePath(b.path("src"));
+    native_parser.addIncludePath(b.path("libs/shadow/src"));
     b.getInstallStep().dependOn(&b.addInstallArtifact(native_parser, .{}).step);
 
     // Tests
     const tests = b.addTest(.{
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/test/root.zig"),
+            .root_source_file = b.path("libs/shadow/test/root.zig"),
             .target = target,
             .optimize = optimize,
         }),
@@ -171,74 +173,115 @@ pub fn build(b: *std.Build) void {
     tests.root_module.addImport("shadow", native_parser.root_module);
     tests.linkLibrary(native_wrapper);
     tests.linkLibCpp();
-    tests.addIncludePath(b.path("src"));
+    tests.addIncludePath(b.path("libs/shadow/src"));
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&b.addRunArtifact(tests).step);
 
-    // WASM: stub CommonIO.h (no Boost.Filesystem)
-    const wasm_headers = b.addWriteFiles();
-    _ = wasm_headers.add("libsolutil/CommonIO.h",
-        \\#pragma once
-        \\#include <string>
-        \\#include <iosfwd>
-        \\namespace solidity::util {
-        \\std::string readFileAsString(std::string const&);
-        \\std::string readUntilEnd(std::istream&);
-        \\std::string readBytes(std::istream&, size_t);
-        \\int readStandardInputChar();
-        \\template<typename T> inline std::string toString(T const& t) { return std::to_string(t); }
-        \\std::string absolutePath(std::string const&, std::string const&);
-        \\std::string sanitizePath(std::string const&);
-        \\}
-        \\
-    );
-
-    // WASM C++ wrapper
+    // WASM: Build Zig code to static library (WASM object files)
     const wasm_target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
-    const wasm_wrapper = b.addLibrary(.{
-        .name = "solidity-parser-wrapper-wasm",
-        .linkage = .static,
-        .root_module = b.createModule(.{ .target = wasm_target, .optimize = .ReleaseSmall }),
-    });
-    wasm_wrapper.step.dependOn(&init_submodules.step);
-    wasm_wrapper.step.dependOn(&gen_buildinfo.step);
-    wasm_wrapper.step.dependOn(&wasm_headers.step);
-    wasm_wrapper.addCSourceFile(.{ .file = b.path("src/solidity-parser-wrapper.cpp"), .flags = cpp_flags });
-    for (solidity_sources) |src| {
-        if (!isExcludedForWasm(src)) {
-            wasm_wrapper.addCSourceFile(.{ .file = b.path(src), .flags = cpp_flags });
-        }
-    }
-    wasm_wrapper.addIncludePath(wasm_headers.getDirectory()); // Override CommonIO.h
-    addSolidityIncludes(wasm_wrapper, b, gen_buildinfo.getDirectory());
-    wasm_wrapper.linkLibCpp();
-
-    // WASM Zig parser
-    const wasm_parser = b.addLibrary(.{
-        .name = "shadow-parser-wasm",
+    const zig_wasm_lib = b.addLibrary(.{
+        .name = "shadow-wasm",
         .linkage = .static,
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/shadow.zig"),
+            .root_source_file = b.path("libs/shadow/api_wasm.zig"),
             .target = wasm_target,
             .optimize = .ReleaseSmall,
         }),
     });
-    wasm_parser.linkLibrary(wasm_wrapper);
-    wasm_parser.addIncludePath(b.path("src"));
-    const wasm_step = b.step("wasm", "Build WASM parser");
-    wasm_step.dependOn(&b.addInstallArtifact(wasm_parser, .{}).step);
+    zig_wasm_lib.step.dependOn(&init_submodules.step);
+    zig_wasm_lib.addIncludePath(b.path("libs/shadow/src"));
 
-    // TypeScript bindings
-    const ts_gen = b.addSystemCommand(&.{ "node", "scripts/generate-ts-bindings.js" });
-    ts_gen.step.dependOn(wasm_step);
-    const ts_step = b.step("typescript", "Generate TypeScript bindings");
-    ts_step.dependOn(&ts_gen.step);
+    // Install Zig WASM library for Emscripten to link
+    const install_zig_lib = b.addInstallArtifact(zig_wasm_lib, .{});
+
+    // WASM: Create output and buildinfo directories
+    const mkdir_dist_wasm = b.addSystemCommand(&.{ "mkdir", "-p", DIST_WASM });
+
+    const wasm_buildinfo_dir = "zig-out/wasm-buildinfo";
+    const mkdir_buildinfo = b.addSystemCommand(&.{ "mkdir", "-p", wasm_buildinfo_dir ++ "/solidity" });
+    const copy_buildinfo = b.addSystemCommand(&.{ "sh", "-c", "echo '#pragma once\n#define ETH_PROJECT_VERSION \"0.8.31\"\n#define ETH_PROJECT_VERSION_MAJOR 0\n#define ETH_PROJECT_VERSION_MINOR 8\n#define ETH_PROJECT_VERSION_PATCH 31\n#define ETH_COMMIT_HASH \"zig-build\"\n#define ETH_BUILD_TYPE \"Release\"\n#define ETH_BUILD_PLATFORM \"zig\"\n#define SOL_VERSION_PRERELEASE \"\"\n#define SOL_VERSION_BUILDINFO \"\"\n#define SOL_VERSION_COMMIT \"\"' > " ++ wasm_buildinfo_dir ++ "/solidity/BuildInfo.h" });
+    copy_buildinfo.step.dependOn(&mkdir_buildinfo.step);
+
+    // WASM: Emscripten build (compiles C++ + links Zig objects)
+    // This uses Emscripten to handle C++ exceptions and generate browser-compatible WASM
+    const emscripten_build = b.addSystemCommand(&.{
+        "emcc",
+        "-std=c++20",
+        "-O3",
+        "-s",
+        "WASM=1",
+        "-s",
+        "MODULARIZE=1",
+        "-s",
+        "EXPORT_ES6=1",
+        "-s",
+        "ALLOW_MEMORY_GROWTH=1",
+        "-s",
+        "EXPORTED_RUNTIME_METHODS=['cwrap','ccall']",
+        "-s",
+        "ERROR_ON_UNDEFINED_SYMBOLS=0",
+        "-s",
+        "STANDALONE_WASM=0",
+        "--bind",
+        "--emit-tsd",
+        "shadow.d.ts",
+        "-I",
+        "libs/shadow/src",
+        "-I",
+        "solidity",
+        "-I",
+        "solidity/libsolidity",
+        "-I",
+        "solidity/liblangutil",
+        "-I",
+        "solidity/libsolutil",
+        "-I",
+        "solidity/libevmasm",
+        "-I",
+        "solidity/deps/nlohmann-json/include",
+        "-I",
+        "solidity/deps/range-v3/include",
+        "-I",
+        "solidity/deps/fmtlib/include",
+        "-I",
+        "/opt/homebrew/opt/boost/include",
+        "-I",
+        wasm_buildinfo_dir,
+    });
+    emscripten_build.step.dependOn(&init_submodules.step);
+    emscripten_build.step.dependOn(&copy_buildinfo.step);
+    emscripten_build.step.dependOn(&install_zig_lib.step);
+    emscripten_build.step.dependOn(&mkdir_dist_wasm.step);
+
+    // Add Zig WASM library
+    emscripten_build.addArg("zig-out/lib/libshadow-wasm.a");
+
+    // Add Emscripten wrapper
+    emscripten_build.addArg("libs/shadow/api_emscripten.cpp");
+
+    // Add C++ wrapper
+    emscripten_build.addArg("libs/shadow/src/solidity-parser-wrapper.cpp");
+
+    // Add Solidity sources (excluding files that need Boost.Filesystem)
+    for (solidity_sources) |src| {
+        if (!isExcludedForWasm(src)) {
+            emscripten_build.addArg(src);
+        }
+    }
+
+    // Output files
+    emscripten_build.addArgs(&.{
+        "-o",
+        b.fmt("{s}/shadow.js", .{DIST_WASM}),
+    });
+
+    const wasm_step = b.step("wasm", "Build WASM module with Emscripten");
+    wasm_step.dependOn(&emscripten_build.step);
 
     // All
     const all_step = b.step("all", "Build everything");
     all_step.dependOn(b.getInstallStep());
     all_step.dependOn(wasm_step);
-    all_step.dependOn(&ts_gen.step);
 
     // Clean
     const clean_step = b.step("clean", "Remove build artifacts");

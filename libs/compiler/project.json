@@ -8,16 +8,15 @@
     "build": {
       "cache": true,
       "outputs": [
-        "{workspaceRoot}/libs/compiler"
+        "{workspaceRoot}/libs/compiler/build"
       ],
       "executor": "@monodon/rust:napi",
       "options": {
-        "dist": "libs/compiler",
+        "dist": "libs/compiler/build",
         "jsFile": "index.js"
       },
       "configurations": {
         "production": {
-          "dist": "dist/compiler",
           "release": true
         }
       }
@@ -29,7 +28,7 @@
         "{options.target-dir}"
       ],
       "options": {
-        "target-dir": "dist/target/compiler"
+        "target-dir": "libs/compiler/target"
       },
       "configurations": {
         "production": {
@@ -44,7 +43,7 @@
         "{options.target-dir}"
       ],
       "options": {
-        "target-dir": "dist/target/compiler"
+        "target-dir": "libs/compiler/target"
       }
     },
     "test-bun": {
