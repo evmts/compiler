@@ -280,7 +280,7 @@ test "stitchIntoAst - basic stitching" {
     var shadow = try Shadow.init(allocator, shadow_func);
     defer shadow.deinit();
 
-    const analyzed_ast = try shadow.stitchIntoAst(target_ast);
+    const analyzed_ast = try shadow.stitchIntoAst(target_ast, null);
     defer allocator.free(analyzed_ast);
 
     try testing.expect(std.mem.indexOf(u8, analyzed_ast, "getSecret") != null);
@@ -320,7 +320,7 @@ test "stitchIntoAst - multiple shadow functions" {
     var shadow = try Shadow.init(allocator, shadow_funcs);
     defer shadow.deinit();
 
-    const analyzed_ast = try shadow.stitchIntoAst(target_ast);
+    const analyzed_ast = try shadow.stitchIntoAst(target_ast, null);
     defer allocator.free(analyzed_ast);
 
     try testing.expect(std.mem.indexOf(u8, analyzed_ast, "getData") != null);
@@ -352,7 +352,7 @@ test "stitchIntoAst - verify semantic analysis succeeded" {
     var shadow = try Shadow.init(allocator, shadow_func);
     defer shadow.deinit();
 
-    const analyzed_ast = try shadow.stitchIntoAst(target_ast);
+    const analyzed_ast = try shadow.stitchIntoAst(target_ast, null);
     defer allocator.free(analyzed_ast);
 
     // Semantic analysis adds these annotations
@@ -382,7 +382,7 @@ test "stitchIntoAst - verify no duplicate IDs" {
     var shadow = try Shadow.init(allocator, shadow_func);
     defer shadow.deinit();
 
-    const analyzed_ast = try shadow.stitchIntoAst(target_ast);
+    const analyzed_ast = try shadow.stitchIntoAst(target_ast, null);
     defer allocator.free(analyzed_ast);
 
     // Parse and verify no duplicate IDs
@@ -425,7 +425,7 @@ test "stitchIntoAst - shadow accessing private variables" {
     var shadow = try Shadow.init(allocator, shadow_func);
     defer shadow.deinit();
 
-    const analyzed_ast = try shadow.stitchIntoAst(target_ast);
+    const analyzed_ast = try shadow.stitchIntoAst(target_ast, null);
     defer allocator.free(analyzed_ast);
 
     try testing.expect(std.mem.indexOf(u8, analyzed_ast, "stealBalance") != null);
@@ -466,7 +466,7 @@ test "stitchIntoAst - target with modifier" {
     var shadow = try Shadow.init(allocator, shadow_func);
     defer shadow.deinit();
 
-    const analyzed_ast = try shadow.stitchIntoAst(target_ast);
+    const analyzed_ast = try shadow.stitchIntoAst(target_ast, null);
     defer allocator.free(analyzed_ast);
 
     try testing.expect(std.mem.indexOf(u8, analyzed_ast, "bypassGuard") != null);
@@ -498,7 +498,7 @@ test "stitchIntoSource - basic usage" {
     var shadow = try Shadow.init(allocator, shadow_func);
     defer shadow.deinit();
 
-    const analyzed_ast = try shadow.stitchIntoSource(target_source, null);
+    const analyzed_ast = try shadow.stitchIntoSource(target_source, null, null);
     defer allocator.free(analyzed_ast);
 
     try testing.expect(std.mem.indexOf(u8, analyzed_ast, "getSecret") != null);
@@ -523,7 +523,7 @@ test "stitchIntoSource - verify equivalence to stitchIntoAst" {
     var shadow1 = try Shadow.init(allocator, shadow_func);
     defer shadow1.deinit();
 
-    const result1 = try shadow1.stitchIntoSource(target_source, null);
+    const result1 = try shadow1.stitchIntoSource(target_source, null, null);
     defer allocator.free(result1);
 
     const target_ast = try Shadow.parseSourceAst(allocator, target_source, null);
@@ -532,7 +532,7 @@ test "stitchIntoSource - verify equivalence to stitchIntoAst" {
     var shadow2 = try Shadow.init(allocator, shadow_func);
     defer shadow2.deinit();
 
-    const result2 = try shadow2.stitchIntoAst(target_ast);
+    const result2 = try shadow2.stitchIntoAst(target_ast, null);
     defer allocator.free(result2);
 
     // Both should contain same function names
@@ -570,7 +570,7 @@ test "edge case - shadow with complex expressions" {
     var shadow = try Shadow.init(allocator, shadow_func);
     defer shadow.deinit();
 
-    const analyzed_ast = try shadow.stitchIntoAst(target_ast);
+    const analyzed_ast = try shadow.stitchIntoAst(target_ast, null);
     defer allocator.free(analyzed_ast);
 
     try testing.expect(std.mem.indexOf(u8, analyzed_ast, "complexMath") != null);
@@ -604,7 +604,7 @@ test "edge case - shadow with conditional logic" {
     var shadow = try Shadow.init(allocator, shadow_func);
     defer shadow.deinit();
 
-    const analyzed_ast = try shadow.stitchIntoAst(target_ast);
+    const analyzed_ast = try shadow.stitchIntoAst(target_ast, null);
     defer allocator.free(analyzed_ast);
 
     try testing.expect(std.mem.indexOf(u8, analyzed_ast, "conditional") != null);
@@ -634,7 +634,7 @@ test "edge case - target with many existing functions" {
     var shadow = try Shadow.init(allocator, shadow_func);
     defer shadow.deinit();
 
-    const analyzed_ast = try shadow.stitchIntoAst(target_ast);
+    const analyzed_ast = try shadow.stitchIntoAst(target_ast, null);
     defer allocator.free(analyzed_ast);
 
     try testing.expect(std.mem.indexOf(u8, analyzed_ast, "f1") != null);
@@ -677,7 +677,7 @@ test "complex - inheritance" {
     var shadow = try Shadow.init(allocator, shadow_func);
     defer shadow.deinit();
 
-    const analyzed_ast = try shadow.stitchIntoAst(target_ast);
+    const analyzed_ast = try shadow.stitchIntoAst(target_ast, null);
     defer allocator.free(analyzed_ast);
 
     try testing.expect(std.mem.indexOf(u8, analyzed_ast, "accessBoth") != null);
@@ -713,7 +713,7 @@ test "complex - struct definitions" {
     var shadow = try Shadow.init(allocator, shadow_func);
     defer shadow.deinit();
 
-    const analyzed_ast = try shadow.stitchIntoAst(target_ast);
+    const analyzed_ast = try shadow.stitchIntoAst(target_ast, null);
     defer allocator.free(analyzed_ast);
 
     try testing.expect(std.mem.indexOf(u8, analyzed_ast, "getUser") != null);
@@ -745,7 +745,7 @@ test "complex - events" {
     var shadow = try Shadow.init(allocator, shadow_func);
     defer shadow.deinit();
 
-    const analyzed_ast = try shadow.stitchIntoAst(target_ast);
+    const analyzed_ast = try shadow.stitchIntoAst(target_ast, null);
     defer allocator.free(analyzed_ast);
 
     try testing.expect(std.mem.indexOf(u8, analyzed_ast, "emitTransfer") != null);
@@ -779,7 +779,7 @@ test "complex - custom errors" {
     var shadow = try Shadow.init(allocator, shadow_func);
     defer shadow.deinit();
 
-    const analyzed_ast = try shadow.stitchIntoAst(target_ast);
+    const analyzed_ast = try shadow.stitchIntoAst(target_ast, null);
     defer allocator.free(analyzed_ast);
 
     try testing.expect(std.mem.indexOf(u8, analyzed_ast, "withdraw") != null);
@@ -812,7 +812,7 @@ test "complex - interfaces" {
     var shadow = try Shadow.init(allocator, shadow_func);
     defer shadow.deinit();
 
-    const analyzed_ast = try shadow.stitchIntoAst(target_ast);
+    const analyzed_ast = try shadow.stitchIntoAst(target_ast, null);
     defer allocator.free(analyzed_ast);
 
     try testing.expect(std.mem.indexOf(u8, analyzed_ast, "sendTokens") != null);
@@ -848,7 +848,7 @@ test "complex - library usage" {
     var shadow = try Shadow.init(allocator, shadow_func);
     defer shadow.deinit();
 
-    const analyzed_ast = try shadow.stitchIntoAst(target_ast);
+    const analyzed_ast = try shadow.stitchIntoAst(target_ast, null);
     defer allocator.free(analyzed_ast);
 
     try testing.expect(std.mem.indexOf(u8, analyzed_ast, "increment") != null);
