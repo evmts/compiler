@@ -127,25 +127,16 @@ contract Target {}
   #[test]
   fn stitches_shadow_nodes_into_contract() {
     let mut root = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol").unwrap();
-    let shadow = parser::parse_source_ast(
-      &parser::wrap_shadow_source(SHADOW_FRAGMENT),
-      "Shadow.sol",
-    )
-    .unwrap();
+    let shadow =
+      parser::parse_source_ast(&parser::wrap_shadow_source(SHADOW_FRAGMENT), "Shadow.sol").unwrap();
 
     let contract_idx = find_target_contract_index(&root, Some("Target")).unwrap();
     let max_id = utils::find_max_id(&root);
     stitch_shadow_nodes_into_contract(&mut root, contract_idx, &shadow, max_id).unwrap();
 
-    let nodes = root
-      .get("nodes")
-      .and_then(|n| n.as_array())
-      .unwrap();
+    let nodes = root.get("nodes").and_then(|n| n.as_array()).unwrap();
     let target = &nodes[contract_idx];
-    let contract_nodes = target
-      .get("nodes")
-      .and_then(|n| n.as_array())
-      .unwrap();
+    let contract_nodes = target.get("nodes").and_then(|n| n.as_array()).unwrap();
     assert!(contract_nodes.iter().any(|n| {
       n.get("nodeType")
         .and_then(|v| v.as_str())

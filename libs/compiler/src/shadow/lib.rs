@@ -4,6 +4,7 @@ use napi::JsUnknown;
 use serde_json::Value;
 
 use super::{error::ShadowError, parser, stitcher, utils};
+use crate::errors::map_napi_error;
 use utils::{from_js_value, to_js_value};
 
 /// Shadow - Parse and stitch Solidity code fragments into contract ASTs
@@ -43,8 +44,10 @@ impl Shadow {
   ) -> Result<JsUnknown> {
     let file_name = source_name.as_deref().unwrap_or("Contract.sol");
 
-    let mut target_ast = parser::parse_source_ast(&target_source, file_name)
-      .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))?;
+    let mut target_ast = map_napi_error(
+      parser::parse_source_ast(&target_source, file_name),
+      "Failed to parse target source",
+    )?;
 
     let stitched =
       self.stitch_into_ast_internal(&mut target_ast, target_contract_name.as_deref())?;
@@ -87,8 +90,10 @@ impl Shadow {
   ) -> Result<JsUnknown> {
     let name = file_name.as_deref().unwrap_or("Contract.sol");
 
-    let value = parser::parse_source_ast(&source, name)
-      .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))?;
+    let value = map_napi_error(
+      parser::parse_source_ast(&source, name),
+      "Failed to parse source",
+    )?;
 
     to_js_value(&env, &value)
   }
@@ -105,22 +110,24 @@ impl Shadow {
     target_ast: &mut Value,
     target_contract_name: Option<&str>,
   ) -> Result<Value> {
-    let shadow_ast = self
-      .to_wrapped_ast()
-      .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))?;
+    let shadow_ast = map_napi_error(self.to_wrapped_ast(), "Failed to parse shadow fragment")?;
 
     let max_target_id = utils::find_max_id(target_ast);
 
-    let contract_idx = stitcher::find_target_contract_index(target_ast, target_contract_name)
-      .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))?;
+    let contract_idx = map_napi_error(
+      stitcher::find_target_contract_index(target_ast, target_contract_name),
+      "Failed to locate target contract",
+    )?;
 
-    stitcher::stitch_shadow_nodes_into_contract(
-      target_ast,
-      contract_idx,
-      &shadow_ast,
-      max_target_id,
-    )
-    .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))?;
+    map_napi_error(
+      stitcher::stitch_shadow_nodes_into_contract(
+        target_ast,
+        contract_idx,
+        &shadow_ast,
+        max_target_id,
+      ),
+      "Failed to stitch shadow nodes",
+    )?;
 
     Ok(target_ast.clone())
   }
@@ -170,6 +177,9 @@ contract Target {
       })
       .unwrap_or(false);
 
-    assert!(contains_added_fn, "stitched AST should contain added function");
+    assert!(
+      contains_added_fn,
+      "stitched AST should contain added function"
+    );
   }
 }

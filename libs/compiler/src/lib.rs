@@ -1,6 +1,8 @@
 #[macro_use]
 extern crate napi_derive;
 
+mod errors;
+
 // Public modules
 pub mod compile;
 pub mod config;

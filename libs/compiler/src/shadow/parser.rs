@@ -11,12 +11,12 @@ use super::error::ShadowError;
 /// Parse Solidity source code and return AST JSON
 /// Uses stopAfter: "parsing" to get syntax-only AST
 pub fn parse_source_ast(source: &str, file_name: &str) -> Result<Value, ShadowError> {
-  let version = Version::parse("0.8.24")
+  let version = Version::parse("0.8.30")
     .map_err(|e| ShadowError::CompilerError(format!("Invalid version: {}", e)))?;
 
   let solc = Solc::find_svm_installed_version(&version)
     .map_err(|e| ShadowError::CompilerError(format!("Failed to find solc: {}", e)))?
-    .ok_or_else(|| ShadowError::CompilerError("Solc 0.8.24 not found".to_string()))?;
+    .ok_or_else(|| ShadowError::CompilerError("Solc 0.8.30 not found".to_string()))?;
 
   let mut sources = Sources::new();
   sources.insert(PathBuf::from(file_name), Source::new(source));
@@ -98,10 +98,10 @@ contract Example {
     let unit: foundry_compilers::artifacts::ast::SourceUnit =
       serde_json::from_value(ast).expect("deserialize SourceUnit");
     assert!(
-      unit
-        .nodes
-        .iter()
-        .any(|n| matches!(n, foundry_compilers::artifacts::ast::SourceUnitPart::ContractDefinition(_))),
+      unit.nodes.iter().any(|n| matches!(
+        n,
+        foundry_compilers::artifacts::ast::SourceUnitPart::ContractDefinition(_)
+      )),
       "typed AST should contain contract definition"
     );
   }

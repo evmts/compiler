@@ -144,6 +144,7 @@ let analyzed_ast = shadow.stitch_into_source(
 ### ID Management
 
 To prevent ID collisions:
+
 - `find_max_id()`: Recursively finds highest ID in target AST
 - `renumber_ids()`: Adds offset to all shadow node IDs
 
@@ -174,7 +175,7 @@ cargo test --lib shadow
 
 1. **Multi-contract files**: Re-analysis of multi-contract files may fail (solc limitation)
 2. **Semantic errors**: Stitched code must be semantically valid for analysis to succeed
-3. **Solidity version**: Currently hardcoded to 0.8.24
+3. **Solidity version**: Currently hardcoded to 0.8.30
 
 ## Differences from Zig Implementation
 
