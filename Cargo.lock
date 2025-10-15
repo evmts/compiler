@@ -532,9 +532,12 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
+ "proc-macro2",
+ "quote",
  "semver 1.0.27",
  "serde",
  "serde_json",
+ "syn 2.0.106",
 ]
 
 [[package]]
@@ -1729,6 +1732,8 @@ dependencies = [
  "napi-derive",
  "napi-sys",
  "once_cell",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

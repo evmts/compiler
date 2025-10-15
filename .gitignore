@@ -7,6 +7,8 @@ out-tsc
 
 # Rust build artifacts
 libs/compiler/target
+# Hardhat cache
+libs/compiler/test/fixtures/hardhat-project/cache/
 
 # dependencies
 node_modules
@@ -47,6 +49,3 @@ Thumbs.db
 .github/instructions/nx.instructions.md
 
 *.node
-
-.zig-cache
-zig-out

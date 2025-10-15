@@ -1,7 +1,10 @@
 use napi::bindgen_prelude::*;
+use napi::Env;
+use napi::JsUnknown;
 use serde_json::Value;
 
 use super::{error::ShadowError, parser, stitcher, utils};
+use utils::{from_js_value, to_js_value};
 
 /// Shadow - Parse and stitch Solidity code fragments into contract ASTs
 ///
@@ -22,100 +25,72 @@ impl Shadow {
     Shadow { source }
   }
 
-  /// Parse and extract all nodes from the shadow AST as JSON strings
-  /// Returns an array of AST node JSON strings
-  #[napi]
-  pub fn to_ast_nodes(&self) -> Result<Vec<String>> {
-    let ast = self
-      .to_wrapped_ast()
-      .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))?;
-
-    let nodes = ast
-      .get("nodes")
-      .and_then(|v| v.as_array())
-      .ok_or_else(|| Error::new(Status::GenericFailure, "Missing nodes array"))?;
-
-    if nodes.len() <= 1 {
-      return Err(Error::new(Status::GenericFailure, "No nodes found"));
-    }
-
-    let contract = &nodes[1];
-    let contract_nodes = contract
-      .get("nodes")
-      .and_then(|v| v.as_array())
-      .ok_or_else(|| Error::new(Status::GenericFailure, "Contract missing nodes"))?;
-
-    if contract_nodes.is_empty() {
-      return Err(Error::new(Status::GenericFailure, "No nodes found"));
-    }
-
-    let result: Vec<String> = contract_nodes
-      .iter()
-      .map(|node| {
-        serde_json::to_string(node)
-          .map_err(|e| Error::new(Status::GenericFailure, format!("JSON error: {}", e)))
-      })
-      .collect::<Result<Vec<String>>>()?;
-
-    Ok(result)
-  }
-
   /// Stitch shadow nodes into an existing contract's source code
   /// Convenience wrapper that parses the source first, then stitches ASTs
-  /// Returns fully analyzed AST JSON string
+  /// Returns the fully analyzed AST as a typed object
   ///
   /// Parameters:
   ///   - target_source: The Solidity source code
   ///   - source_name: Optional source file name (defaults to "Contract.sol")
   ///   - target_contract_name: Optional contract name (defaults to last contract)
-  #[napi]
+  #[napi(ts_return_type = "import('./foundry-types').SourceUnit")]
   pub fn stitch_into_source(
     &self,
+    env: Env,
     target_source: String,
     source_name: Option<String>,
     target_contract_name: Option<String>,
-  ) -> Result<String> {
+  ) -> Result<JsUnknown> {
     let file_name = source_name.as_deref().unwrap_or("Contract.sol");
 
-    let target_ast = parser::parse_source_ast(&target_source, file_name)
+    let mut target_ast = parser::parse_source_ast(&target_source, file_name)
       .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))?;
 
-    self.stitch_into_ast_internal(target_ast, target_contract_name.as_deref(), file_name)
+    let stitched =
+      self.stitch_into_ast_internal(&mut target_ast, target_contract_name.as_deref())?;
+    to_js_value(&env, &stitched)
   }
 
   /// Stitch shadow nodes into an existing contract's AST
-  /// Returns fully analyzed AST JSON string
+  /// Returns fully analyzed AST object
   ///
   /// Parameters:
-  ///   - target_ast_json: The target AST as JSON string
+  ///   - target_ast: The target AST as object
   ///   - target_contract_name: Optional contract name (defaults to last contract)
   ///   - source_name: Optional source file name (defaults to "Contract.sol")
-  #[napi]
+  #[napi(ts_return_type = "import('./foundry-types').SourceUnit")]
   pub fn stitch_into_ast(
     &self,
-    target_ast_json: String,
+    env: Env,
+    target_ast: JsUnknown,
     target_contract_name: Option<String>,
-    source_name: Option<String>,
-  ) -> Result<String> {
-    let target_ast: Value = serde_json::from_str(&target_ast_json)
-      .map_err(|e| Error::new(Status::GenericFailure, format!("JSON error: {}", e)))?;
+    _source_name: Option<String>,
+  ) -> Result<JsUnknown> {
+    let mut target_ast_value: Value = from_js_value(&env, target_ast)?;
 
-    let file_name = source_name.as_deref().unwrap_or("Contract.sol");
+    let stitched =
+      self.stitch_into_ast_internal(&mut target_ast_value, target_contract_name.as_deref())?;
 
-    self.stitch_into_ast_internal(target_ast, target_contract_name.as_deref(), file_name)
+    to_js_value(&env, &stitched)
   }
 
-  /// Parse Solidity source code to AST JSON
-  /// Static utility method for parsing any Solidity source
-  #[napi]
-  pub fn parse_source_ast_static(source: String, file_name: Option<String>) -> Result<String> {
+  /// Parse Solidity source code and return the strongly typed SourceUnit AST
+  /// that foundry-compilers exposes as a plain JavaScript object. The returned
+  /// value preserves the original shape and TypeScript bindings are patched via
+  /// `foundry-types.ts`.
+  // napi-ts-return: import('./foundry-types').SourceUnit
+  #[napi(ts_return_type = "import('./foundry-types').SourceUnit")]
+  pub fn parse_source_ast(
+    env: Env,
+    source: String,
+    file_name: Option<String>,
+  ) -> Result<JsUnknown> {
     let name = file_name.as_deref().unwrap_or("Contract.sol");
 
-    let ast = parser::parse_source_ast(&source, name)
+    let value = parser::parse_source_ast(&source, name)
       .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))?;
 
-    serde_json::to_string(&ast)
-      .map_err(|e| Error::new(Status::GenericFailure, format!("JSON error: {}", e)))
+    to_js_value(&env, &value)
   }
 
   // Internal helper methods
@@ -127,29 +102,74 @@ impl Shadow {
 
   fn stitch_into_ast_internal(
     &self,
-    mut target_ast: Value,
+    target_ast: &mut Value,
     target_contract_name: Option<&str>,
-    _file_name: &str,
-  ) -> Result<String> {
+  ) -> Result<Value> {
     let shadow_ast = self
       .to_wrapped_ast()
       .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))?;
 
-    let max_target_id = utils::find_max_id(&target_ast);
+    let max_target_id = utils::find_max_id(target_ast);
 
-    let contract_idx = stitcher::find_target_contract_index(&target_ast, target_contract_name)
+    let contract_idx = stitcher::find_target_contract_index(target_ast, target_contract_name)
       .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))?;
 
     stitcher::stitch_shadow_nodes_into_contract(
-      &mut target_ast,
+      target_ast,
       contract_idx,
       &shadow_ast,
       max_target_id,
     )
     .map_err(|e| Error::new(Status::GenericFailure, format!("{}", e)))?;
 
-    // Return the stitched AST directly (parsed AST, no semantic analysis)
-    serde_json::to_string(&target_ast)
-      .map_err(|e| Error::new(Status::GenericFailure, format!("JSON error: {}", e)))
+    Ok(target_ast.clone())
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::shadow::parser;
+
+  const TARGET_CONTRACT: &str = r#"
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Target {
+  uint256 private value;
+}
+"#;
+
+  const SHADOW_FUNC: &str = "function added() public view returns (uint256) { return value; }";
+
+  #[test]
+  fn stitches_shadow_into_target_ast() {
+    let shadow = Shadow::new(SHADOW_FUNC.to_string());
+    let mut target_ast =
+      parser::parse_source_ast(TARGET_CONTRACT, "Target.sol").expect("parse target");
+    let stitched = shadow
+      .stitch_into_ast_internal(&mut target_ast, Some("Target"))
+      .expect("stitch");
+
+    let contract = stitched
+      .get("nodes")
+      .and_then(|n| n.as_array())
+      .and_then(|nodes| nodes.last())
+      .expect("contract node");
+    let contains_added_fn = contract
+      .get("nodes")
+      .and_then(|n| n.as_array())
+      .map(|nodes| {
+        nodes.iter().any(|node| {
+          node
+            .get("name")
+            .and_then(|n| n.as_str())
+            .map(|name| name == "added")
+            .unwrap_or(false)
+        })
+      })
+      .unwrap_or(false);
+
+    assert!(contains_added_fn, "stitched AST should contain added function");
   }
 }

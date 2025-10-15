@@ -64,16 +64,6 @@ let shadow = Shadow::new(source: String) -> Shadow
 
 ### Methods
 
-#### `to_ast_nodes() -> Result<Vec<String>>`
-
-Extract individual AST nodes as JSON strings.
-
-```rust
-let shadow = Shadow::new("function test() public {}".to_string());
-let nodes = shadow.to_ast_nodes()?;
-// Returns: ["{ nodeType: 'FunctionDefinition', ... }"]
-```
-
 #### `stitch_into_source(target_source, source_name, target_contract_name) -> Result<String>`
 
 Stitch shadow nodes into target source code. Returns fully analyzed AST.

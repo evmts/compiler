@@ -91,3 +91,66 @@ pub fn stitch_shadow_nodes_into_contract(
 
   Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::shadow::{parser, utils};
+
+  const MULTI_CONTRACT: &str = r#"
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract First {}
+contract Second {}
+contract Target {}
+"#;
+
+  const SHADOW_FRAGMENT: &str = "function hello() public {}";
+
+  #[test]
+  fn locates_contract_by_name() {
+    let root = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol").unwrap();
+    let idx = find_target_contract_index(&root, Some("Target")).unwrap();
+    let nodes = root.get("nodes").and_then(|n| n.as_array()).unwrap();
+    assert_eq!(utils::get_contract_name(&nodes[idx]), Some("Target"));
+  }
+
+  #[test]
+  fn falls_back_to_last_contract() {
+    let root = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol").unwrap();
+    let idx = find_target_contract_index(&root, None).unwrap();
+    let nodes = root.get("nodes").and_then(|n| n.as_array()).unwrap();
+    assert_eq!(utils::get_contract_name(&nodes[idx]), Some("Target"));
+  }
+
+  #[test]
+  fn stitches_shadow_nodes_into_contract() {
+    let mut root = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol").unwrap();
+    let shadow = parser::parse_source_ast(
+      &parser::wrap_shadow_source(SHADOW_FRAGMENT),
+      "Shadow.sol",
+    )
+    .unwrap();
+
+    let contract_idx = find_target_contract_index(&root, Some("Target")).unwrap();
+    let max_id = utils::find_max_id(&root);
+    stitch_shadow_nodes_into_contract(&mut root, contract_idx, &shadow, max_id).unwrap();
+
+    let nodes = root
+      .get("nodes")
+      .and_then(|n| n.as_array())
+      .unwrap();
+    let target = &nodes[contract_idx];
+    let contract_nodes = target
+      .get("nodes")
+      .and_then(|n| n.as_array())
+      .unwrap();
+    assert!(contract_nodes.iter().any(|n| {
+      n.get("nodeType")
+        .and_then(|v| v.as_str())
+        .map(|t| t == "FunctionDefinition")
+        .unwrap_or(false)
+    }));
+  }
+}

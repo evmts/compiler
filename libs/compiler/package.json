@@ -1,6 +1,9 @@
 {
   "name": "@compiler/compiler",
   "version": "0.0.0",
+  "scripts": {
+    "copy-types": "cp src/foundry-types.ts build/foundry-types.d.ts"
+  },
   "main": "./build/index.js",
   "types": "./build/index.d.ts",
   "napi": {

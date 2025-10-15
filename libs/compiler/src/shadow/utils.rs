@@ -1,62 +1,128 @@
-use serde_json::Value;
+use napi::{Env, JsUnknown, Result};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use serde_json::{Number, Value};
 
-/// Find the maximum ID in an AST to avoid ID collisions when stitching
-pub fn find_max_id(value: &Value) -> i64 {
-  match value {
-    Value::Object(map) => {
-      let mut max_id = 0i64;
-
-      if let Some(Value::Number(id)) = map.get("id") {
-        if let Some(id_val) = id.as_i64() {
-          max_id = max_id.max(id_val);
-        }
-      }
-
-      for val in map.values() {
-        let child_max = find_max_id(val);
-        max_id = max_id.max(child_max);
-      }
-
-      max_id
-    }
-    Value::Array(arr) => arr.iter().map(find_max_id).max().unwrap_or(0),
-    _ => 0,
-  }
+pub fn to_js_value<T>(env: &Env, value: &T) -> Result<JsUnknown>
+where
+  T: Serialize,
+{
+  env.to_js_value(value)
 }
 
-/// Renumber all IDs in an AST by adding an offset
-pub fn renumber_ids(value: &mut Value, offset: i64) {
-  match value {
-    Value::Object(map) => {
-      if let Some(Value::Number(id)) = map.get("id") {
-        if let Some(id_val) = id.as_i64() {
-          map.insert("id".to_string(), Value::Number((id_val + offset).into()));
-        }
-      }
-
-      for val in map.values_mut() {
-        renumber_ids(val, offset);
-      }
-    }
-    Value::Array(arr) => {
-      for val in arr.iter_mut() {
-        renumber_ids(val, offset);
-      }
-    }
-    _ => {}
-  }
+pub fn from_js_value<T>(env: &Env, value: JsUnknown) -> Result<T>
+where
+  T: DeserializeOwned,
+{
+  env.from_js_value(value)
 }
 
-/// Check if a JSON node is a ContractDefinition
+pub fn find_max_id(node: &Value) -> i64 {
+  fn walk(value: &Value, max_id: &mut i64) {
+    match value {
+      Value::Object(map) => {
+        if let Some(Value::Number(num)) = map.get("id") {
+          if let Some(id) = num.as_u64() {
+            *max_id = (*max_id).max(id as i64);
+          }
+        }
+        for child in map.values() {
+          walk(child, max_id);
+        }
+      }
+      Value::Array(items) => {
+        for item in items {
+          walk(item, max_id);
+        }
+      }
+      _ => {}
+    }
+  }
+
+  let mut max_id = 0;
+  walk(node, &mut max_id);
+  max_id
+}
+
+pub fn renumber_ids(node: &mut Value, start_from: i64) {
+  fn walk(value: &mut Value, next_id: &mut i64) {
+    match value {
+      Value::Object(map) => {
+        if let Some(id_value) = map.get_mut("id") {
+          *next_id += 1;
+          *id_value = Value::Number(Number::from(*next_id));
+        }
+        for child in map.values_mut() {
+          walk(child, next_id);
+        }
+      }
+      Value::Array(items) => {
+        for item in items {
+          walk(item, next_id);
+        }
+      }
+      _ => {}
+    }
+  }
+
+  let mut counter = start_from;
+  walk(node, &mut counter);
+}
+
 pub fn is_contract_definition(node: &Value) -> bool {
   node
     .get("nodeType")
-    .and_then(|v| v.as_str())
-    .map(|s| s == "ContractDefinition")
+    .and_then(Value::as_str)
+    .map(|kind| kind == "ContractDefinition")
     .unwrap_or(false)
 }
 
-/// Get the name of a contract node
 pub fn get_contract_name(node: &Value) -> Option<&str> {
-  node.get("name").and_then(|v| v.as_str())
+  node.get("name").and_then(Value::as_str)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use serde_json::json;
+
+  fn sample_ast() -> Value {
+    json!({
+      "nodeType": "SourceUnit",
+      "nodes": [
+        {
+          "nodeType": "ContractDefinition",
+          "name": "Sample",
+          "id": 1,
+          "nodes": [
+            { "nodeType": "FunctionDefinition", "id": 2 },
+            { "nodeType": "VariableDeclaration", "id": 3 }
+          ]
+        }
+      ]
+    })
+  }
+
+  #[test]
+  fn finds_max_id_in_ast() {
+    let mut ast = sample_ast();
+    assert_eq!(find_max_id(&ast), 3);
+
+    renumber_ids(&mut ast, 10);
+    assert!(find_max_id(&ast) > 10);
+  }
+
+  #[test]
+  fn identifies_contract_definitions() {
+    let ast = sample_ast();
+    let nodes = ast.get("nodes").and_then(Value::as_array).unwrap();
+    assert!(is_contract_definition(&nodes[0]));
+  }
+
+  #[test]
+  fn extracts_contract_name() {
+    let ast = sample_ast();
+    let nodes = ast.get("nodes").and_then(Value::as_array).unwrap();
+    assert_eq!(get_contract_name(&nodes[0]), Some("Sample"));
+  }
 }

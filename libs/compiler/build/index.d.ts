@@ -12,36 +12,33 @@ export declare class Shadow {
   /** Initialize a new Shadow with a source fragment (function, variable, etc.) */
   constructor(source: string)
   /**
-   * Parse and extract all nodes from the shadow AST as JSON strings
-   * Returns an array of AST node JSON strings
-   */
-  toAstNodes(): Array<string>
-  /**
    * Stitch shadow nodes into an existing contract's source code
    * Convenience wrapper that parses the source first, then stitches ASTs
-   * Returns fully analyzed AST JSON string
+   * Returns the fully analyzed AST as a typed object
    *
    * Parameters:
    *   - target_source: The Solidity source code
    *   - source_name: Optional source file name (defaults to "Contract.sol")
    *   - target_contract_name: Optional contract name (defaults to last contract)
    */
-  stitchIntoSource(targetSource: string, sourceName?: string | undefined | null, targetContractName?: string | undefined | null): string
+  stitchIntoSource(targetSource: string, sourceName?: string | undefined | null, targetContractName?: string | undefined | null): import('./foundry-types').SourceUnit
   /**
    * Stitch shadow nodes into an existing contract's AST
-   * Returns fully analyzed AST JSON string
+   * Returns fully analyzed AST object
    *
    * Parameters:
-   *   - target_ast_json: The target AST as JSON string
+   *   - target_ast: The target AST as object
    *   - target_contract_name: Optional contract name (defaults to last contract)
    *   - source_name: Optional source file name (defaults to "Contract.sol")
    */
-  stitchIntoAst(targetAstJson: string, targetContractName?: string | undefined | null, sourceName?: string | undefined | null): string
+  stitchIntoAst(targetAst: unknown, targetContractName?: string | undefined | null, sourceName?: string | undefined | null): import('./foundry-types').SourceUnit
   /**
-   * Parse Solidity source code to AST JSON
-   * Static utility method for parsing any Solidity source
+   * Parse Solidity source code and return the strongly typed SourceUnit AST
+   * that foundry-compilers exposes as a plain JavaScript object. The returned
+   * value preserves the original shape and TypeScript bindings are patched via
+   * `foundry-types.ts`.
    */
-  static parseSourceAstStatic(source: string, fileName?: string | undefined | null): string
+  static parseSourceAst(source: string, fileName?: string | undefined | null): import('./foundry-types').SourceUnit
 }
 
 export declare class SolidityProject {

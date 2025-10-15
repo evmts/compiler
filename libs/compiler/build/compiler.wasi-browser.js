@@ -51,10 +51,10 @@ const {
 })
 
 function __napi_rs_initialize_modules(__napiInstance) {
-  __napiInstance.exports['__napi_register__SolidityProject_struct_0']?.()
-  __napiInstance.exports['__napi_register__SolidityProject_impl_8']?.()
-  __napiInstance.exports['__napi_register__SolidityProjectBuilder_struct_9']?.()
-  __napiInstance.exports['__napi_register__SolidityProjectBuilder_impl_22']?.()
+  __napiInstance.exports['__napi_register__SolidityProjectBuilder_struct_0']?.()
+  __napiInstance.exports['__napi_register__SolidityProjectBuilder_impl_13']?.()
+  __napiInstance.exports['__napi_register__SolidityProject_struct_14']?.()
+  __napiInstance.exports['__napi_register__SolidityProject_impl_22']?.()
   __napiInstance.exports['__napi_register__create_hardhat_paths_23']?.()
   __napiInstance.exports['__napi_register__create_dapptools_paths_24']?.()
   __napiInstance.exports['__napi_register__create_current_hardhat_paths_25']?.()
@@ -64,12 +64,12 @@ function __napi_rs_initialize_modules(__napiInstance) {
   __napiInstance.exports['__napi_register__find_source_dir_29']?.()
   __napiInstance.exports['__napi_register__find_libs_30']?.()
   __napiInstance.exports['__napi_register__Shadow_struct_31']?.()
-  __napiInstance.exports['__napi_register__Shadow_impl_37']?.()
-  __napiInstance.exports['__napi_register__CompilerError_struct_38']?.()
-  __napiInstance.exports['__napi_register__SourceLocation_struct_39']?.()
-  __napiInstance.exports['__napi_register__ContractArtifact_struct_40']?.()
-  __napiInstance.exports['__napi_register__CompileOutput_struct_41']?.()
-  __napiInstance.exports['__napi_register__ProjectPaths_struct_42']?.()
+  __napiInstance.exports['__napi_register__Shadow_impl_36']?.()
+  __napiInstance.exports['__napi_register__CompilerError_struct_37']?.()
+  __napiInstance.exports['__napi_register__SourceLocation_struct_38']?.()
+  __napiInstance.exports['__napi_register__ContractArtifact_struct_39']?.()
+  __napiInstance.exports['__napi_register__CompileOutput_struct_40']?.()
+  __napiInstance.exports['__napi_register__ProjectPaths_struct_41']?.()
 }
 export const Shadow = __napiModule.exports.Shadow
 export const SolidityProject = __napiModule.exports.SolidityProject
