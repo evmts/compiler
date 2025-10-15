@@ -361,6 +361,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
+module.exports.Shadow = nativeBinding.Shadow
 module.exports.SolidityProject = nativeBinding.SolidityProject
 module.exports.SolidityProjectBuilder = nativeBinding.SolidityProjectBuilder
 module.exports.createCurrentDapptoolsPaths = nativeBinding.createCurrentDapptoolsPaths

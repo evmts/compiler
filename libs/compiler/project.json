@@ -22,6 +22,9 @@
       }
     },
     "test": {
+      "dependsOn": ["test:rust", "test:js"]
+    },
+    "test:rust": {
       "cache": true,
       "executor": "@monodon/rust:test",
       "outputs": [
@@ -36,6 +39,15 @@
         }
       }
     },
+    "test:js": {
+      "cache": true,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bun test",
+        "cwd": "libs/compiler"
+      },
+      "dependsOn": ["build"]
+    },
     "lint": {
       "cache": true,
       "executor": "@monodon/rust:lint",
@@ -46,14 +58,21 @@
         "target-dir": "libs/compiler/target"
       }
     },
-    "test-bun": {
+    "format": {
       "cache": true,
       "executor": "nx:run-commands",
       "options": {
-        "command": "bun test",
+        "command": "cargo fmt",
         "cwd": "libs/compiler"
-      },
-      "dependsOn": ["build"]
+      }
+    },
+    "format:check": {
+      "cache": true,
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo fmt -- --check",
+        "cwd": "libs/compiler"
+      }
     }
   }
 }

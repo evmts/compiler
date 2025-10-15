@@ -3,10 +3,10 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "all": "bun build:zig && bun test:zig && bun lint:zig && nx run-many -t lint test build",
-    "lint:zig": "zig fmt --check .",
-    "test:zig": "zig build test",
-    "build:zig": "zig build && zig build wasm"
+    "all": "nx run-many -t lint test build",
+    "build": "nx run-many -t build",
+    "lint": "nx run-many -t lint format",
+    "test": "nx run-many -t test"
   },
   "private": true,
   "devDependencies": {
@@ -16,8 +16,5 @@
     "@nx/workspace": "21.6.4",
     "emnapi": "^1.1.0",
     "nx": "21.6.4"
-  },
-  "dependencies": {
-    "solc": "^0.8.30"
   }
 }

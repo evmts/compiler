@@ -1,3 +1,0 @@
-[submodule "solidity"]
-	path = solidity
-	url = git@github.com:argotorg/solidity.git
