@@ -361,14 +361,21 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
+module.exports.Compiler = nativeBinding.Compiler
 module.exports.Shadow = nativeBinding.Shadow
 module.exports.SolidityProject = nativeBinding.SolidityProject
 module.exports.SolidityProjectBuilder = nativeBinding.SolidityProjectBuilder
+module.exports.BytecodeHash = nativeBinding.BytecodeHash
 module.exports.createCurrentDapptoolsPaths = nativeBinding.createCurrentDapptoolsPaths
 module.exports.createCurrentHardhatPaths = nativeBinding.createCurrentHardhatPaths
 module.exports.createDapptoolsPaths = nativeBinding.createDapptoolsPaths
 module.exports.createHardhatPaths = nativeBinding.createHardhatPaths
+module.exports.EvmVersion = nativeBinding.EvmVersion
 module.exports.findArtifactsDir = nativeBinding.findArtifactsDir
 module.exports.findLibs = nativeBinding.findLibs
 module.exports.findSourceDir = nativeBinding.findSourceDir
-module.exports.sum = nativeBinding.sum
+module.exports.ModelCheckerEngine = nativeBinding.ModelCheckerEngine
+module.exports.ModelCheckerInvariant = nativeBinding.ModelCheckerInvariant
+module.exports.ModelCheckerSolver = nativeBinding.ModelCheckerSolver
+module.exports.ModelCheckerTarget = nativeBinding.ModelCheckerTarget
+module.exports.RevertStrings = nativeBinding.RevertStrings

@@ -7,9 +7,7 @@
   "targets": {
     "build": {
       "cache": true,
-      "outputs": [
-        "{workspaceRoot}/libs/compiler/build"
-      ],
+      "outputs": ["{workspaceRoot}/libs/compiler/build"],
       "executor": "@monodon/rust:napi",
       "options": {
         "dist": "libs/compiler/build",
@@ -27,9 +25,7 @@
     "test:rust": {
       "cache": false,
       "executor": "@monodon/rust:test",
-      "outputs": [
-        "{options.target-dir}"
-      ],
+      "outputs": ["{options.target-dir}"],
       "options": {
         "target-dir": "libs/compiler/target"
       },
@@ -49,11 +45,9 @@
       "dependsOn": ["build"]
     },
     "lint": {
-      "cache": true,
+      "cache": false,
       "executor": "@monodon/rust:lint",
-      "outputs": [
-        "{options.target-dir}"
-      ],
+      "outputs": ["{options.target-dir}"],
       "options": {
         "target-dir": "libs/compiler/target"
       }

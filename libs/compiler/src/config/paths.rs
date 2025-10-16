@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use foundry_compilers::{error::SolcError, solc::SolcLanguage, ProjectPathsConfig};
 use napi::bindgen_prelude::*;
 
-use crate::errors::map_napi_error;
+use crate::internal::errors::map_napi_error;
 use crate::types::ProjectPaths;
 
 fn to_project_paths(config: ProjectPathsConfig<SolcLanguage>) -> ProjectPaths {

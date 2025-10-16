@@ -6,4 +6,4 @@ pub use paths::{
   create_hardhat_paths,
 };
 
-pub use utils::{find_artifacts_dir, find_libs, find_source_dir, sum};
+pub use utils::{find_artifacts_dir, find_libs, find_source_dir};

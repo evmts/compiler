@@ -6,7 +6,7 @@ use napi::bindgen_prelude::*;
 use std::path::PathBuf;
 
 use super::project::SolidityProject;
-use crate::errors::map_napi_error;
+use crate::internal::errors::map_napi_error;
 
 #[napi]
 pub struct SolidityProjectBuilder {

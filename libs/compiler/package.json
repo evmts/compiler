@@ -2,7 +2,7 @@
   "name": "@compiler/compiler",
   "version": "0.0.0",
   "scripts": {
-    "copy-types": "cp src/foundry-types.ts build/foundry-types.d.ts"
+    "copy-types": "tsc src/types/*.d.ts --noEmit && cp src/types/*.d.ts build/"
   },
   "main": "./build/index.js",
   "types": "./build/index.d.ts",

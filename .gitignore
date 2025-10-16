@@ -8,6 +8,7 @@ out-tsc
 # Rust build artifacts
 libs/compiler/target
 # Hardhat cache
+libs/compiler/test/fixtures/hardhat-project/artifacts/
 libs/compiler/test/fixtures/hardhat-project/cache/
 
 # dependencies

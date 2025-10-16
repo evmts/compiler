@@ -3,9 +3,9 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "all": "nx run-many -t lint test build",
+    "all": "nx run-many -t lint format test build",
     "build": "nx run-many -t build && pnpm --filter @compiler/compiler run copy-types",
-    "lint": "nx run-many -t lint",
+    "lint": "nx run-many -t lint format",
     "test": "nx run-many -t test"
   },
   "private": true,

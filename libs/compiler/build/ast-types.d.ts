@@ -1,8 +1,5 @@
 // Manual bridge for Foundry AST typings.
-// napi cannot infer TypeScript signatures for the recursive enums we return from napi,
-// so a post-build script will merge these definitions with the `// napi-ts-return` markers
-// in the Rust sources. Keep this file in sync with those annotations.
-/* tslint:disable */
+// napi cannot infer TypeScript signatures for the recursive enums we return from napi
 
 export type SourceLocation = string;
 

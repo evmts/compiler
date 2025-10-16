@@ -95,7 +95,9 @@ pub fn stitch_shadow_nodes_into_contract(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::shadow::{parser, utils};
+  use crate::internal::solc;
+  use crate::shadow::{parser, utils, Shadow};
+  use foundry_compilers::solc::Solc;
 
   const MULTI_CONTRACT: &str = r#"
 // SPDX-License-Identifier: MIT
@@ -108,9 +110,18 @@ contract Target {}
 
   const SHADOW_FRAGMENT: &str = "function hello() public {}";
 
+  fn find_default_solc() -> Option<Solc> {
+    let version = solc::default_version().ok()?;
+    Solc::find_svm_installed_version(&version).ok().flatten()
+  }
+
   #[test]
   fn locates_contract_by_name() {
-    let root = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol").unwrap();
+    let Some(solc) = find_default_solc() else {
+      return;
+    };
+    let settings = Shadow::sanitize_settings(None);
+    let root = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol", &solc, &settings).unwrap();
     let idx = find_target_contract_index(&root, Some("Target")).unwrap();
     let nodes = root.get("nodes").and_then(|n| n.as_array()).unwrap();
     assert_eq!(utils::get_contract_name(&nodes[idx]), Some("Target"));
@@ -118,7 +129,11 @@ contract Target {}
 
   #[test]
   fn falls_back_to_last_contract() {
-    let root = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol").unwrap();
+    let Some(solc) = find_default_solc() else {
+      return;
+    };
+    let settings = Shadow::sanitize_settings(None);
+    let root = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol", &solc, &settings).unwrap();
     let idx = find_target_contract_index(&root, None).unwrap();
     let nodes = root.get("nodes").and_then(|n| n.as_array()).unwrap();
     assert_eq!(utils::get_contract_name(&nodes[idx]), Some("Target"));
@@ -126,9 +141,18 @@ contract Target {}
 
   #[test]
   fn stitches_shadow_nodes_into_contract() {
-    let mut root = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol").unwrap();
-    let shadow =
-      parser::parse_source_ast(&parser::wrap_shadow_source(SHADOW_FRAGMENT), "Shadow.sol").unwrap();
+    let Some(solc) = find_default_solc() else {
+      return;
+    };
+    let settings = Shadow::sanitize_settings(None);
+    let mut root = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol", &solc, &settings).unwrap();
+    let shadow = parser::parse_source_ast(
+      &parser::wrap_shadow_source(SHADOW_FRAGMENT),
+      "Shadow.sol",
+      &solc,
+      &settings,
+    )
+    .unwrap();
 
     let contract_idx = find_target_contract_index(&root, Some("Target")).unwrap();
     let max_id = utils::find_max_id(&root);

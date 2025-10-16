@@ -2,11 +2,6 @@ use std::path::PathBuf;
 
 use foundry_compilers::ProjectPathsConfig;
 
-#[napi]
-pub fn sum(a: i32, b: i32) -> i32 {
-  a + b
-}
-
 fn path_to_string(path: PathBuf) -> String {
   path.to_string_lossy().to_string()
 }
