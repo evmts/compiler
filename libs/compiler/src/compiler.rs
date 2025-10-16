@@ -7,15 +7,11 @@ use foundry_compilers::solc::Solc;
 use napi::bindgen_prelude::*;
 use serde_json::json;
 
+use crate::ast::utils::sanitize_ast_value;
 use crate::compile::from_standard_json;
-use crate::instrument::utils::sanitize_ast_value;
-use crate::instrument::Instrument;
 use crate::internal::{
   errors::map_napi_error,
-  options::{
-    default_compiler_settings, parse_compiler_options, parse_instrument_options, CompilerOptions,
-    InstrumentOptions, SolcConfig,
-  },
+  options::{default_compiler_settings, parse_compiler_options, CompilerOptions, SolcConfig},
   solc,
 };
 use crate::types::CompileOutput;
@@ -75,46 +71,6 @@ impl Compiler {
     solc::ensure_installed(&config.version)?;
 
     Ok(Compiler { config })
-  }
-
-  fn spawn_instrument(&self, overrides: Option<&InstrumentOptions>) -> Result<Instrument> {
-    Instrument::from_compiler_config(&self.config, overrides)
-  }
-
-  /// Build an `Instrument` primed from Solidity source text.
-  ///
-  /// - `targetSource` is the Solidity code to instrument.
-  /// - `options` override the default solc version/settings for this instrument.
-  #[napi(ts_args_type = "targetSource: string, options?: InstrumentOptions | undefined")]
-  pub fn instrument_from_source(
-    &self,
-    env: Env,
-    target_source: String,
-    options: Option<JsUnknown>,
-  ) -> Result<Instrument> {
-    let parsed = parse_instrument_options(&env, options)?;
-    let mut instrument = self.spawn_instrument(parsed.as_ref())?;
-    instrument.load_source(&target_source, parsed.as_ref())?;
-    Ok(instrument)
-  }
-
-  /// Build an `Instrument` from an existing Solidity AST (`SourceUnit`).
-  ///
-  /// - `targetAst` must follow Foundry's `SourceUnit` shape.
-  /// - `options` override the default solc version/settings for this instrument.
-  #[napi(
-    ts_args_type = "targetAst: import('./ast-types').SourceUnit, options?: InstrumentOptions | undefined"
-  )]
-  pub fn instrument_from_ast(
-    &self,
-    env: Env,
-    target_ast: JsUnknown,
-    options: Option<JsUnknown>,
-  ) -> Result<Instrument> {
-    let parsed = parse_instrument_options(&env, options)?;
-    let mut instrument = self.spawn_instrument(parsed.as_ref())?;
-    instrument.load_ast(&env, target_ast, parsed.as_ref())?;
-    Ok(instrument)
   }
 
   /// Compile an in-memory Solidity source file using the configured solc version.

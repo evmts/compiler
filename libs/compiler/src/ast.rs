@@ -13,7 +13,7 @@ use napi::{Env, JsUnknown};
 use self::utils::{from_js_value, sanitize_ast_value, to_js_value};
 use crate::internal::{
   errors::{map_napi_error, napi_error},
-  options::{parse_instrument_options, InstrumentOptions, SolcConfig},
+  options::{parse_ast_options, AstOptions, SolcConfig},
   solc,
 };
 
@@ -22,23 +22,22 @@ const DEFAULT_VIRTUAL_SOURCE: &str = "Instrumented.sol";
 /// High-level helper for manipulating Solidity ASTs prior to recompilation.
 #[napi]
 #[derive(Clone)]
-pub struct Instrument {
+pub struct Ast {
   config: SolcConfig,
   ast: Option<SourceUnit>,
-  source_name: Option<String>,
-  default_contract: Option<String>,
+  options: AstOptions,
 }
 
-impl Instrument {
-  fn contract_override<'a>(&'a self, overrides: Option<&'a InstrumentOptions>) -> Option<&'a str> {
+impl Ast {
+  fn contract_override<'a>(&'a self, overrides: Option<&'a AstOptions>) -> Option<&'a str> {
     overrides
       .and_then(|opts| opts.instrumented_contract())
-      .or_else(|| self.default_contract.as_deref())
+      .or_else(|| self.options.instrumented_contract())
   }
 
-  fn update_default_contract(&mut self, overrides: Option<&InstrumentOptions>) {
+  fn update_options(&mut self, overrides: Option<&AstOptions>) {
     if let Some(opts) = overrides {
-      self.default_contract = opts.instrumented_contract.clone();
+      self.options = opts.clone();
     }
   }
 
@@ -50,7 +49,7 @@ impl Instrument {
     settings
   }
 
-  fn resolve_config(&self, overrides: Option<&InstrumentOptions>) -> Result<SolcConfig> {
+  fn resolve_config(&self, overrides: Option<&AstOptions>) -> Result<SolcConfig> {
     let mut config = self.config.merge(overrides)?;
     config.settings = Self::sanitize_settings(Some(config.settings));
     Ok(config)
@@ -60,19 +59,19 @@ impl Instrument {
     self
       .ast
       .as_mut()
-      .ok_or_else(|| napi_error("Instrument has no target AST. Call fromSource or fromAst first."))
+      .ok_or_else(|| napi_error("Ast has no target AST. Call fromSource or fromAst first."))
   }
 
   fn target_ast(&self) -> Result<&SourceUnit> {
     self
       .ast
       .as_ref()
-      .ok_or_else(|| napi_error("Instrument has no target AST. Call fromSource or fromAst first."))
+      .ok_or_else(|| napi_error("Ast has no target AST. Call fromSource or fromAst first."))
   }
 
   fn find_contract_index(&self, ast: &SourceUnit, contract_name: Option<&str>) -> Result<usize> {
     map_napi_error(
-      stitcher::find_target_contract_index(ast, contract_name),
+      stitcher::find_instrumented_contract_index(ast, contract_name),
       "Failed to locate target contract",
     )
   }
@@ -80,7 +79,7 @@ impl Instrument {
   fn inject_fragment_contract(
     &mut self,
     fragment_contract: ContractDefinition,
-    overrides: Option<&InstrumentOptions>,
+    overrides: Option<&AstOptions>,
   ) -> Result<()> {
     let contract_name = self
       .contract_override(overrides)
@@ -100,7 +99,7 @@ impl Instrument {
         &fragment_contract,
         max_target_id,
       ),
-      "Failed to stitch instrumentation nodes",
+      "Failed to stitch AST nodes",
     )?;
 
     Ok(())
@@ -109,10 +108,10 @@ impl Instrument {
   fn contract_indices(
     &self,
     ast: &SourceUnit,
-    overrides: Option<&InstrumentOptions>,
+    overrides: Option<&AstOptions>,
   ) -> Result<Vec<usize>> {
     if let Some(name) = self.contract_override(overrides) {
-      let idx = stitcher::find_target_contract_index(ast, Some(name))?;
+      let idx = stitcher::find_instrumented_contract_index(ast, Some(name))?;
       Ok(vec![idx])
     } else {
       let indices = ast
@@ -138,8 +137,8 @@ impl Instrument {
     }
   }
 
-  fn expose_variables_internal(&mut self, overrides: Option<&InstrumentOptions>) -> Result<()> {
-    self.update_default_contract(overrides);
+  fn expose_variables_internal(&mut self, overrides: Option<&AstOptions>) -> Result<()> {
+    self.update_options(overrides);
     let target_ast_ptr = self.target_ast_mut()? as *mut SourceUnit;
     // safety: pointer valid during this scope
     let target_ast = unsafe { &mut *target_ast_ptr };
@@ -169,8 +168,8 @@ impl Instrument {
     Ok(())
   }
 
-  fn expose_functions_internal(&mut self, overrides: Option<&InstrumentOptions>) -> Result<()> {
-    self.update_default_contract(overrides);
+  fn expose_functions_internal(&mut self, overrides: Option<&AstOptions>) -> Result<()> {
+    self.update_options(overrides);
     let target_ast_ptr = self.target_ast_mut()? as *mut SourceUnit;
     let target_ast = unsafe { &mut *target_ast_ptr };
     let indices = self.contract_indices(target_ast, overrides)?;
@@ -199,31 +198,8 @@ impl Instrument {
     Ok(())
   }
 
-  pub(crate) fn from_compiler_config(
-    base: &SolcConfig,
-    overrides: Option<&InstrumentOptions>,
-  ) -> Result<Self> {
-    let base_settings = Self::sanitize_settings(Some(base.settings.clone()));
-    let mut config = SolcConfig::with_defaults(&base.version, &base_settings, overrides)?;
-    config.settings = Self::sanitize_settings(Some(config.settings));
-    solc::ensure_installed(&config.version)?;
-
-    let mut instrument = Instrument {
-      config,
-      ast: None,
-      source_name: None,
-      default_contract: None,
-    };
-    instrument.update_default_contract(overrides);
-    Ok(instrument)
-  }
-
-  pub(crate) fn load_source(
-    &mut self,
-    source: &str,
-    overrides: Option<&InstrumentOptions>,
-  ) -> Result<()> {
-    self.update_default_contract(overrides);
+  pub(crate) fn load_source(&mut self, source: &str, overrides: Option<&AstOptions>) -> Result<()> {
+    self.update_options(overrides);
     let mut config = self.resolve_config(overrides)?;
     let solc = solc::ensure_installed(&config.version)?;
 
@@ -237,7 +213,6 @@ impl Instrument {
     config.settings = settings;
     self.config = config;
     self.ast = Some(ast);
-    self.source_name = Some(DEFAULT_VIRTUAL_SOURCE.to_string());
     Ok(())
   }
 
@@ -245,29 +220,28 @@ impl Instrument {
     &mut self,
     env: &Env,
     target_ast: JsUnknown,
-    overrides: Option<&InstrumentOptions>,
+    overrides: Option<&AstOptions>,
   ) -> Result<()> {
-    self.update_default_contract(overrides);
+    self.update_options(overrides);
     let config = self.resolve_config(overrides)?;
     solc::ensure_installed(&config.version)?;
 
     let ast_unit: SourceUnit = from_js_value(env, target_ast)?;
 
     map_napi_error(
-      stitcher::find_target_contract_index(&ast_unit, self.contract_override(overrides)),
+      stitcher::find_instrumented_contract_index(&ast_unit, self.contract_override(overrides)),
       "Failed to locate target contract",
     )?;
 
     self.config = config;
     self.ast = Some(ast_unit);
-    self.source_name = None;
     Ok(())
   }
 
   pub(crate) fn inject_fragment_from_source(
     &mut self,
     fragment_source: &str,
-    overrides: Option<&InstrumentOptions>,
+    overrides: Option<&AstOptions>,
   ) -> Result<()> {
     let mut config = self.resolve_config(overrides)?;
     let solc = solc::ensure_installed(&config.version)?;
@@ -275,7 +249,7 @@ impl Instrument {
 
     let fragment_contract = map_napi_error(
       parser::parse_fragment_contract(fragment_source, &solc, &settings),
-      "Failed to parse instrumentation fragment",
+      "Failed to parse AST fragment",
     )?;
 
     config.settings = settings;
@@ -286,7 +260,7 @@ impl Instrument {
   pub(crate) fn inject_fragment_from_ast_value(
     &mut self,
     fragment_ast: SourceUnit,
-    overrides: Option<&InstrumentOptions>,
+    overrides: Option<&AstOptions>,
   ) -> Result<()> {
     let config = self.resolve_config(overrides)?;
     solc::ensure_installed(&config.version)?;
@@ -303,32 +277,30 @@ impl Instrument {
 
 /// JavaScript-facing API surface.
 #[napi]
-impl Instrument {
-  /// Create a new instrumentation helper. Providing `instrumentedContract`
-  /// establishes the default contract targeted by subsequent operations.
-  #[napi(constructor, ts_args_type = "options?: InstrumentOptions | undefined")]
+impl Ast {
+  /// Create a new AST helper. Providing `instrumentedContract`
+  /// establishes the instrumented contract targeted by subsequent operations.
+  #[napi(constructor, ts_args_type = "options?: AstOptions | undefined")]
   pub fn new(env: Env, options: Option<JsUnknown>) -> Result<Self> {
-    let parsed = parse_instrument_options(&env, options)?;
+    let parsed = parse_ast_options(&env, options)?;
     let default_settings = Self::sanitize_settings(None);
     let mut config = SolcConfig::new(&default_settings, parsed.as_ref())?;
     config.settings = Self::sanitize_settings(Some(config.settings));
     solc::ensure_installed(&config.version)?;
 
-    let mut instrument = Instrument {
+    let ast = Ast {
       config,
       ast: None,
-      source_name: None,
-      default_contract: None,
+      options: parsed.unwrap_or_default(),
     };
-    instrument.update_default_contract(parsed.as_ref());
-    Ok(instrument)
+    Ok(ast)
   }
 
   /// Parse Solidity source into an AST using the configured solc version.
   /// When no `instrumentedContract` is provided, later operations apply to all
   /// contracts in the file.
   #[napi(
-    ts_args_type = "targetSource: string, options?: InstrumentOptions | undefined",
+    ts_args_type = "targetSource: string, options?: AstOptions | undefined",
     ts_return_type = "this"
   )]
   pub fn from_source(
@@ -336,15 +308,15 @@ impl Instrument {
     env: Env,
     target_source: String,
     options: Option<JsUnknown>,
-  ) -> Result<Instrument> {
-    let parsed = parse_instrument_options(&env, options)?;
+  ) -> Result<Ast> {
+    let parsed = parse_ast_options(&env, options)?;
     self.load_source(&target_source, parsed.as_ref())?;
     Ok(self.clone())
   }
 
-  /// Load a pre-existing `SourceUnit` for instrumentation.
+  /// Load a pre-existing `SourceUnit` for AST.
   #[napi(
-    ts_args_type = "targetAst: import('./ast-types').SourceUnit, options?: InstrumentOptions | undefined",
+    ts_args_type = "targetAst: import('./ast-types').SourceUnit, options?: AstOptions | undefined",
     ts_return_type = "this"
   )]
   pub fn from_ast(
@@ -352,16 +324,16 @@ impl Instrument {
     env: Env,
     target_ast: JsUnknown,
     options: Option<JsUnknown>,
-  ) -> Result<Instrument> {
-    let parsed = parse_instrument_options(&env, options)?;
+  ) -> Result<Ast> {
+    let parsed = parse_ast_options(&env, options)?;
     self.load_ast(&env, target_ast, parsed.as_ref())?;
     Ok(self.clone())
   }
 
-  /// Parse an instrumentation fragment from source text and inject it into the
+  /// Parse an AST fragment from source text and inject it into the
   /// targeted contract.
   #[napi(
-    ts_args_type = "fragmentSource: string, options?: InstrumentOptions | undefined",
+    ts_args_type = "fragmentSource: string, options?: AstOptions | undefined",
     ts_return_type = "this"
   )]
   pub fn inject_shadow_source(
@@ -369,15 +341,15 @@ impl Instrument {
     env: Env,
     fragment_source: String,
     options: Option<JsUnknown>,
-  ) -> Result<Instrument> {
-    let parsed = parse_instrument_options(&env, options)?;
+  ) -> Result<Ast> {
+    let parsed = parse_ast_options(&env, options)?;
     self.inject_fragment_from_source(&fragment_source, parsed.as_ref())?;
     Ok(self.clone())
   }
 
-  /// Inject a pre-parsed instrumentation fragment into the targeted contract.
+  /// Inject a pre-parsed AST fragment into the targeted contract.
   #[napi(
-    ts_args_type = "fragmentAst: import('./ast-types').SourceUnit, options?: InstrumentOptions | undefined",
+    ts_args_type = "fragmentAst: import('./ast-types').SourceUnit, options?: AstOptions | undefined",
     ts_return_type = "this"
   )]
   pub fn inject_shadow_ast(
@@ -385,8 +357,8 @@ impl Instrument {
     env: Env,
     fragment_ast: JsUnknown,
     options: Option<JsUnknown>,
-  ) -> Result<Instrument> {
-    let parsed = parse_instrument_options(&env, options)?;
+  ) -> Result<Ast> {
+    let parsed = parse_ast_options(&env, options)?;
     let fragment_unit: SourceUnit = from_js_value(&env, fragment_ast)?;
     self.inject_fragment_from_ast_value(fragment_unit, parsed.as_ref())?;
     Ok(self.clone())
@@ -395,15 +367,11 @@ impl Instrument {
   /// Promote private/internal state variables to public visibility. Omitting
   /// `instrumentedContract` applies the change to all contracts.
   #[napi(
-    ts_args_type = "options?: InstrumentOptions | undefined",
+    ts_args_type = "options?: AstOptions | undefined",
     ts_return_type = "this"
   )]
-  pub fn expose_internal_variables(
-    &mut self,
-    env: Env,
-    options: Option<JsUnknown>,
-  ) -> Result<Instrument> {
-    let parsed = parse_instrument_options(&env, options)?;
+  pub fn expose_internal_variables(&mut self, env: Env, options: Option<JsUnknown>) -> Result<Ast> {
+    let parsed = parse_ast_options(&env, options)?;
     self.expose_variables_internal(parsed.as_ref())?;
     Ok(self.clone())
   }
@@ -411,24 +379,22 @@ impl Instrument {
   /// Promote private/internal functions to public visibility. Omitting
   /// `instrumentedContract` applies the change to all contracts.
   #[napi(
-    ts_args_type = "options?: InstrumentOptions | undefined",
+    ts_args_type = "options?: AstOptions | undefined",
     ts_return_type = "this"
   )]
-  pub fn expose_internal_functions(
-    &mut self,
-    env: Env,
-    options: Option<JsUnknown>,
-  ) -> Result<Instrument> {
-    let parsed = parse_instrument_options(&env, options)?;
+  pub fn expose_internal_functions(&mut self, env: Env, options: Option<JsUnknown>) -> Result<Ast> {
+    let parsed = parse_ast_options(&env, options)?;
     self.expose_functions_internal(parsed.as_ref())?;
     Ok(self.clone())
   }
 
+  /// Get the current intrumented AST.
   #[napi(ts_return_type = "import('./ast-types').SourceUnit")]
   pub fn ast(&self, env: Env) -> Result<JsUnknown> {
-    let ast = self.ast.as_ref().ok_or_else(|| {
-      napi_error("Instrument has no target AST. Call fromSource or fromAst first.")
-    })?;
+    let ast = self
+      .ast
+      .as_ref()
+      .ok_or_else(|| napi_error("Ast has no target unit. Call fromSource or fromAst first."))?;
     let mut ast_value = map_napi_error(serde_json::to_value(ast), "Failed to serialize AST value")?;
     sanitize_ast_value(&mut ast_value);
     to_js_value(&env, &ast_value)
@@ -438,12 +404,13 @@ impl Instrument {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::internal::options::{InstrumentOptions, SolcConfig};
+  use crate::internal::options::{AstOptions, SolcConfig};
+  use crate::internal::solc;
   use foundry_compilers::artifacts::CompilerOutput;
   use foundry_compilers::solc::Solc;
   use serde_json::{json, Value};
 
-  const TARGET_CONTRACT: &str = r#"
+  const INSTRUMENTED_CONTRACT: &str = r#"
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
@@ -466,18 +433,23 @@ contract Target {
       return;
     }
 
-    let default_settings = Instrument::sanitize_settings(None);
+    let default_settings = Ast::sanitize_settings(None);
     let mut config =
-      SolcConfig::new(&default_settings, Option::<&InstrumentOptions>::None).expect("config");
-    config.settings = Instrument::sanitize_settings(Some(config.settings));
+      SolcConfig::new(&default_settings, Option::<&AstOptions>::None).expect("config");
+    config.settings = Ast::sanitize_settings(Some(config.settings));
+    solc::ensure_installed(&config.version).expect("ensure solc");
 
-    let mut instrument = Instrument::from_compiler_config(&config, None).expect("instrument");
+    let mut instrument = Ast {
+      config,
+      ast: None,
+      options: AstOptions::default(),
+    };
 
     instrument
-      .load_source(TARGET_CONTRACT, None)
+      .load_source(INSTRUMENTED_CONTRACT, None)
       .expect("load source");
 
-    let overrides = InstrumentOptions {
+    let overrides = AstOptions {
       solc_version: None,
       settings: None,
       instrumented_contract: Some("Target".into()),
@@ -535,22 +507,22 @@ contract Target {
     if find_default_solc().is_none() {
       return;
     }
-    let default_settings = Instrument::sanitize_settings(None);
+    let default_settings = Ast::sanitize_settings(None);
     let mut config =
-      SolcConfig::new(&default_settings, Option::<&InstrumentOptions>::None).expect("config");
-    config.settings = Instrument::sanitize_settings(Some(config.settings));
+      SolcConfig::new(&default_settings, Option::<&AstOptions>::None).expect("config");
+    config.settings = Ast::sanitize_settings(Some(config.settings));
+    solc::ensure_installed(&config.version).expect("ensure solc");
 
-    let mut instrument = Instrument {
+    let mut instrument = Ast {
       config,
       ast: None,
-      source_name: None,
-      default_contract: None,
+      options: AstOptions::default(),
     };
 
     instrument
-      .load_source(TARGET_CONTRACT, None)
+      .load_source(INSTRUMENTED_CONTRACT, None)
       .expect("load source");
-    let overrides = InstrumentOptions {
+    let overrides = AstOptions {
       solc_version: None,
       settings: None,
       instrumented_contract: Some("Target".into()),
@@ -589,19 +561,24 @@ contract Target {
   }
 
   #[test]
-  fn instrumented_ast_round_trip() {
+  fn ast_round_trip() {
     let Some(solc) = find_default_solc() else {
       return;
     };
 
-    let default_settings = Instrument::sanitize_settings(None);
+    let default_settings = Ast::sanitize_settings(None);
     let mut config =
-      SolcConfig::new(&default_settings, Option::<&InstrumentOptions>::None).expect("config");
-    config.settings = Instrument::sanitize_settings(Some(config.settings));
+      SolcConfig::new(&default_settings, Option::<&AstOptions>::None).expect("config");
+    config.settings = Ast::sanitize_settings(Some(config.settings));
+    solc::ensure_installed(&config.version).expect("ensure solc");
 
-    let mut instrument = Instrument::from_compiler_config(&config, None).expect("instrument");
+    let mut instrument = Ast {
+      config,
+      ast: None,
+      options: AstOptions::default(),
+    };
     instrument
-      .load_source(TARGET_CONTRACT, None)
+      .load_source(INSTRUMENTED_CONTRACT, None)
       .expect("load source");
     instrument
       .expose_variables_internal(None)
@@ -633,7 +610,7 @@ contract Target {
 
     assert!(
       output.errors.is_empty(),
-      "expected solc to compile instrumented ast without errors, but got errors: {:?}, ast: {:?}",
+      "expected solc to compile ast without errors, but got errors: {:?}, ast: {:?}",
       output.errors,
       serde_json::to_string_pretty(&ast_value).unwrap_or_default()
     );

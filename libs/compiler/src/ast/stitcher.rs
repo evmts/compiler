@@ -2,12 +2,12 @@ use foundry_compilers::artifacts::ast::{
   ContractDefinition, ContractDefinitionPart, SourceUnit, SourceUnitPart,
 };
 
-use super::{error::InstrumentError, utils};
+use super::{error::AstError, utils};
 
-pub fn find_target_contract_index(
+pub fn find_instrumented_contract_index(
   unit: &SourceUnit,
   contract_name: Option<&str>,
-) -> Result<usize, InstrumentError> {
+) -> Result<usize, AstError> {
   let mut fallback: Option<usize> = None;
 
   for (idx, part) in unit.nodes.iter().enumerate() {
@@ -26,14 +26,14 @@ pub fn find_target_contract_index(
 
   contract_name
     .map(|name| {
-      Err(InstrumentError::InvalidContractStructure(format!(
+      Err(AstError::InvalidContractStructure(format!(
         "Contract '{}' not found",
         name
       )))
     })
     .unwrap_or_else(|| {
       fallback.ok_or_else(|| {
-        InstrumentError::InvalidContractStructure("No ContractDefinition found".to_string())
+        AstError::InvalidContractStructure("No ContractDefinition found".to_string())
       })
     })
 }
@@ -43,13 +43,13 @@ pub fn stitch_fragment_nodes_into_contract(
   contract_idx: usize,
   fragment_contract: &ContractDefinition,
   max_target_id: i64,
-) -> Result<(), InstrumentError> {
-  let SourceUnitPart::ContractDefinition(target_contract) =
-    target.nodes.get_mut(contract_idx).ok_or_else(|| {
-      InstrumentError::InvalidContractStructure("Invalid contract index".to_string())
-    })?
+) -> Result<(), AstError> {
+  let SourceUnitPart::ContractDefinition(target_contract) = target
+    .nodes
+    .get_mut(contract_idx)
+    .ok_or_else(|| AstError::InvalidContractStructure("Invalid contract index".to_string()))?
   else {
-    return Err(InstrumentError::InvalidContractStructure(
+    return Err(AstError::InvalidContractStructure(
       "Target index is not a contract".to_string(),
     ));
   };
@@ -71,7 +71,7 @@ fn resolve_contract_part(part: ContractDefinitionPart) -> ContractDefinitionPart
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::instrument::{parser, utils, Instrument};
+  use crate::ast::{parser, utils, Ast};
   use crate::internal::solc;
   use foundry_compilers::solc::Solc;
 
@@ -96,9 +96,9 @@ contract Target {}
     let Some(solc) = find_default_solc() else {
       return;
     };
-    let settings = Instrument::sanitize_settings(None);
+    let settings = Ast::sanitize_settings(None);
     let unit = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol", &solc, &settings).unwrap();
-    let idx = find_target_contract_index(&unit, Some("Target")).unwrap();
+    let idx = find_instrumented_contract_index(&unit, Some("Target")).unwrap();
     let SourceUnitPart::ContractDefinition(contract) = &unit.nodes[idx] else {
       panic!("Expected contract definition");
     };
@@ -110,9 +110,9 @@ contract Target {}
     let Some(solc) = find_default_solc() else {
       return;
     };
-    let settings = Instrument::sanitize_settings(None);
+    let settings = Ast::sanitize_settings(None);
     let unit = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol", &solc, &settings).unwrap();
-    let idx = find_target_contract_index(&unit, None).unwrap();
+    let idx = find_instrumented_contract_index(&unit, None).unwrap();
     let SourceUnitPart::ContractDefinition(contract) = &unit.nodes[idx] else {
       panic!("Expected contract definition");
     };
@@ -124,10 +124,10 @@ contract Target {}
     let Some(solc) = find_default_solc() else {
       return;
     };
-    let settings = Instrument::sanitize_settings(None);
+    let settings = Ast::sanitize_settings(None);
     let mut unit = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol", &solc, &settings).unwrap();
     let fragment = parser::parse_fragment_contract(FRAGMENT, &solc, &settings).unwrap();
-    let idx = find_target_contract_index(&unit, Some("Target")).unwrap();
+    let idx = find_instrumented_contract_index(&unit, Some("Target")).unwrap();
     let max_id = utils::max_id(&unit).unwrap();
 
     stitch_fragment_nodes_into_contract(&mut unit, idx, &fragment, max_id).unwrap();

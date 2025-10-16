@@ -361,8 +361,8 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
+module.exports.Ast = nativeBinding.Ast
 module.exports.Compiler = nativeBinding.Compiler
-module.exports.Instrument = nativeBinding.Instrument
 module.exports.SolidityProject = nativeBinding.SolidityProject
 module.exports.SolidityProjectBuilder = nativeBinding.SolidityProjectBuilder
 module.exports.BytecodeHash = nativeBinding.BytecodeHash

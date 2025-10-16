@@ -4,7 +4,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
 
-use super::error::InstrumentError;
+use super::error::AstError;
 
 pub fn to_js_value<T>(env: &Env, value: &T) -> napi::Result<JsUnknown>
 where
@@ -35,9 +35,8 @@ fn walk_max_id(node: &Value, max_id: &mut i64) {
   }
 }
 
-pub fn max_id(unit: &SourceUnit) -> std::result::Result<i64, InstrumentError> {
-  let value =
-    serde_json::to_value(unit).map_err(|err| InstrumentError::JsonError(err.to_string()))?;
+pub fn max_id(unit: &SourceUnit) -> std::result::Result<i64, AstError> {
+  let value = serde_json::to_value(unit).map_err(|err| AstError::JsonError(err.to_string()))?;
   let mut max_id = 0;
   walk_max_id(&value, &mut max_id);
   Ok(max_id)
@@ -64,14 +63,13 @@ fn walk_renumber(node: &mut Value, next_id: &mut i64) {
 pub fn renumber_contract_definition(
   contract: &mut ContractDefinition,
   start_from: i64,
-) -> std::result::Result<(), InstrumentError> {
+) -> std::result::Result<(), AstError> {
   let mut value =
-    serde_json::to_value(&*contract).map_err(|err| InstrumentError::JsonError(err.to_string()))?;
+    serde_json::to_value(&*contract).map_err(|err| AstError::JsonError(err.to_string()))?;
   let mut next = start_from;
   walk_renumber(&mut value, &mut next);
   sanitize_ast_value(&mut value);
-  *contract =
-    serde_json::from_value(value).map_err(|err| InstrumentError::JsonError(err.to_string()))?;
+  *contract = serde_json::from_value(value).map_err(|err| AstError::JsonError(err.to_string()))?;
   Ok(())
 }
 

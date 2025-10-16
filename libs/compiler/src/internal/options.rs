@@ -41,7 +41,7 @@ define_options_struct!(
 
 #[napi(object)]
 #[derive(Clone, Default)]
-pub struct InstrumentOptions {
+pub struct AstOptions {
   #[napi(ts_type = "string | undefined")]
   pub solc_version: Option<String>,
   #[napi(ts_type = "import('./index').CompilerSettings | undefined")]
@@ -50,7 +50,7 @@ pub struct InstrumentOptions {
   pub instrumented_contract: Option<String>,
 }
 
-impl SolcUserOptions for InstrumentOptions {
+impl SolcUserOptions for AstOptions {
   fn solc_version(&self) -> Option<&str> {
     self.solc_version.as_deref()
   }
@@ -130,16 +130,13 @@ pub(crate) fn parse_compiler_options(
     .transpose()
 }
 
-pub(crate) fn parse_instrument_options(
-  env: &Env,
-  value: Option<JsUnknown>,
-) -> Result<Option<InstrumentOptions>> {
+pub(crate) fn parse_ast_options(env: &Env, value: Option<JsUnknown>) -> Result<Option<AstOptions>> {
   parse_options(value)?
-    .map(|unknown| unsafe { InstrumentOptions::from_napi_value(env.raw(), unknown.raw()) })
+    .map(|unknown| unsafe { AstOptions::from_napi_value(env.raw(), unknown.raw()) })
     .transpose()
 }
 
-impl InstrumentOptions {
+impl AstOptions {
   pub fn instrumented_contract(&self) -> Option<&str> {
     self.instrumented_contract.as_deref()
   }
