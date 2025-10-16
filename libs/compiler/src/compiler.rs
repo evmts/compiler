@@ -1,23 +1,27 @@
 use std::path::PathBuf;
 
 use foundry_compilers::artifacts::{
-  CompilerOutput, Settings, SolcInput, SolcLanguage, Source, Sources,
+  ast::SourceUnit, CompilerOutput, Settings, SolcInput, SolcLanguage, Source, Sources,
 };
 use foundry_compilers::solc::Solc;
 use napi::bindgen_prelude::*;
+use serde_json::json;
 
 use crate::compile::from_standard_json;
+use crate::instrument::utils::sanitize_ast_value;
+use crate::instrument::Instrument;
 use crate::internal::{
   errors::map_napi_error,
   options::{
-    default_compiler_settings, parse_compiler_options, parse_shadow_options, CompilerOptions,
-    SolcConfig,
+    default_compiler_settings, parse_compiler_options, parse_instrument_options, CompilerOptions,
+    InstrumentOptions, SolcConfig,
   },
   solc,
 };
-use crate::shadow::Shadow;
 use crate::types::CompileOutput;
 use napi::JsUnknown;
+
+const DEFAULT_VIRTUAL_SOURCE: &str = "Instrumented.sol";
 
 /// High-level façade for compiling Solidity sources with a pre-selected solc version.
 #[napi]
@@ -73,47 +77,109 @@ impl Compiler {
     Ok(Compiler { config })
   }
 
-  /// Spawn a new `Shadow` helper that shares this compiler's solc defaults.
+  fn spawn_instrument(&self, overrides: Option<&InstrumentOptions>) -> Result<Instrument> {
+    Instrument::from_compiler_config(&self.config, overrides)
+  }
+
+  /// Build an `Instrument` primed from Solidity source text.
   ///
-  /// The returned instance inherits the compiler's configured solc version and
-  /// settings unless overridden via `options`. Callers can then stitch shadow
-  /// fragments into either raw source (via `stitchIntoSource`) or existing ASTs.
-  #[napi(ts_args_type = "source: string, options?: ShadowOptions | undefined")]
-  pub fn create_shadow(
+  /// - `targetSource` is the Solidity code to instrument.
+  /// - `options` override the default solc version/settings for this instrument.
+  #[napi(ts_args_type = "targetSource: string, options?: InstrumentOptions | undefined")]
+  pub fn instrument_from_source(
     &self,
     env: Env,
-    source: String,
+    target_source: String,
     options: Option<JsUnknown>,
-  ) -> Result<Shadow> {
-    let parsed = parse_shadow_options(&env, options)?;
-    let base_settings = Shadow::sanitize_settings(Some(self.config.settings.clone()));
-    let config = SolcConfig::with_defaults(&self.config.version, &base_settings, parsed.as_ref())?;
-    Shadow::from_config(source, config)
+  ) -> Result<Instrument> {
+    let parsed = parse_instrument_options(&env, options)?;
+    let mut instrument = self.spawn_instrument(parsed.as_ref())?;
+    instrument.load_source(&target_source, parsed.as_ref())?;
+    Ok(instrument)
+  }
+
+  /// Build an `Instrument` from an existing Solidity AST (`SourceUnit`).
+  ///
+  /// - `targetAst` must follow Foundry's `SourceUnit` shape.
+  /// - `options` override the default solc version/settings for this instrument.
+  #[napi(
+    ts_args_type = "targetAst: import('./ast-types').SourceUnit, options?: InstrumentOptions | undefined"
+  )]
+  pub fn instrument_from_ast(
+    &self,
+    env: Env,
+    target_ast: JsUnknown,
+    options: Option<JsUnknown>,
+  ) -> Result<Instrument> {
+    let parsed = parse_instrument_options(&env, options)?;
+    let mut instrument = self.spawn_instrument(parsed.as_ref())?;
+    instrument.load_ast(&env, target_ast, parsed.as_ref())?;
+    Ok(instrument)
   }
 
   /// Compile an in-memory Solidity source file using the configured solc version.
   ///
   /// - `source` is the Solidity text to compile.
-  /// - `fileName` controls the virtual file name used for diagnostics (defaults to `Contract.sol`).
   /// - `options` allows per-call overrides that merge on top of the constructor defaults.
   ///
   /// The return value mirrors Foundry's standard JSON output and includes ABI,
   /// bytecode, deployed bytecode and any solc diagnostics.
-  #[napi(
-    ts_args_type = "source: string, fileName?: string | undefined, options?: CompilerOptions | undefined"
-  )]
+  #[napi(ts_args_type = "source: string, options?: CompilerOptions | undefined")]
   pub fn compile_source(
     &self,
     env: Env,
     source: String,
-    file_name: Option<String>,
     options: Option<JsUnknown>,
   ) -> Result<CompileOutput> {
     let parsed = parse_compiler_options(&env, options)?;
     let config = self.resolve_config(parsed.as_ref())?;
     let solc = solc::ensure_installed(&config.version)?;
-    let sources = build_sources(source, file_name);
+    let sources = build_sources(source);
     let input = build_input(&solc, config.settings.clone(), sources);
+
+    let output: CompilerOutput =
+      map_napi_error(solc.compile_as(&input), "Solc compilation failed")?;
+    Ok(from_standard_json(output))
+  }
+
+  /// Compile a Solidity AST (`SourceUnit`) using the configured solc version.
+  ///
+  /// - `options` allows per-call overrides that merge on top of the constructor defaults.
+  #[napi(
+    ts_args_type = "ast: import('./ast-types').SourceUnit, options?: CompilerOptions | undefined"
+  )]
+  pub fn compile_ast(
+    &self,
+    env: Env,
+    ast: JsUnknown,
+    options: Option<JsUnknown>,
+  ) -> Result<CompileOutput> {
+    let parsed = parse_compiler_options(&env, options)?;
+    let config = self.resolve_config(parsed.as_ref())?;
+    let solc = solc::ensure_installed(&config.version)?;
+
+    let ast_unit: SourceUnit = env.from_js_value(ast)?;
+    let mut ast_value = map_napi_error(
+      serde_json::to_value(&ast_unit),
+      "Failed to serialise AST value",
+    )?;
+    sanitize_ast_value(&mut ast_value);
+    let file_name = DEFAULT_VIRTUAL_SOURCE.to_string();
+
+    let settings_value = map_napi_error(
+      serde_json::to_value(&config.settings),
+      "Failed to serialize settings",
+    )?;
+
+    let input = json!({
+      "language": "SolidityAST",
+      "sources": {
+        file_name.clone(): {
+          "ast": ast_value
+        }
+      },
+      "settings": settings_value
+    });
 
     let output: CompilerOutput =
       map_napi_error(solc.compile_as(&input), "Solc compilation failed")?;
@@ -121,8 +187,8 @@ impl Compiler {
   }
 }
 
-fn build_sources(source: String, file_name: Option<String>) -> Sources {
-  let path = PathBuf::from(file_name.unwrap_or_else(|| "Contract.sol".to_string()));
+fn build_sources(source: String) -> Sources {
+  let path = PathBuf::from(DEFAULT_VIRTUAL_SOURCE);
   let mut sources = Sources::new();
   sources.insert(path, Source::new(source));
   sources

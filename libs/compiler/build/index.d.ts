@@ -28,56 +28,70 @@ export declare class Compiler {
    */
   constructor(options?: CompilerOptions | undefined)
   /**
-   * Spawn a new `Shadow` helper that shares this compiler's solc defaults.
+   * Build an `Instrument` primed from Solidity source text.
    *
-   * The returned instance inherits the compiler's configured solc version and
-   * settings unless overridden via `options`. Callers can then stitch shadow
-   * fragments into either raw source (via `stitchIntoSource`) or existing ASTs.
+   * - `targetSource` is the Solidity code to instrument.
+   * - `options` override the default solc version/settings for this instrument.
    */
-  createShadow(source: string, options?: ShadowOptions | undefined): Shadow
+  instrumentFromSource(targetSource: string, options?: InstrumentOptions | undefined): Instrument
+  /**
+   * Build an `Instrument` from an existing Solidity AST (`SourceUnit`).
+   *
+   * - `targetAst` must follow Foundry's `SourceUnit` shape.
+   * - `options` override the default solc version/settings for this instrument.
+   */
+  instrumentFromAst(targetAst: import('./ast-types').SourceUnit, options?: InstrumentOptions | undefined): Instrument
   /**
    * Compile an in-memory Solidity source file using the configured solc version.
    *
    * - `source` is the Solidity text to compile.
-   * - `fileName` controls the virtual file name used for diagnostics (defaults to `Contract.sol`).
    * - `options` allows per-call overrides that merge on top of the constructor defaults.
    *
    * The return value mirrors Foundry's standard JSON output and includes ABI,
    * bytecode, deployed bytecode and any solc diagnostics.
    */
-  compileSource(source: string, fileName?: string | undefined, options?: CompilerOptions | undefined): CompileOutput
+  compileSource(source: string, options?: CompilerOptions | undefined): CompileOutput
+  /**
+   * Compile a Solidity AST (`SourceUnit`) using the configured solc version.
+   *
+   * - `options` allows per-call overrides that merge on top of the constructor defaults.
+   */
+  compileAst(ast: import('./ast-types').SourceUnit, options?: CompilerOptions | undefined): CompileOutput
 }
 
-/** Convenience API for deriving AST fragments and stitching them into existing Solidity code. */
-export declare class Shadow {
+/** High-level helper for manipulating Solidity ASTs prior to recompilation. */
+export declare class Instrument {
   /**
-   * Create a shadow instance with a Solidity fragment that will be injected later.
-   *
-   * Optional `options` let callers pin the solc version used for parsing. Any
-   * provided solver settings are sanitised so the parser always runs with
-   * `stopAfter = "parsing"` and AST-only output.
+   * Create a new instrumentation helper. Providing `instrumentedContract`
+   * establishes the default contract targeted by subsequent operations.
    */
-  constructor(source: string, options?: ShadowOptions | undefined)
+  constructor(options?: InstrumentOptions | undefined)
   /**
-   * Parse + stitch the shadow fragment into Solidity source text.
-   *
-   * - `targetSource` is the Solidity code whose AST will be expanded.
-   * - `sourceName` controls diagnostic file names (defaults to `Contract.sol`).
-   * - `targetContractName` selects a specific contract; when omitted the last
-   *   contract in the file is used.
-   * - `options` offer per-call overrides for the solc version/settings.
-   *
-   * Returns a fully analysed AST (`SourceUnit`) as a plain JS object following Foundry's typings.
+   * Parse Solidity source into an AST using the configured solc version.
+   * When no `instrumentedContract` is provided, later operations apply to all
+   * contracts in the file.
    */
-  stitchIntoSource(targetSource: string, sourceName?: string | undefined, targetContractName?: string | undefined, options?: ShadowOptions | undefined): import('./ast-types').SourceUnit
+  fromSource(targetSource: string, options?: InstrumentOptions | undefined): this
+  /** Load a pre-existing `SourceUnit` for instrumentation. */
+  fromAst(targetAst: import('./ast-types').SourceUnit, options?: InstrumentOptions | undefined): this
   /**
-   * Stitch the fragment into an already parsed AST.
-   *
-   * Accepts any Foundry-style AST object (for example, one produced by
-   * `Shadow.stitchIntoSource` or captured from fixtures). Returns a fresh AST
-   * value with the injected nodes while leaving the input object untouched.
+   * Parse an instrumentation fragment from source text and inject it into the
+   * targeted contract.
    */
-  stitchIntoAst(targetAst: import('./ast-types').SourceUnit, targetContractName?: string | undefined, sourceName?: string | undefined, options?: ShadowOptions | undefined): import('./ast-types').SourceUnit
+  injectShadowSource(fragmentSource: string, options?: InstrumentOptions | undefined): this
+  /** Inject a pre-parsed instrumentation fragment into the targeted contract. */
+  injectShadowAst(fragmentAst: import('./ast-types').SourceUnit, options?: InstrumentOptions | undefined): this
+  /**
+   * Promote private/internal state variables to public visibility. Omitting
+   * `instrumentedContract` applies the change to all contracts.
+   */
+  exposeInternalVariables(options?: InstrumentOptions | undefined): this
+  /**
+   * Promote private/internal functions to public visibility. Omitting
+   * `instrumentedContract` applies the change to all contracts.
+   */
+  exposeInternalFunctions(options?: InstrumentOptions | undefined): this
+  ast(): import('./ast-types').SourceUnit
 }
 
 export declare class SolidityProject {
@@ -211,6 +225,12 @@ export declare export declare function findLibs(rootPath: string): Array<string>
 
 export declare export declare function findSourceDir(rootPath: string): string
 
+export interface InstrumentOptions {
+  solcVersion?: string | undefined
+  settings?: import('./index').CompilerSettings | undefined
+  instrumentedContract?: string | undefined
+}
+
 export declare const enum ModelCheckerEngine {
   Default = 'Default',
   All = 'All',
@@ -294,12 +314,6 @@ export interface SettingsMetadata {
   useLiteralContent?: boolean
   bytecodeHash?: BytecodeHash
   cborMetadata?: boolean
-}
-
-/**r" Mirror of `CompilerOptions` for the shadow APIs. */
-export interface ShadowOptions {
-  solcVersion?: string | undefined
-  settings?: import('./index').CompilerSettings | undefined
 }
 
 export interface SourceLocation {

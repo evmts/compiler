@@ -39,10 +39,26 @@ define_options_struct!(
   CompilerOptions
 );
 
-define_options_struct!(
-  /// Mirror of `CompilerOptions` for the shadow APIs.
-  ShadowOptions
-);
+#[napi(object)]
+#[derive(Clone, Default)]
+pub struct InstrumentOptions {
+  #[napi(ts_type = "string | undefined")]
+  pub solc_version: Option<String>,
+  #[napi(ts_type = "import('./index').CompilerSettings | undefined")]
+  pub settings: Option<CompilerSettings>,
+  #[napi(ts_type = "string | undefined")]
+  pub instrumented_contract: Option<String>,
+}
+
+impl SolcUserOptions for InstrumentOptions {
+  fn solc_version(&self) -> Option<&str> {
+    self.solc_version.as_deref()
+  }
+
+  fn settings(&self) -> Option<&CompilerSettings> {
+    self.settings.as_ref()
+  }
+}
 
 #[derive(Clone)]
 pub(crate) struct SolcConfig {
@@ -114,13 +130,19 @@ pub(crate) fn parse_compiler_options(
     .transpose()
 }
 
-pub(crate) fn parse_shadow_options(
+pub(crate) fn parse_instrument_options(
   env: &Env,
   value: Option<JsUnknown>,
-) -> Result<Option<ShadowOptions>> {
+) -> Result<Option<InstrumentOptions>> {
   parse_options(value)?
-    .map(|unknown| unsafe { ShadowOptions::from_napi_value(env.raw(), unknown.raw()) })
+    .map(|unknown| unsafe { InstrumentOptions::from_napi_value(env.raw(), unknown.raw()) })
     .transpose()
+}
+
+impl InstrumentOptions {
+  pub fn instrumented_contract(&self) -> Option<&str> {
+    self.instrumented_contract.as_deref()
+  }
 }
 
 fn parse_options(value: Option<JsUnknown>) -> Result<Option<JsUnknown>> {
@@ -150,6 +172,18 @@ fn parse_options(value: Option<JsUnknown>) -> Result<Option<JsUnknown>> {
           _ => {
             return Err(napi_error(
               "Solc settings override must be provided as an object value.",
+            ));
+          }
+        }
+      }
+
+      if object.has_named_property("instrumentedContract")? {
+        let contract_value = object.get_named_property::<JsUnknown>("instrumentedContract")?;
+        match contract_value.get_type()? {
+          ValueType::Undefined | ValueType::Null | ValueType::String => {}
+          _ => {
+            return Err(napi_error(
+              "instrumentedContract must be a string when provided.",
             ));
           }
         }

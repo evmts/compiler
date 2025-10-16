@@ -362,7 +362,7 @@ if (!nativeBinding) {
 }
 
 module.exports.Compiler = nativeBinding.Compiler
-module.exports.Shadow = nativeBinding.Shadow
+module.exports.Instrument = nativeBinding.Instrument
 module.exports.SolidityProject = nativeBinding.SolidityProject
 module.exports.SolidityProjectBuilder = nativeBinding.SolidityProjectBuilder
 module.exports.BytecodeHash = nativeBinding.BytecodeHash

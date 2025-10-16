@@ -91,7 +91,7 @@ describe("Compiler API", () => {
 
   test("compiles inline solidity and exposes artifacts", () => {
     const compiler = new Compiler();
-    const output = compiler.compileSource(INLINE_SOURCE, "InlineExample.sol");
+    const output = compiler.compileSource(INLINE_SOURCE);
 
     expect(output.hasCompilerErrors).toBe(false);
     expect(output.errors).toHaveLength(0);
@@ -131,7 +131,7 @@ describe("Compiler API", () => {
 
     const typedSource = INLINE_SOURCE.replace(/\bstored\b/g, "storedValue");
 
-    const output = compiler.compileSource(typedSource, "TypedSettingsInline.sol");
+    const output = compiler.compileSource(typedSource);
 
     expect(output.hasCompilerErrors).toBe(false);
     expect(output.errors).toHaveLength(0);
@@ -141,24 +141,20 @@ describe("Compiler API", () => {
     const compiler = new Compiler({
       solcVersion: DEFAULT_SOLC_VERSION,
     });
-    const first = compiler.compileSource(INLINE_SOURCE, "InlineExample.sol");
-    const second = compiler.compileSource(
-      INLINE_SOURCE,
-      "OptimizedInline.sol",
-      {
-        settings: {
-          optimizer: { enabled: true, runs: 1 },
-          outputSelection: {
-            "*": {
-              "*": [],
-              "": [],
-            },
+    const first = compiler.compileSource(INLINE_SOURCE);
+    const second = compiler.compileSource(INLINE_SOURCE, {
+      settings: {
+        optimizer: { enabled: true, runs: 1 },
+        outputSelection: {
+          "*": {
+            "*": [],
+            "": [],
           },
         },
       },
-    );
+    });
 
-    const third = compiler.compileSource(INLINE_SOURCE, "InlineExampleAgain.sol");
+    const third = compiler.compileSource(INLINE_SOURCE);
 
     expect(first.hasCompilerErrors).toBe(false);
     expect(second.hasCompilerErrors).toBe(false);
@@ -173,22 +169,14 @@ describe("Compiler API", () => {
 
   test("allows per-call version overrides when binaries are installed", () => {
     const compiler = new Compiler();
-    const output = compiler.compileSource(
-      INLINE_SOURCE,
-      "OverrideVersion.sol",
-      { solcVersion: DEFAULT_SOLC_VERSION },
-    );
+    const output = compiler.compileSource(INLINE_SOURCE, { solcVersion: DEFAULT_SOLC_VERSION });
     expect(output.hasCompilerErrors).toBe(false);
   });
 
   test("throws when per-call overrides reference missing solc versions", () => {
     const compiler = new Compiler();
     expect(() =>
-      compiler.compileSource(
-        INLINE_SOURCE,
-        "MissingVersion.sol",
-        { solcVersion: "123.45.67" },
-      ),
+      compiler.compileSource(INLINE_SOURCE, { solcVersion: "123.45.67" }),
     ).toThrow(/not installed/i);
   });
 
@@ -202,7 +190,7 @@ describe("Compiler API", () => {
 
   test("surfaces compilation diagnostics without throwing", () => {
     const compiler = new Compiler();
-    const diagnostics = compiler.compileSource(BROKEN_SOURCE, "Broken.sol");
+    const diagnostics = compiler.compileSource(BROKEN_SOURCE);
 
     expect(diagnostics.hasCompilerErrors).toBe(true);
     expect(diagnostics.errors.length).toBeGreaterThan(0);
