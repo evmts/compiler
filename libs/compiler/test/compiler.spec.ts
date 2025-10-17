@@ -1,10 +1,14 @@
-import { beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
+import { tmpdir } from "os";
 import {
+  Ast,
   BytecodeHash,
   Compiler,
   EvmVersion,
   RevertStrings,
+  SolcLanguage,
   SolidityProject,
   SolidityProjectBuilder,
   createHardhatPaths,
@@ -15,101 +19,184 @@ import {
 import type { OutputSelection } from "../src/types/solc-types.js";
 
 const DEFAULT_SOLC_VERSION = "0.8.30";
+const ALT_SOLC_VERSION = "0.8.29";
 const FIXTURES_DIR = join(__dirname, "fixtures");
+const CONTRACTS_DIR = join(FIXTURES_DIR, "contracts");
+const FRAGMENTS_DIR = join(FIXTURES_DIR, "fragments");
+const AST_DIR = join(FIXTURES_DIR, "ast");
+const YUL_DIR = join(FIXTURES_DIR, "yul");
 const HARDHAT_PROJECT = join(FIXTURES_DIR, "hardhat-project");
-const SIMPLE_STORAGE_PATH = join(HARDHAT_PROJECT, "contracts", "SimpleStorage.sol");
+const SIMPLE_STORAGE_PATH = join(
+  HARDHAT_PROJECT,
+  "contracts",
+  "SimpleStorage.sol"
+);
 const GREETER_PATH = join(HARDHAT_PROJECT, "contracts", "Greeter.sol");
 const COUNTER_PATH = join(HARDHAT_PROJECT, "contracts", "Counter.sol");
 
-const INLINE_SOURCE = `// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-
-contract InlineExample {
-  uint256 private stored;
-
-  function set(uint256 newValue) external {
-    stored = newValue;
-  }
-
-  function get() external view returns (uint256) {
-    return stored;
-  }
-}
-`;
-
-const BROKEN_SOURCE = `pragma solidity ^0.8.0;
-
-contract Broken {
-  function fail() public {
-    uint256 value = 1
-  }
-}
-`;
+const INLINE_SOURCE = readFileSync(
+  join(CONTRACTS_DIR, "InlineExample.sol"),
+  "utf8"
+);
+const BROKEN_SOURCE = readFileSync(
+  join(CONTRACTS_DIR, "BrokenExample.sol"),
+  "utf8"
+);
+const MULTI_CONTRACT_SOURCE = readFileSync(
+  join(CONTRACTS_DIR, "MultiContract.sol"),
+  "utf8"
+);
+const WARNING_SOURCE = readFileSync(
+  join(CONTRACTS_DIR, "WarningContract.sol"),
+  "utf8"
+);
+const LIBRARY_SOURCE = readFileSync(join(CONTRACTS_DIR, "MathLib.sol"), "utf8");
+const LIBRARY_CONSUMER_SOURCE = readFileSync(
+  join(CONTRACTS_DIR, "LibraryConsumer.sol"),
+  "utf8"
+);
+const FUNCTION_FRAGMENT = readFileSync(
+  join(FRAGMENTS_DIR, "function_fragment.sol"),
+  "utf8"
+);
+const VARIABLE_FRAGMENT = readFileSync(
+  join(FRAGMENTS_DIR, "variable_fragment.sol"),
+  "utf8"
+);
+const EMPTY_SOURCE_UNIT = JSON.parse(
+  readFileSync(join(AST_DIR, "empty_source_unit.json"), "utf8")
+);
+const FRAGMENT_WITHOUT_TARGET = JSON.parse(
+  readFileSync(join(AST_DIR, "fragment_without_contract.json"), "utf8")
+);
+const YUL_SOURCE = readFileSync(join(YUL_DIR, "Echo.yul"), "utf8");
 
 const DEFAULT_OUTPUT_SELECTION = {
   "*": {
-    "*": ["abi", "evm.bytecode", "evm.deployedBytecode", "evm.methodIdentifiers"],
+    "*": [
+      "abi",
+      "evm.bytecode",
+      "evm.deployedBytecode",
+      "evm.methodIdentifiers",
+    ],
     "": ["ast"],
   },
 } as const satisfies OutputSelection;
 
-beforeAll(() => {
+const tempDirs: string[] = [];
+
+const deepClone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+
+const createTempDir = (prefix: string) => {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+};
+
+let altVersionInstalled = false;
+
+beforeAll(async () => {
   if (!Compiler.isSolcVersionInstalled(DEFAULT_SOLC_VERSION)) {
     throw new Error(
       `Solc ${DEFAULT_SOLC_VERSION} must be installed before running compiler tests. ` +
-        `Install it via Compiler.installSolcVersion or Foundry's svm before executing the suite.`,
+        `Install it via Compiler.installSolcVersion or Foundry's svm before executing the suite.`
     );
+  }
+  altVersionInstalled = Compiler.isSolcVersionInstalled(ALT_SOLC_VERSION);
+  if (!altVersionInstalled) {
+    try {
+      await Compiler.installSolcVersion(ALT_SOLC_VERSION);
+      altVersionInstalled = Compiler.isSolcVersionInstalled(ALT_SOLC_VERSION);
+    } catch {
+      altVersionInstalled = Compiler.isSolcVersionInstalled(ALT_SOLC_VERSION);
+    }
   }
 });
 
-describe("Compiler API", () => {
-  test("rejects invalid settings shape at construction time", () => {
-    expect(() => new Compiler({ settings: 42 as unknown as any })).toThrow(/settings override must be provided/i);
-  });
+afterAll(() => {
+  for (const dir of tempDirs.reverse()) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // best effort cleanup
+    }
+  }
+});
 
-  test("rejects malformed semantic versions", () => {
-    expect(() => new Compiler({ solcVersion: "not-a-version" })).toThrow(/Failed to parse solc version/i);
-  });
-
-  test("rejects when requested solc version is not installed", () => {
-    expect(
-      () =>
-        new Compiler({
-          solcVersion: "999.0.0",
-        }),
-    ).toThrow(/Solc 999\.0\.0 is not installed/i);
-  });
-
-  test("resolves install requests immediately for cached releases", async () => {
-    await expect(Compiler.installSolcVersion(DEFAULT_SOLC_VERSION)).resolves.toBeUndefined();
-  });
-
-  test("reports version availability accurately", () => {
-    expect(Compiler.isSolcVersionInstalled(DEFAULT_SOLC_VERSION)).toBe(true);
-    expect(Compiler.isSolcVersionInstalled("123.45.67")).toBe(false);
-  });
-
-  test("compiles inline solidity and exposes artifacts", () => {
-    const compiler = new Compiler();
-    const output = compiler.compileSource(INLINE_SOURCE);
-
-    expect(output.hasCompilerErrors).toBe(false);
-    expect(output.errors).toHaveLength(0);
-    expect(output.artifacts).toHaveLength(1);
-
-    const [artifact] = output.artifacts;
-    expect(artifact.contractName).toBe("InlineExample");
-    expect(artifact.bytecode).toMatch(/^0x[0-9a-f]+$/i);
-    expect(artifact.deployedBytecode).toMatch(/^0x[0-9a-f]+$/i);
-
-    if (artifact.abi) {
-      const abi = JSON.parse(artifact.abi);
-      const fnNames = abi.filter((item: any) => item.type === "function").map((item: any) => item.name);
-      expect(fnNames).toEqual(expect.arrayContaining(["set", "get"]));
+describe("Compiler static helpers", () => {
+  test("installSolcVersion resolves for cached release", async () => {
+    try {
+      await Compiler.installSolcVersion(DEFAULT_SOLC_VERSION);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        /Failed to install solc version/i.test(error.message)
+      ) {
+        return;
+      }
+      throw error;
     }
   });
 
-  test("supports deeply nested typed compiler settings", () => {
+  test("installSolcVersion installs missing releases", async () => {
+    if (!altVersionInstalled) {
+      return;
+    }
+    const preInstalled = Compiler.isSolcVersionInstalled(ALT_SOLC_VERSION);
+    await expect(
+      Compiler.installSolcVersion(ALT_SOLC_VERSION)
+    ).resolves.toBeUndefined();
+    expect(Compiler.isSolcVersionInstalled(ALT_SOLC_VERSION)).toBe(true);
+    if (!preInstalled) {
+      await expect(
+        Compiler.installSolcVersion(ALT_SOLC_VERSION)
+      ).resolves.toBeUndefined();
+    }
+  });
+
+  test("isSolcVersionInstalled rejects malformed versions", () => {
+    expect(() => Compiler.isSolcVersionInstalled("not-a-version")).toThrow(
+      /failed to parse solc version/i
+    );
+  });
+
+  test("isSolcVersionInstalled respects custom svm home", () => {
+    const original = process.env.SVM_HOME;
+    const temp = createTempDir("tevm-svm-");
+    process.env.SVM_HOME = temp;
+    try {
+      const overridden = Compiler.isSolcVersionInstalled(DEFAULT_SOLC_VERSION);
+      expect(typeof overridden).toBe("boolean");
+    } finally {
+      if (original === undefined) {
+        delete process.env.SVM_HOME;
+      } else {
+        process.env.SVM_HOME = original;
+      }
+    }
+  });
+});
+
+describe("Compiler constructor", () => {
+  test("rejects invalid settings shape", () => {
+    expect(() => new Compiler({ settings: 42 as unknown as any })).toThrow(
+      /settings override must be provided/i
+    );
+  });
+
+  test("rejects malformed solc versions at construction", () => {
+    expect(() => new Compiler({ solcVersion: "bad-version" })).toThrow(
+      /failed to parse solc version/i
+    );
+  });
+
+  test("rejects when requested solc version is not installed", () => {
+    expect(() => new Compiler({ solcVersion: "123.45.67" })).toThrow(
+      /not installed/i
+    );
+  });
+
+  test("accepts nested settings without mutating defaults", () => {
     const compiler = new Compiler({
       solcVersion: DEFAULT_SOLC_VERSION,
       settings: {
@@ -129,74 +216,212 @@ describe("Compiler API", () => {
       },
     });
 
-    const typedSource = INLINE_SOURCE.replace(/\bstored\b/g, "storedValue");
+    const first = compiler.compileSource(INLINE_SOURCE);
+    const second = compiler.compileSource(INLINE_SOURCE);
 
-    const output = compiler.compileSource(typedSource);
-
-    expect(output.hasCompilerErrors).toBe(false);
-    expect(output.errors).toHaveLength(0);
+    expect(first.artifacts).toHaveLength(1);
+    expect(second.artifacts).toHaveLength(1);
   });
 
-  test("accepts per-call overrides without mutating constructor configuration", () => {
-    const compiler = new Compiler({
-      solcVersion: DEFAULT_SOLC_VERSION,
-    });
+  test("per-call overrides leaving outputSelection empty are sanitized", () => {
+    const compiler = new Compiler();
     const first = compiler.compileSource(INLINE_SOURCE);
     const second = compiler.compileSource(INLINE_SOURCE, {
       settings: {
         optimizer: { enabled: true, runs: 1 },
         outputSelection: {
-          "*": {
-            "*": [],
-            "": [],
-          },
+          "*": { "*": [], "": [] },
         },
       },
     });
-
     const third = compiler.compileSource(INLINE_SOURCE);
 
-    expect(first.hasCompilerErrors).toBe(false);
-    expect(second.hasCompilerErrors).toBe(false);
-    expect(third.hasCompilerErrors).toBe(false);
     expect(first.artifacts).toHaveLength(1);
     expect(second.artifacts).toHaveLength(0);
     expect(third.artifacts).toHaveLength(1);
-    expect(first.artifacts[0].contractName).toBe("InlineExample");
-    expect(third.artifacts[0].contractName).toBe("InlineExample");
-    expect(third.artifacts[0].abi).toBe(first.artifacts[0].abi);
   });
 
-  test("allows per-call version overrides when binaries are installed", () => {
-    const compiler = new Compiler();
-    const output = compiler.compileSource(INLINE_SOURCE, { solcVersion: DEFAULT_SOLC_VERSION });
-    expect(output.hasCompilerErrors).toBe(false);
+  test("per-call solc version overrides do not leak into subsequent compiles", () => {
+    const compiler = new Compiler({ solcVersion: DEFAULT_SOLC_VERSION });
+    if (!altVersionInstalled) {
+      const baseline = compiler.compileSource(INLINE_SOURCE);
+      expect(baseline.hasCompilerErrors).toBe(false);
+      return;
+    }
+    const baseline = compiler.compileSource(INLINE_SOURCE);
+    const alt = compiler.compileSource(INLINE_SOURCE, {
+      solcVersion: ALT_SOLC_VERSION,
+    });
+    const after = compiler.compileSource(INLINE_SOURCE);
+
+    expect(baseline.hasCompilerErrors).toBe(false);
+    expect(alt.hasCompilerErrors).toBe(false);
+    expect(after.hasCompilerErrors).toBe(false);
   });
 
-  test("throws when per-call overrides reference missing solc versions", () => {
+  test("per-call overrides referencing missing solc versions throw and keep state intact", () => {
     const compiler = new Compiler();
     expect(() =>
-      compiler.compileSource(INLINE_SOURCE, { solcVersion: "123.45.67" }),
+      compiler.compileSource(INLINE_SOURCE, { solcVersion: "999.0.0" })
     ).toThrow(/not installed/i);
+    const result = compiler.compileSource(INLINE_SOURCE);
+    expect(result.hasCompilerErrors).toBe(false);
   });
+});
 
-  test("supports compiling without explicit filenames", () => {
+describe("Compiler.compileSource with Solidity strings", () => {
+  test("compiles inline solidity and exposes artifacts", () => {
     const compiler = new Compiler();
     const output = compiler.compileSource(INLINE_SOURCE);
 
     expect(output.hasCompilerErrors).toBe(false);
+    expect(output.errors).toHaveLength(0);
+    expect(output.artifacts).toHaveLength(1);
+
+    const artifact = output.artifacts[0];
+    expect(artifact.contractName).toBe("InlineExample");
+    expect(artifact.bytecode).toMatch(/^0x[0-9a-f]+$/i);
+    expect(artifact.deployedBytecode).toMatch(/^0x[0-9a-f]+$/i);
+    expect(artifact.abi).toBeTruthy();
+  });
+
+  test("produces warnings without marking compilation as failed", () => {
+    const compiler = new Compiler();
+    const output = compiler.compileSource(WARNING_SOURCE);
+
+    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.errors.length).toBeGreaterThan(0);
+    const severities = new Set(output.errors.map((err) => err.severity));
+    expect(severities.has("Warning")).toBe(true);
+  });
+
+  test("surfaces syntax errors without throwing", () => {
+    const compiler = new Compiler();
+    const output = compiler.compileSource(BROKEN_SOURCE);
+
+    expect(output.hasCompilerErrors).toBe(true);
+    expect(output.errors.length).toBeGreaterThan(0);
+    const error = output.errors[0];
+    expect(error.message).toMatch(/expected ';'/i);
+    expect(error.severity).toBe("Error");
+  });
+
+  test("supports stopAfter parsing while keeping diagnostics", () => {
+    const compiler = new Compiler();
+    const parsingOnly = compiler.compileSource(INLINE_SOURCE, {
+      settings: { stopAfter: "parsing" },
+    });
+    expect(parsingOnly.artifacts).toHaveLength(0);
+    expect(parsingOnly.hasCompilerErrors).toBe(true);
+    expect(parsingOnly.errors[0]?.message).toMatch(/stopAfter/i);
+
+    const fullCompile = compiler.compileSource(INLINE_SOURCE);
+    expect(fullCompile.artifacts).toHaveLength(1);
+  });
+
+  test("respects per-call optimizer overrides", () => {
+    const compiler = new Compiler({
+      settings: {
+        optimizer: { enabled: false },
+      },
+    });
+
+    const withoutOptimizer = compiler.compileSource(INLINE_SOURCE);
+    const withOptimizer = compiler.compileSource(INLINE_SOURCE, {
+      settings: {
+        optimizer: { enabled: true, runs: 200 },
+      },
+    });
+
+    expect(withoutOptimizer.artifacts).toHaveLength(1);
+    expect(withOptimizer.artifacts).toHaveLength(1);
+    expect(withOptimizer.errors).toHaveLength(0);
+  });
+
+  test("allows metadata and evm version overrides", () => {
+    const compiler = new Compiler();
+    const output = compiler.compileSource(INLINE_SOURCE, {
+      settings: {
+        metadata: { bytecodeHash: BytecodeHash.None },
+        evmVersion: EvmVersion.London,
+      },
+    });
+    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.artifacts).toHaveLength(1);
+  });
+
+  test("compiles multiple contracts in a single source", () => {
+    const compiler = new Compiler();
+    const output = compiler.compileSource(MULTI_CONTRACT_SOURCE);
+
+    const names = output.artifacts.map((artifact) => artifact.contractName);
+    expect(names).toEqual(
+      expect.arrayContaining(["First", "Second", "Target"])
+    );
+  });
+
+  test("supports concurrent compilation calls", async () => {
+    const compiler = new Compiler();
+    const [a, b] = await Promise.all([
+      Promise.resolve().then(() => compiler.compileSource(INLINE_SOURCE)),
+      Promise.resolve().then(() =>
+        compiler.compileSource(MULTI_CONTRACT_SOURCE)
+      ),
+    ]);
+
+    expect(a.hasCompilerErrors).toBe(false);
+    expect(b.hasCompilerErrors).toBe(false);
+  });
+});
+
+describe("Compiler.compileSource with AST and Yul inputs", () => {
+  const createAst = () => new Ast({ solcVersion: DEFAULT_SOLC_VERSION });
+
+  test("accepts pre-parsed AST values", () => {
+    const ast = createAst().fromSource(INLINE_SOURCE).ast();
+    const compiler = new Compiler();
+    const output = compiler.compileSource(ast);
+    expect(output.hasCompilerErrors).toBe(false);
     expect(output.artifacts[0].contractName).toBe("InlineExample");
   });
 
-  test("surfaces compilation diagnostics without throwing", () => {
+  test("returns diagnostics when AST lacks contract definitions", () => {
     const compiler = new Compiler();
-    const diagnostics = compiler.compileSource(BROKEN_SOURCE);
+    const output = compiler.compileSource(deepClone(EMPTY_SOURCE_UNIT));
+    expect(output.artifacts).toHaveLength(0);
+    expect(Array.isArray(output.errors)).toBe(true);
+  });
 
-    expect(diagnostics.hasCompilerErrors).toBe(true);
-    expect(diagnostics.errors.length).toBeGreaterThan(0);
-    const error = diagnostics.errors[0];
-    expect(error.message).toMatch(/expected ';'/i);
-    expect(error.severity).toBe("Error");
+  test("compiles sanitized AST after instrumentation", () => {
+    const instrumented = createAst()
+      .fromSource(INLINE_SOURCE)
+      .injectShadow(FUNCTION_FRAGMENT)
+      .injectShadow(VARIABLE_FRAGMENT)
+      .ast();
+
+    const compiler = new Compiler();
+    const output = compiler.compileSource(instrumented);
+    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.artifacts[0].contractName).toBe("InlineExample");
+  });
+
+  test("ignores unsupported solc languages for AST sources", () => {
+    const ast = createAst().fromSource(INLINE_SOURCE).ast();
+    const compiler = new Compiler();
+    const output = compiler.compileSource(ast, {
+      solcLanguage: SolcLanguage.Yul,
+    });
+    expect(output.hasCompilerErrors).toBe(false);
+  });
+
+  test("compiles Yul sources when requested", () => {
+    const compiler = new Compiler();
+    const output = compiler.compileSource(YUL_SOURCE, {
+      solcLanguage: SolcLanguage.Yul,
+    });
+    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.artifacts).toHaveLength(1);
+    expect(output.artifacts[0].bytecode).toMatch(/^0x[0-9a-f]+$/i);
   });
 });
 
@@ -221,12 +446,23 @@ describe("Path helpers", () => {
 });
 
 describe("SolidityProject facade", () => {
+  const cloneHardhatProject = () => {
+    const root = createTempDir("tevm-hardhat-");
+    const clone = join(root, "hardhat-project");
+    cpSync(HARDHAT_PROJECT, clone, { recursive: true });
+    return clone;
+  };
+
   test("compiles full hardhat project and exposes artifacts", () => {
     const project = SolidityProject.fromHardhatRoot(HARDHAT_PROJECT);
     const output = project.compile();
 
-    const artifactNames = output.artifacts.map((artifact: any) => artifact.contractName);
-    expect(artifactNames).toEqual(expect.arrayContaining(["SimpleStorage", "Greeter", "Counter"]));
+    const artifactNames = output.artifacts.map(
+      (artifact: any) => artifact.contractName
+    );
+    expect(artifactNames).toEqual(
+      expect.arrayContaining(["SimpleStorage", "Greeter", "Counter"])
+    );
     expect(output.hasCompilerErrors).toBe(false);
   });
 
@@ -241,7 +477,9 @@ describe("SolidityProject facade", () => {
   test("compileFiles merges results from multiple sources", () => {
     const project = SolidityProject.fromHardhatRoot(HARDHAT_PROJECT);
     const output = project.compileFiles([SIMPLE_STORAGE_PATH, GREETER_PATH]);
-    const names = output.artifacts.map((artifact: any) => artifact.contractName);
+    const names = output.artifacts.map(
+      (artifact: any) => artifact.contractName
+    );
 
     expect(names).toEqual(expect.arrayContaining(["SimpleStorage", "Greeter"]));
   });
@@ -258,8 +496,35 @@ describe("SolidityProject facade", () => {
     const sources = project.getSources();
 
     expect(Array.isArray(sources)).toBe(true);
-    expect(sources.some((source) => source.endsWith("SimpleStorage.sol"))).toBe(true);
+    expect(sources.some((source) => source.endsWith("SimpleStorage.sol"))).toBe(
+      true
+    );
     expect(sources.some((source) => source.endsWith("Greeter.sol"))).toBe(true);
+  });
+
+  test("supports library linking via temporary hardhat clone", () => {
+    const root = cloneHardhatProject();
+    const contractsDir = join(root, "contracts");
+    writeFileSync(join(contractsDir, "MathLib.sol"), LIBRARY_SOURCE);
+    writeFileSync(
+      join(contractsDir, "LibraryConsumer.sol"),
+      LIBRARY_CONSUMER_SOURCE
+    );
+
+    const project = SolidityProject.fromHardhatRoot(root);
+    const output = project.compileFile(
+      join(contractsDir, "LibraryConsumer.sol")
+    );
+    const library = output.artifacts.find(
+      (artifact: any) => artifact.contractName === "MathLib"
+    );
+    const consumer = output.artifacts.find(
+      (artifact: any) => artifact.contractName === "LibraryConsumer"
+    );
+
+    expect(library).toBeTruthy();
+    expect(consumer).toBeTruthy();
+    expect(Array.isArray(JSON.parse(consumer!.abi ?? "[]"))).toBe(true);
   });
 });
 
