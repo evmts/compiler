@@ -2,55 +2,36 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use foundry_compilers::artifacts::{
-  error::Severity, output_selection::OutputSelection, remappings::Remapping, Settings,
-};
+use foundry_compilers::artifacts::{error::Severity, remappings::Remapping, Settings};
 use foundry_compilers::solc::SolcLanguage as FoundrySolcLanguage;
 use napi::bindgen_prelude::*;
 use napi::{Env, JsObject, JsUnknown, NapiRaw, ValueType};
 use semver::Version;
 
-use super::errors::{map_napi_error, napi_error};
-use super::settings::CompilerSettings;
+use crate::internal::errors::{map_napi_error, napi_error};
+use crate::internal::path::{canonicalize_path, to_path_set, to_path_vec};
+use crate::internal::settings::{merge_settings, sanitize_settings, CompilerSettings};
 
 /// Normalised compiler configuration used by the Rust compiler facade.
 #[derive(Clone, Debug)]
 pub struct ResolvedCompilerConfig {
-  /// Active solc version.
   pub solc_version: Version,
-  /// Active solc language (Solidity or Yul).
   pub solc_language: FoundrySolcLanguage,
-  /// Fully resolved standard-json settings.
   pub solc_settings: Settings,
-  /// Controls whether Foundry caching is enabled.
   pub cache_enabled: bool,
-  /// Optional project root used for caching and relative paths.
   pub base_dir: Option<PathBuf>,
-  /// Prevent network access (svm downloads).
   pub offline_mode: bool,
-  /// Skip writing artifacts to disk.
   pub no_artifacts: bool,
-  /// Emit build-info files alongside artifacts.
   pub build_info_enabled: bool,
-  /// Slash backslashes in generated paths (useful on Windows).
   pub slash_paths: bool,
-  /// Explicit solc job count; `None` lets Foundry auto-detect.
   pub solc_jobs: Option<usize>,
-  /// Enable sparse output selections for faster compiles.
   pub sparse_output: bool,
-  /// Allowed import roots passed to solc (`--allow-paths`).
   pub allow_paths: BTreeSet<PathBuf>,
-  /// Extra include paths for solc (`--include-path`).
   pub include_paths: BTreeSet<PathBuf>,
-  /// Additional library directories.
   pub library_paths: Vec<PathBuf>,
-  /// Resolved remappings.
   pub remappings: Vec<Remapping>,
-  /// Paths suppressed from diagnostics.
   pub ignored_file_paths: BTreeSet<PathBuf>,
-  /// Compiler diagnostic codes to ignore.
   pub ignored_error_codes: Vec<u64>,
-  /// Minimum severity treated as an error.
   pub compiler_severity_filter: Severity,
 }
 
@@ -60,7 +41,7 @@ impl Default for ResolvedCompilerConfig {
       solc_version: crate::internal::solc::default_version()
         .unwrap_or_else(|_| Version::new(0, 8, 30)),
       solc_language: crate::internal::solc::default_language(),
-      solc_settings: default_compiler_settings(),
+      solc_settings: Settings::default(),
       cache_enabled: true,
       base_dir: None,
       offline_mode: false,
@@ -81,90 +62,26 @@ impl Default for ResolvedCompilerConfig {
 }
 
 impl ResolvedCompilerConfig {
-  /// Merge a set of overrides into the current configuration.
   pub fn merged(&self, overrides: &ConfigOverrides) -> Result<Self> {
-    let mut next = self.clone();
-
-    if let Some(version) = &overrides.solc_version {
-      next.solc_version = version.clone();
-    }
-    if let Some(language) = overrides.solc_language {
-      next.solc_language = language;
-    }
-    if let Some(settings) = overrides.resolved_settings.as_ref() {
-      next.solc_settings = settings.clone();
-    } else if let Some(settings) = overrides.solc_settings.as_ref() {
-      next.solc_settings = resolve_settings(&next.solc_settings, Some(settings))?;
-    }
-    if let Some(cache) = overrides.cache_enabled {
-      next.cache_enabled = cache;
-    }
-    if let Some(base_dir) = overrides.base_dir.as_ref() {
-      next.base_dir = Some(base_dir.clone());
-    }
-    if let Some(offline) = overrides.offline_mode {
-      next.offline_mode = offline;
-    }
-    if let Some(no_artifacts) = overrides.no_artifacts {
-      next.no_artifacts = no_artifacts;
-    }
-    if let Some(build_info) = overrides.build_info_enabled {
-      next.build_info_enabled = build_info;
-    }
-    if let Some(slash_paths) = overrides.slash_paths {
-      next.slash_paths = slash_paths;
-    }
-    if let Some(solc_jobs) = overrides.solc_jobs.clone() {
-      next.solc_jobs = solc_jobs;
-    }
-    if let Some(sparse_output) = overrides.sparse_output {
-      next.sparse_output = sparse_output;
-    }
-    if let Some(allow_paths) = overrides.allow_paths.as_ref() {
-      next.allow_paths = allow_paths.clone();
-    }
-    if let Some(include_paths) = overrides.include_paths.as_ref() {
-      next.include_paths = include_paths.clone();
-    }
-    if let Some(libraries) = overrides.library_paths.as_ref() {
-      next.library_paths = libraries.clone();
-    }
-    if let Some(remappings) = overrides.remappings.as_ref() {
-      next.remappings = remappings.clone();
-    }
-    if let Some(ignored_paths) = overrides.ignored_file_paths.as_ref() {
-      next.ignored_file_paths = ignored_paths.clone();
-    }
-    if let Some(ignored_codes) = overrides.ignored_error_codes.as_ref() {
-      next.ignored_error_codes = ignored_codes.clone();
-    }
-    if let Some(severity) = overrides.compiler_severity_filter {
-      next.compiler_severity_filter = severity;
-    }
-
-    Ok(next)
+    CompilerConfigBuilder::with_base(self.clone())
+      .apply_overrides(overrides.clone())?
+      .build()
   }
 
-  /// Merge optional JavaScript options on top of the config.
   pub fn merge_options(&self, options: Option<&CompilerConfig>) -> Result<Self> {
-    let Some(options) = options else {
-      return Ok(self.clone());
-    };
-    let overrides = ConfigOverrides::from_options(options)?;
-    self.merged(&overrides)
+    CompilerConfigBuilder::with_base(self.clone())
+      .apply_options(options)?
+      .build()
   }
 
-  /// Build a config purely from options (defaults + constructor overrides).
   pub fn from_options(options: Option<&CompilerConfig>) -> Result<Self> {
-    let merged = ResolvedCompilerConfig::default().merge_options(options)?;
-    let mut sanitized = merged.clone();
-    sanitized.solc_settings = sanitize_settings(&merged.solc_settings)?;
-    Ok(sanitized)
+    CompilerConfigBuilder::from_defaults()
+      .apply_options(options)?
+      .build()
   }
 }
 
-/// Builder-style struct used to compose `CompilerConfig`.
-#[derive(Default)]
+#[derive(Clone, Debug, Default)]
 pub struct ConfigOverrides {
   pub solc_version: Option<Version>,
   pub solc_language: Option<FoundrySolcLanguage>,
@@ -197,7 +114,7 @@ impl ConfigOverrides {
 
     overrides.solc_language = options.solc_language.map(Into::into);
 
-    if let Some(settings) = options.solc_settings.as_ref().or(options.settings.as_ref()) {
+    if let Some(settings) = options.solc_settings.as_ref() {
       overrides.solc_settings = Some(settings.clone());
     }
 
@@ -214,20 +131,23 @@ impl ConfigOverrides {
       .solc_jobs
       .map(|jobs| if jobs == 0 { None } else { Some(jobs as usize) });
     overrides.sparse_output = options.sparse_output;
-    overrides.allow_paths = options.allow_paths.as_ref().map(|paths| to_path_set(paths));
+    overrides.allow_paths = options
+      .allow_paths
+      .as_ref()
+      .map(|paths| to_path_set(paths.as_slice()));
     overrides.include_paths = options
       .include_paths
       .as_ref()
-      .map(|paths| to_path_set(paths));
+      .map(|paths| to_path_set(paths.as_slice()));
     overrides.library_paths = options
       .library_paths
       .as_ref()
-      .map(|paths| to_path_vec(paths));
+      .map(|paths| to_path_vec(paths.as_slice()));
     overrides.remappings = map_remappings(options.remappings.as_ref())?;
     overrides.ignored_file_paths = options
       .ignored_paths
       .as_ref()
-      .map(|paths| to_path_set(paths));
+      .map(|paths| to_path_set(paths.as_slice()));
     overrides.ignored_error_codes = options
       .ignored_error_codes
       .as_ref()
@@ -241,7 +161,6 @@ impl ConfigOverrides {
   }
 }
 
-/// JavaScript-facing compiler configuration shared by all entry points.
 #[napi(object)]
 #[derive(Clone, Default)]
 pub struct CompilerConfig {
@@ -251,8 +170,6 @@ pub struct CompilerConfig {
   pub solc_language: Option<SolcLanguage>,
   #[napi(ts_type = "import('./index').CompilerSettings | undefined")]
   pub solc_settings: Option<CompilerSettings>,
-  #[napi(ts_type = "import('./index').CompilerSettings | undefined")]
-  pub settings: Option<CompilerSettings>,
   #[napi(ts_type = "boolean | undefined")]
   pub cache_enabled: Option<bool>,
   #[napi(ts_type = "string | undefined")]
@@ -285,7 +202,6 @@ pub struct CompilerConfig {
   pub compiler_severity: Option<String>,
 }
 
-/// JavaScript-facing AST options.
 #[napi(object)]
 #[derive(Clone, Default)]
 pub struct AstOptions {
@@ -299,7 +215,6 @@ pub struct AstOptions {
   pub instrumented_contract: Option<String>,
 }
 
-/// Supported solc languages.
 #[napi(string_enum)]
 #[derive(Debug, Eq, PartialEq)]
 pub enum SolcLanguage {
@@ -319,7 +234,7 @@ impl From<SolcLanguage> for FoundrySolcLanguage {
 pub(crate) trait SolcUserOptions {
   fn solc_version(&self) -> Option<&str>;
   fn solc_language(&self) -> Option<SolcLanguage>;
-  fn settings(&self) -> Option<&CompilerSettings>;
+  fn compiler_settings(&self) -> Option<&CompilerSettings>;
 }
 
 impl SolcUserOptions for CompilerConfig {
@@ -331,8 +246,8 @@ impl SolcUserOptions for CompilerConfig {
     self.solc_language
   }
 
-  fn settings(&self) -> Option<&CompilerSettings> {
-    self.solc_settings.as_ref().or(self.settings.as_ref())
+  fn compiler_settings(&self) -> Option<&CompilerSettings> {
+    self.solc_settings.as_ref()
   }
 }
 
@@ -345,7 +260,7 @@ impl SolcUserOptions for AstOptions {
     self.solc_language
   }
 
-  fn settings(&self) -> Option<&CompilerSettings> {
+  fn compiler_settings(&self) -> Option<&CompilerSettings> {
     self.settings.as_ref()
   }
 }
@@ -395,7 +310,10 @@ impl SolcConfig {
       .map(FoundrySolcLanguage::from)
       .unwrap_or_else(|| default_language.clone());
 
-    let settings = resolve_settings(default_settings, overrides.and_then(|opts| opts.settings()))?;
+    let settings = merge_settings(
+      default_settings,
+      overrides.and_then(|opts| opts.compiler_settings()),
+    )?;
 
     Ok(SolcConfig {
       version,
@@ -416,7 +334,10 @@ impl SolcConfig {
       .map(FoundrySolcLanguage::from)
       .unwrap_or_else(|| self.language.clone());
 
-    let settings = resolve_settings(&self.settings, overrides.and_then(|opts| opts.settings()))?;
+    let settings = merge_settings(
+      &self.settings,
+      overrides.and_then(|opts| opts.compiler_settings()),
+    )?;
 
     Ok(SolcConfig {
       version,
@@ -426,7 +347,6 @@ impl SolcConfig {
   }
 }
 
-/// Parse `CompilerConfig` from a JS value (undefined/null → `None`).
 pub(crate) fn parse_compiler_config(
   env: &Env,
   value: Option<JsUnknown>,
@@ -436,11 +356,15 @@ pub(crate) fn parse_compiler_config(
     .transpose()
 }
 
-/// Parse `AstOptions` from a JS value (undefined/null → `None`).
 pub(crate) fn parse_ast_options(env: &Env, value: Option<JsUnknown>) -> Result<Option<AstOptions>> {
-  parse_options(value)?
-    .map(|unknown| unsafe { AstOptions::from_napi_value(env.raw(), unknown.raw()) })
-    .transpose()
+  match parse_options(value)? {
+    Some(unknown) => {
+      let object = unsafe { JsObject::from_napi_value(env.raw(), unknown.raw()) }?;
+      validate_object_field(&object, "settings")?;
+      unsafe { AstOptions::from_napi_value(env.raw(), unknown.raw()) }.map(Some)
+    }
+    None => Ok(None),
+  }
 }
 
 fn parse_options(value: Option<JsUnknown>) -> Result<Option<JsUnknown>> {
@@ -453,17 +377,12 @@ fn parse_options(value: Option<JsUnknown>) -> Result<Option<JsUnknown>> {
     ValueType::Object => {
       let object: JsObject = value.coerce_to_object()?;
       validate_object_field(&object, "solcSettings")?;
-      validate_object_field(&object, "settings")?;
       Ok(Some(object.into_unknown()))
     }
     _ => Err(napi_error(
       "Compiler options must be an object or undefined/null.",
     )),
   }
-}
-
-fn default_compiler_settings() -> Settings {
-  Settings::default()
 }
 
 fn validate_object_field(object: &JsObject, field: &str) -> Result<()> {
@@ -478,92 +397,6 @@ fn validate_object_field(object: &JsObject, field: &str) -> Result<()> {
       "{field} override must be provided as an object."
     ))),
   }
-}
-
-fn resolve_settings(base: &Settings, overrides: Option<&CompilerSettings>) -> Result<Settings> {
-  match overrides {
-    Some(settings) => {
-      let mut merged = settings.clone().overlay(base)?;
-      if output_selection_is_effectively_empty(&merged.output_selection) {
-        merged.output_selection = Settings::default().output_selection;
-      }
-      Ok(merged)
-    }
-    None => Ok(base.clone()),
-  }
-}
-
-fn sanitize_settings(settings: &Settings) -> Result<Settings> {
-  let mut merged = settings.clone();
-  if output_selection_is_effectively_empty(&merged.output_selection) {
-    merged.output_selection = Settings::default().output_selection;
-  }
-  Ok(merged)
-}
-
-fn canonicalize_path(path: &Path) -> PathBuf {
-  match std::fs::canonicalize(path) {
-    Ok(canonical) => canonical,
-    Err(_) => {
-      if path.is_absolute() {
-        path.to_path_buf()
-      } else {
-        std::env::current_dir()
-          .unwrap_or_else(|_| PathBuf::from("."))
-          .join(path)
-      }
-    }
-  }
-}
-
-fn to_path_set(paths: &[String]) -> BTreeSet<PathBuf> {
-  paths
-    .iter()
-    .map(|p| canonicalize_path(Path::new(p)))
-    .collect()
-}
-
-fn output_selection_is_effectively_empty(selection: &OutputSelection) -> bool {
-  let map = selection.as_ref();
-  if map.is_empty() {
-    return true;
-  }
-
-  map.values().all(|contracts| {
-    contracts
-      .values()
-      .all(|outputs| outputs.iter().all(|output| output.trim().is_empty()))
-  })
-}
-
-#[cfg(test)]
-mod tests {
-  use std::collections::BTreeMap;
-
-  use super::*;
-
-  #[test]
-  fn empty_output_selection_is_sanitized() {
-    let base = Settings::default();
-    let mut overrides = CompilerSettings::default();
-    overrides.output_selection = Some(BTreeMap::from([(
-      "*".to_string(),
-      BTreeMap::from([("*".to_string(), Vec::new()), (String::new(), Vec::new())]),
-    )]));
-
-    let merged = resolve_settings(&base, Some(&overrides)).expect("settings");
-    assert!(
-      !output_selection_is_effectively_empty(&merged.output_selection),
-      "merged selection should fallback to defaults"
-    );
-  }
-}
-
-fn to_path_vec(paths: &Vec<String>) -> Vec<PathBuf> {
-  paths
-    .iter()
-    .map(|p| canonicalize_path(Path::new(p)))
-    .collect()
 }
 
 fn map_remappings(remappings: Option<&Vec<String>>) -> Result<Option<Vec<Remapping>>> {
@@ -595,5 +428,139 @@ fn parse_severity(value: &str) -> Result<Severity> {
     other => Err(napi_error(format!(
       "Unsupported compiler severity filter \"{other}\""
     ))),
+  }
+}
+
+#[derive(Default)]
+pub(crate) struct CompilerConfigBuilder {
+  config: ResolvedCompilerConfig,
+}
+
+impl CompilerConfigBuilder {
+  pub fn from_defaults() -> Self {
+    Self {
+      config: ResolvedCompilerConfig::default(),
+    }
+  }
+
+  pub fn with_base(base: ResolvedCompilerConfig) -> Self {
+    Self { config: base }
+  }
+
+  pub fn apply_options(mut self, options: Option<&CompilerConfig>) -> Result<Self> {
+    if let Some(options) = options {
+      let overrides = ConfigOverrides::from_options(options)?;
+      self = self.apply_overrides(overrides)?;
+    }
+    Ok(self)
+  }
+
+  pub fn apply_overrides(mut self, overrides: ConfigOverrides) -> Result<Self> {
+    if let Some(version) = overrides.solc_version {
+      self.config.solc_version = version;
+    }
+    if let Some(language) = overrides.solc_language {
+      self.config.solc_language = language;
+    }
+    if let Some(settings) = overrides.resolved_settings {
+      self.config.solc_settings = sanitize_settings(&settings)?;
+    } else if let Some(settings) = overrides.solc_settings {
+      self.config.solc_settings = merge_settings(&self.config.solc_settings, Some(&settings))?;
+    }
+    if let Some(cache) = overrides.cache_enabled {
+      self.config.cache_enabled = cache;
+    }
+    if let Some(base_dir) = overrides.base_dir {
+      self.config.base_dir = Some(base_dir);
+    }
+    if let Some(offline) = overrides.offline_mode {
+      self.config.offline_mode = offline;
+    }
+    if let Some(no_artifacts) = overrides.no_artifacts {
+      self.config.no_artifacts = no_artifacts;
+    }
+    if let Some(build_info) = overrides.build_info_enabled {
+      self.config.build_info_enabled = build_info;
+    }
+    if let Some(slash_paths) = overrides.slash_paths {
+      self.config.slash_paths = slash_paths;
+    }
+    if let Some(solc_jobs) = overrides.solc_jobs {
+      self.config.solc_jobs = solc_jobs;
+    }
+    if let Some(sparse_output) = overrides.sparse_output {
+      self.config.sparse_output = sparse_output;
+    }
+    if let Some(allow_paths) = overrides.allow_paths {
+      self.config.allow_paths = allow_paths;
+    }
+    if let Some(include_paths) = overrides.include_paths {
+      self.config.include_paths = include_paths;
+    }
+    if let Some(libraries) = overrides.library_paths {
+      self.config.library_paths = libraries;
+    }
+    if let Some(remappings) = overrides.remappings {
+      self.config.remappings = remappings;
+    }
+    if let Some(ignored_paths) = overrides.ignored_file_paths {
+      self.config.ignored_file_paths = ignored_paths;
+    }
+    if let Some(ignored_codes) = overrides.ignored_error_codes {
+      self.config.ignored_error_codes = ignored_codes;
+    }
+    if let Some(severity) = overrides.compiler_severity_filter {
+      self.config.compiler_severity_filter = severity;
+    }
+
+    Ok(self)
+  }
+
+  pub fn build(mut self) -> Result<ResolvedCompilerConfig> {
+    self.config.solc_settings = sanitize_settings(&self.config.solc_settings)?;
+    Ok(self.config)
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use std::collections::BTreeMap;
+
+  use super::*;
+
+  #[test]
+  fn empty_output_selection_is_sanitized() {
+    let base = Settings::default();
+    let mut overrides = CompilerSettings::default();
+    overrides.output_selection = Some(BTreeMap::from([(
+      "*".to_string(),
+      BTreeMap::from([("*".to_string(), Vec::new()), (String::new(), Vec::new())]),
+    )]));
+
+    let merged = merge_settings(&base, Some(&overrides)).expect("settings");
+    assert!(
+      !crate::internal::settings::output_selection_is_effectively_empty(&merged.output_selection),
+      "merged selection should fallback to defaults"
+    );
+  }
+
+  #[test]
+  fn builder_defaults_without_options() {
+    let baseline = ResolvedCompilerConfig::default();
+    let built = CompilerConfigBuilder::from_defaults()
+      .build()
+      .expect("builder without options");
+    assert_eq!(built.solc_version, baseline.solc_version);
+    assert_eq!(built.solc_language, baseline.solc_language);
+  }
+
+  #[test]
+  fn invalid_severity_string_is_rejected() {
+    let mut options = CompilerConfig::default();
+    options.compiler_severity = Some("not-a-level".to_string());
+    let error = ConfigOverrides::from_options(&options).expect_err("should fail");
+    assert!(error
+      .to_string()
+      .contains("Unsupported compiler severity filter"));
   }
 }

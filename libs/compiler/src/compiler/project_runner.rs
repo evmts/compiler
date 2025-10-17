@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use foundry_compilers::artifacts::sources::Source as FoundrySource;
 use foundry_compilers::artifacts::SolcLanguage as FoundrySolcLanguage;
@@ -7,9 +7,8 @@ use foundry_compilers::{Project, ProjectCompileOutput};
 use napi::Result;
 use std::sync::OnceLock;
 
-use crate::compile::output::into_core_compile_output;
-use crate::compile::output::CoreCompileOutput;
 use crate::compiler::input::CompilationInput;
+use crate::compiler::{into_core_compile_output, CoreCompileOutput};
 use crate::internal::{
   config::ResolvedCompilerConfig,
   errors::{map_napi_error, napi_error},
@@ -47,7 +46,7 @@ impl<'a> ProjectRunner<'a> {
         if matches!(self.context.layout, ProjectLayout::Synthetic) {
           return Ok(None);
         }
-        let normalized = self.normalize_file_paths(config, &paths)?;
+        let normalized = self.context.normalise_paths(config, paths.as_slice())?;
         let output = self.compile_with_project(config, "Compilation failed", |project| {
           project.compile_files(normalized)
         });
@@ -99,57 +98,11 @@ impl<'a> ProjectRunner<'a> {
     map_napi_error(compile_fn(&project), label)
   }
 
-  fn normalize_file_paths(
-    &self,
-    config: &ResolvedCompilerConfig,
-    paths: &[PathBuf],
-  ) -> Result<Vec<PathBuf>> {
-    let mut resolved = Vec::with_capacity(paths.len());
-    for entry in paths {
-      let candidate = Path::new(entry);
-      let absolute = if candidate.is_absolute() {
-        candidate.to_path_buf()
-      } else if let Some(base) = config.base_dir.as_ref() {
-        base.join(candidate)
-      } else {
-        self.context.root.join(candidate)
-      };
-
-      let canonical = match absolute.canonicalize() {
-        Ok(path) => path,
-        Err(_) => absolute,
-      };
-
-      if !canonical.exists() {
-        return Err(napi_error(format!(
-          "Source file {} does not exist",
-          canonical.display()
-        )));
-      }
-
-      resolved.push(canonical);
-    }
-    Ok(resolved)
-  }
-
   fn write_virtual_source(
     &self,
     config: &ResolvedCompilerConfig,
     contents: &str,
   ) -> Result<PathBuf> {
-    let dir = self
-      .context
-      .virtual_sources_dir
-      .as_ref()
-      .ok_or_else(|| napi_error("Cannot cache inline sources without a baseDir"))?;
-
-    std::fs::create_dir_all(dir).map_err(|err| {
-      napi_error(format!(
-        "Failed to prepare virtual sources directory {}: {err}",
-        dir.display()
-      ))
-    })?;
-
     let extension = match config.solc_language {
       FoundrySolcLanguage::Solidity => "sol",
       FoundrySolcLanguage::Yul => "yul",
@@ -157,7 +110,7 @@ impl<'a> ProjectRunner<'a> {
     };
 
     let source_hash = FoundrySource::content_hash_of(contents);
-    let path = dir.join(format!("virtual-{source_hash}.{extension}"));
+    let path = self.context.virtual_source_path(&source_hash, extension)?;
     if !path.exists() {
       std::fs::write(&path, contents).map_err(|err| {
         napi_error(format!(
@@ -191,10 +144,11 @@ impl<'a> ProjectRunner<'a> {
 
 fn default_cache_dir() -> PathBuf {
   static CACHE_PATH: OnceLock<PathBuf> = OnceLock::new();
-  CACHE_PATH.get_or_init(|| {
-    let root = std::env::temp_dir().join(".tevm/cache");
-    let _ = std::fs::create_dir_all(&root);
-    root
-  })
-  .clone()
+  CACHE_PATH
+    .get_or_init(|| {
+      let root = std::env::temp_dir().join(".tevm/cache");
+      let _ = std::fs::create_dir_all(&root);
+      root
+    })
+    .clone()
 }

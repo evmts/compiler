@@ -1,17 +1,26 @@
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use std::time::SystemTime;
 
-use foundry_compilers::solc::SolcLanguage as FoundrySolcLanguage;
+use foundry_compilers::artifacts::{
+  error::Severity, remappings::Remapping, CompilerOutput, Settings,
+};
+use foundry_compilers::buildinfo::BuildInfo;
+use foundry_compilers::solc::{SolcLanguage as FoundrySolcLanguage, SolcVersionedInput};
 use foundry_compilers::{
   cache::SOLIDITY_FILES_CACHE_FILENAME,
   solc::{CliSettings, SolcCompiler, SolcSettings},
   Project, ProjectBuilder, ProjectPathsConfig,
 };
+use foundry_config::{Config as FoundryConfig, SolcReq};
 use napi::bindgen_prelude::Result;
 
-use super::config::ResolvedCompilerConfig;
-use super::errors::{map_napi_error, napi_error};
+use crate::internal::config::{ConfigOverrides, ResolvedCompilerConfig, SolcConfig};
+use crate::internal::errors::{map_napi_error, napi_error};
+use crate::internal::path::{canonicalize_path, canonicalize_with_base};
+use crate::internal::settings::CompilerSettings;
 
 #[derive(Clone)]
 pub enum ProjectLayout {
@@ -26,6 +35,56 @@ pub struct ProjectContext {
   pub root: PathBuf,
   pub paths: ProjectPathsConfig<FoundrySolcLanguage>,
   pub virtual_sources_dir: Option<PathBuf>,
+}
+
+impl ProjectContext {
+  pub fn normalise_paths(
+    &self,
+    config: &ResolvedCompilerConfig,
+    inputs: &[PathBuf],
+  ) -> Result<Vec<PathBuf>> {
+    let mut resolved = Vec::with_capacity(inputs.len());
+    for entry in inputs {
+      let candidate = if entry.is_absolute() {
+        entry.clone()
+      } else if let Some(base) = config.base_dir.as_ref() {
+        base.join(entry)
+      } else {
+        self.root.join(entry)
+      };
+
+      let canonical = match candidate.canonicalize() {
+        Ok(path) => path,
+        Err(_) => candidate.clone(),
+      };
+
+      if !canonical.exists() {
+        return Err(napi_error(format!(
+          "Source file {} does not exist",
+          canonical.display()
+        )));
+      }
+
+      resolved.push(canonical);
+    }
+    Ok(resolved)
+  }
+
+  pub fn virtual_source_path(&self, hash: &str, extension: &str) -> Result<PathBuf> {
+    let dir = self
+      .virtual_sources_dir
+      .as_ref()
+      .ok_or_else(|| napi_error("Cannot cache inline sources without a baseDir"))?;
+
+    if let Err(err) = std::fs::create_dir_all(dir) {
+      return Err(napi_error(format!(
+        "Failed to prepare virtual sources directory {}: {err}",
+        dir.display()
+      )));
+    }
+
+    Ok(dir.join(format!("virtual-{hash}.{extension}")))
+  }
 }
 
 pub fn build_project(
@@ -78,7 +137,7 @@ pub fn build_project(
 }
 
 pub fn create_synthetic_context(base_dir: &Path) -> Result<ProjectContext> {
-  let root = absolute_path(base_dir);
+  let root = canonicalize_path(base_dir);
   let tevm_root = root.join(".tevm");
   let cache_dir = tevm_root.join("cache");
   let artifacts_dir = tevm_root.join("out");
@@ -141,21 +200,6 @@ fn extend_paths_with_config(
   }
 }
 
-fn absolute_path(path: &Path) -> PathBuf {
-  match path.canonicalize() {
-    Ok(canonical) => canonical,
-    Err(_) => {
-      if path.is_absolute() {
-        path.to_path_buf()
-      } else {
-        std::env::current_dir()
-          .unwrap_or_else(|_| PathBuf::from("."))
-          .join(path)
-      }
-    }
-  }
-}
-
 fn create_dir_if_missing(path: &Path) -> Result<()> {
   if let Err(err) = fs::create_dir_all(path) {
     return Err(napi_error(format!(
@@ -164,4 +208,284 @@ fn create_dir_if_missing(path: &Path) -> Result<()> {
     )));
   }
   Ok(())
+}
+
+pub struct FoundryAdapter;
+
+impl FoundryAdapter {
+  pub fn load(root: &Path) -> Result<(ConfigOverrides, ProjectContext)> {
+    let figment = FoundryConfig::figment_with_root(root);
+    let config = map_napi_error(
+      FoundryConfig::try_from(figment),
+      "Failed to load foundry configuration",
+    )?
+    .sanitized()
+    .canonic();
+
+    let mut overrides = ConfigOverrides::default();
+    let base_dir = config.__root.0.clone();
+    overrides.base_dir = Some(base_dir.clone());
+    overrides.cache_enabled = Some(config.cache);
+    overrides.offline_mode = Some(config.offline);
+    overrides.no_artifacts = Some(false);
+    overrides.build_info_enabled = Some(config.build_info);
+    overrides.sparse_output = Some(config.sparse_mode);
+
+    if let Some(SolcReq::Version(version)) = &config.solc {
+      overrides.solc_version = Some(version.clone());
+    }
+
+    let ethers_settings = map_napi_error(
+      config.solc_settings(),
+      "Failed to derive foundry compiler settings",
+    )?;
+    let settings_json = map_napi_error(
+      serde_json::to_value(&ethers_settings),
+      "Failed to serialise foundry compiler settings",
+    )?;
+    let settings: Settings = map_napi_error(
+      serde_json::from_value(settings_json),
+      "Failed to convert foundry compiler settings",
+    )?;
+    overrides.resolved_settings = Some(settings);
+
+    overrides.allow_paths = Some(
+      config
+        .allow_paths
+        .iter()
+        .map(|p| canonicalize_with_base(&base_dir, p))
+        .collect::<BTreeSet<_>>(),
+    );
+    if let Some(allow) = overrides.allow_paths.as_mut() {
+      allow.insert(base_dir.clone());
+    }
+    overrides.include_paths = Some(
+      config
+        .include_paths
+        .iter()
+        .map(|p| canonicalize_with_base(&base_dir, p))
+        .collect::<BTreeSet<_>>(),
+    );
+    overrides.library_paths = Some(
+      config
+        .libs
+        .iter()
+        .map(|p| canonicalize_with_base(&base_dir, p))
+        .collect::<Vec<_>>(),
+    );
+    overrides.remappings = Some(
+      config
+        .remappings
+        .iter()
+        .filter_map(|remapping| Remapping::from_str(&remapping.to_string()).ok())
+        .collect(),
+    );
+    overrides.ignored_error_codes = Some(
+      config
+        .ignored_error_codes
+        .iter()
+        .map(|code| (*code).into())
+        .collect(),
+    );
+    if config.deny_warnings {
+      overrides.compiler_severity_filter = Some(Severity::Warning);
+    }
+
+    let config_paths = config.project_paths();
+    let mut paths = ProjectPathsConfig::builder()
+      .root(config_paths.root.clone())
+      .cache(config_paths.cache.clone())
+      .artifacts(config_paths.artifacts.clone())
+      .build_infos(config_paths.build_infos.clone())
+      .sources(config_paths.sources.clone())
+      .tests(config_paths.tests.clone())
+      .scripts(config_paths.scripts.clone())
+      .libs(config_paths.libraries.clone())
+      .remappings(
+        config_paths
+          .remappings
+          .iter()
+          .filter_map(|remapping| Remapping::from_str(&remapping.to_string()).ok())
+          .collect::<Vec<_>>(),
+      )
+      .build_with_root::<FoundrySolcLanguage>(&config_paths.root);
+    paths.slash_paths();
+    let context = ProjectContext {
+      layout: ProjectLayout::Foundry,
+      root: base_dir,
+      paths,
+      virtual_sources_dir: None,
+    };
+
+    Ok((overrides, context))
+  }
+}
+
+pub struct HardhatAdapter;
+
+impl HardhatAdapter {
+  pub fn load(root: &Path) -> Result<(ConfigOverrides, ProjectContext)> {
+    let mut paths = map_napi_error(
+      ProjectPathsConfig::hardhat(root),
+      "Failed to create hardhat project paths",
+    )?;
+    paths.slash_paths();
+
+    let mut overrides = ConfigOverrides::default();
+    overrides.base_dir = Some(paths.root.clone());
+    overrides.cache_enabled = Some(true);
+    overrides.build_info_enabled = Some(true);
+    overrides.no_artifacts = Some(false);
+
+    if let Some((solc_config, cli_settings)) = infer_hardhat_build_info(&paths) {
+      overrides.solc_version = Some(solc_config.version);
+      let settings_json = map_napi_error(
+        serde_json::to_value(&solc_config.settings),
+        "Failed to serialise hardhat compiler settings",
+      )?;
+      let solc_settings: CompilerSettings = map_napi_error(
+        serde_json::from_value(settings_json),
+        "Failed to convert hardhat compiler settings",
+      )?;
+      overrides.solc_settings = Some(solc_settings);
+      overrides.allow_paths = Some(
+        cli_settings
+          .allow_paths
+          .into_iter()
+          .map(|p| canonicalize_with_base(&paths.root, &p))
+          .collect::<BTreeSet<_>>(),
+      );
+      if let Some(allow) = overrides.allow_paths.as_mut() {
+        allow.insert(paths.root.clone());
+      }
+      overrides.include_paths = Some(
+        cli_settings
+          .include_paths
+          .into_iter()
+          .map(|p| canonicalize_with_base(&paths.root, &p))
+          .collect::<BTreeSet<_>>(),
+      );
+    }
+
+    overrides.library_paths = Some(
+      paths
+        .libraries
+        .iter()
+        .map(|p| canonicalize_with_base(&paths.root, p))
+        .collect::<Vec<_>>(),
+    );
+
+    let context = ProjectContext {
+      layout: ProjectLayout::Hardhat,
+      root: paths.root.clone(),
+      paths,
+      virtual_sources_dir: None,
+    };
+
+    Ok((overrides, context))
+  }
+}
+
+fn infer_hardhat_build_info(
+  paths: &ProjectPathsConfig<FoundrySolcLanguage>,
+) -> Option<(SolcConfig, CliSettingsData)> {
+  let entries = fs::read_dir(&paths.build_infos).ok()?;
+  let mut latest: Option<(SystemTime, PathBuf)> = None;
+
+  for entry in entries.flatten() {
+    let file_type = entry.file_type().ok()?;
+    if !file_type.is_file() {
+      continue;
+    }
+
+    if entry
+      .path()
+      .extension()
+      .and_then(|ext| ext.to_str())
+      .map(|ext| ext != "json")
+      .unwrap_or(true)
+    {
+      continue;
+    }
+
+    let modified = entry
+      .metadata()
+      .and_then(|meta| meta.modified())
+      .unwrap_or(SystemTime::UNIX_EPOCH);
+
+    match &mut latest {
+      Some((time, path)) => {
+        if modified > *time {
+          *time = modified;
+          *path = entry.path();
+        }
+      }
+      None => latest = Some((modified, entry.path())),
+    }
+  }
+
+  let (_, path) = latest?;
+  let build_info: BuildInfo<SolcVersionedInput, CompilerOutput> = BuildInfo::read(&path).ok()?;
+
+  let compiler_config = SolcConfig {
+    version: build_info.solc_version.clone(),
+    settings: build_info.input.input.settings.clone(),
+    language: build_info.input.input.language,
+  };
+
+  let cli_settings = CliSettingsData {
+    allow_paths: build_info
+      .input
+      .cli_settings
+      .allow_paths
+      .iter()
+      .cloned()
+      .collect(),
+    include_paths: build_info
+      .input
+      .cli_settings
+      .include_paths
+      .iter()
+      .cloned()
+      .collect(),
+  };
+
+  Some((compiler_config, cli_settings))
+}
+
+struct CliSettingsData {
+  allow_paths: BTreeSet<PathBuf>,
+  include_paths: BTreeSet<PathBuf>,
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::path::PathBuf;
+  use tempfile::tempdir;
+
+  #[test]
+  fn normalise_paths_resolves_relative_entries() {
+    let temp = tempdir().expect("tempdir");
+    let context = create_synthetic_context(temp.path()).expect("context");
+    let target = context.root.join("Example.sol");
+    std::fs::write(&target, "// test").expect("write file");
+
+    let config = ResolvedCompilerConfig::default();
+    let resolved = context
+      .normalise_paths(&config, &[PathBuf::from("Example.sol")])
+      .expect("normalised paths");
+    assert_eq!(resolved, vec![target.canonicalize().unwrap()]);
+  }
+
+  #[test]
+  fn virtual_source_path_prepares_directory() {
+    let temp = tempdir().expect("tempdir");
+    let context = create_synthetic_context(temp.path()).expect("context");
+    let path = context
+      .virtual_source_path("hash", "sol")
+      .expect("virtual path");
+    assert!(path.ends_with("virtual-hash.sol"));
+    assert!(path.parent().unwrap().exists());
+  }
 }

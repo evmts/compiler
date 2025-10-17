@@ -45,7 +45,6 @@ export declare class Compiler {
   compileContract(contractName: string, options?: CompilerConfig | undefined): CompileOutput
 }
 
-/** JavaScript-facing AST options. */
 export interface AstOptions {
   solcVersion?: string | undefined
   solcLanguage?: import('./index').SolcLanguage | undefined
@@ -65,12 +64,10 @@ export interface CompileOutput {
   hasCompilerErrors: boolean
 }
 
-/** JavaScript-facing compiler configuration shared by all entry points. */
 export interface CompilerConfig {
   solcVersion?: string | undefined
   solcLanguage?: import('./index').SolcLanguage | undefined
   solcSettings?: import('./index').CompilerSettings | undefined
-  settings?: import('./index').CompilerSettings | undefined
   cacheEnabled?: boolean | undefined
   baseDir?: string | undefined
   offlineMode?: boolean | undefined
@@ -94,15 +91,7 @@ export interface CompilerError {
   sourceLocation?: SourceLocation
 }
 
-/**
- * Full compiler settings accepted by Foundry's solc wrapper.
- *
- * This struct mirrors [`foundry_compilers::artifacts::Settings`] and the nested
- * configuration types, but it is shaped for ergonomic consumption from
- * JavaScript. All fields are optional so callers can provide partial objects;
- * omitted values fall back to solc's defaults when converted back into the
- * Foundry representation.
- */
+/** Full compiler settings accepted by Foundry's solc wrapper. */
 export interface CompilerSettings {
   stopAfter?: 'parsing' | undefined
   remappings?: `${string}=${string}`[] | undefined
@@ -143,9 +132,6 @@ export interface DebuggingSettings {
 }
 
 export declare const enum EvmVersion {
-  Homestead = 'Homestead',
-  TangerineWhistle = 'TangerineWhistle',
-  SpuriousDragon = 'SpuriousDragon',
   Byzantium = 'Byzantium',
   Constantinople = 'Constantinople',
   Petersburg = 'Petersburg',
@@ -153,9 +139,9 @@ export declare const enum EvmVersion {
   Berlin = 'Berlin',
   London = 'London',
   Paris = 'Paris',
-  Prague = 'Prague',
   Shanghai = 'Shanghai',
-  Cancun = 'Cancun'
+  Cancun = 'Cancun',
+  Prague = 'Prague'
 }
 
 export declare export declare function findArtifactsDir(rootPath: string): string
@@ -165,15 +151,18 @@ export declare export declare function findLibs(rootPath: string): Array<string>
 export declare export declare function findSourceDir(rootPath: string): string
 
 export declare const enum ModelCheckerEngine {
-  Default = 'Default',
-  All = 'All',
   Bmc = 'Bmc',
-  Chc = 'Chc'
+  None = 'None'
 }
 
 export declare const enum ModelCheckerInvariant {
   Contract = 'Contract',
   Reentrancy = 'Reentrancy'
+}
+
+export declare const enum ModelCheckerInvariantKind {
+  Reentrancy = 'Reentrancy',
+  Contract = 'Contract'
 }
 
 export interface ModelCheckerSettings {
@@ -190,21 +179,22 @@ export interface ModelCheckerSettings {
 }
 
 export declare const enum ModelCheckerSolver {
-  Cvc4 = 'Cvc4',
+  Z3 = 'Z3',
   Eld = 'Eld',
-  Smtlib2 = 'Smtlib2',
-  Z3 = 'Z3'
+  Cvc4 = 'Cvc4',
+  EldStrict = 'EldStrict'
 }
 
 export declare const enum ModelCheckerTarget {
   Assert = 'Assert',
-  Underflow = 'Underflow',
-  Overflow = 'Overflow',
-  DivByZero = 'DivByZero',
-  ConstantCondition = 'ConstantCondition',
-  PopEmptyArray = 'PopEmptyArray',
-  OutOfBounds = 'OutOfBounds',
-  Balance = 'Balance'
+  Contract = 'Contract',
+  External = 'External',
+  Public = 'Public'
+}
+
+export declare const enum ModelCheckerTargetType {
+  RecursiveDepth = 'RecursiveDepth',
+  BoundedLoop = 'BoundedLoop'
 }
 
 export interface OptimizerDetails {
@@ -249,7 +239,6 @@ export interface SettingsMetadata {
   cborMetadata?: boolean
 }
 
-/** Supported solc languages. */
 export declare const enum SolcLanguage {
   Solidity = 'Solidity',
   Yul = 'Yul'

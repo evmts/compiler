@@ -71,20 +71,22 @@ function __napi_rs_initialize_modules(__napiInstance) {
   __napiInstance.exports['__napi_register__ModelCheckerTarget_33']?.()
   __napiInstance.exports['__napi_register__ModelCheckerInvariant_34']?.()
   __napiInstance.exports['__napi_register__ModelCheckerSolver_35']?.()
-  __napiInstance.exports['__napi_register__EvmVersion_36']?.()
-  __napiInstance.exports['__napi_register__create_hardhat_paths_37']?.()
-  __napiInstance.exports['__napi_register__create_dapptools_paths_38']?.()
-  __napiInstance.exports['__napi_register__create_current_hardhat_paths_39']?.()
-  __napiInstance.exports['__napi_register__create_current_dapptools_paths_40']?.()
-  __napiInstance.exports['__napi_register__find_artifacts_dir_41']?.()
-  __napiInstance.exports['__napi_register__find_source_dir_42']?.()
-  __napiInstance.exports['__napi_register__find_libs_43']?.()
-  __napiInstance.exports['__napi_register__CompilerError_struct_44']?.()
-  __napiInstance.exports['__napi_register__SourceLocation_struct_45']?.()
-  __napiInstance.exports['__napi_register__ContractBytecode_struct_46']?.()
-  __napiInstance.exports['__napi_register__ContractArtifact_struct_47']?.()
-  __napiInstance.exports['__napi_register__CompileOutput_struct_48']?.()
-  __napiInstance.exports['__napi_register__ProjectPaths_struct_49']?.()
+  __napiInstance.exports['__napi_register__ModelCheckerTargetType_36']?.()
+  __napiInstance.exports['__napi_register__EvmVersion_37']?.()
+  __napiInstance.exports['__napi_register__ModelCheckerInvariantKind_38']?.()
+  __napiInstance.exports['__napi_register__create_hardhat_paths_39']?.()
+  __napiInstance.exports['__napi_register__create_dapptools_paths_40']?.()
+  __napiInstance.exports['__napi_register__create_current_hardhat_paths_41']?.()
+  __napiInstance.exports['__napi_register__create_current_dapptools_paths_42']?.()
+  __napiInstance.exports['__napi_register__find_artifacts_dir_43']?.()
+  __napiInstance.exports['__napi_register__find_source_dir_44']?.()
+  __napiInstance.exports['__napi_register__find_libs_45']?.()
+  __napiInstance.exports['__napi_register__CompilerError_struct_46']?.()
+  __napiInstance.exports['__napi_register__SourceLocation_struct_47']?.()
+  __napiInstance.exports['__napi_register__ContractBytecode_struct_48']?.()
+  __napiInstance.exports['__napi_register__ContractArtifact_struct_49']?.()
+  __napiInstance.exports['__napi_register__CompileOutput_struct_50']?.()
+  __napiInstance.exports['__napi_register__ProjectPaths_struct_51']?.()
 }
 export const Ast = __napiModule.exports.Ast
 export const Compiler = __napiModule.exports.Compiler
@@ -99,7 +101,9 @@ export const findLibs = __napiModule.exports.findLibs
 export const findSourceDir = __napiModule.exports.findSourceDir
 export const ModelCheckerEngine = __napiModule.exports.ModelCheckerEngine
 export const ModelCheckerInvariant = __napiModule.exports.ModelCheckerInvariant
+export const ModelCheckerInvariantKind = __napiModule.exports.ModelCheckerInvariantKind
 export const ModelCheckerSolver = __napiModule.exports.ModelCheckerSolver
 export const ModelCheckerTarget = __napiModule.exports.ModelCheckerTarget
+export const ModelCheckerTargetType = __napiModule.exports.ModelCheckerTargetType
 export const RevertStrings = __napiModule.exports.RevertStrings
 export const SolcLanguage = __napiModule.exports.SolcLanguage

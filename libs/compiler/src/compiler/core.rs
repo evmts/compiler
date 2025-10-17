@@ -1,33 +1,24 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use std::time::SystemTime;
 
 use foundry_compilers::artifacts::{
-  ast::SourceUnit, CompilerOutput, Settings, SolcInput, SolcLanguage as FoundrySolcLanguage,
-  Source, Sources,
+  ast::SourceUnit, CompilerOutput, SolcInput, SolcLanguage as FoundrySolcLanguage, Source, Sources,
 };
-use foundry_compilers::buildinfo::BuildInfo;
-use foundry_compilers::solc::SolcVersionedInput;
-use foundry_compilers::{
-  artifacts::{error::Severity, remappings::Remapping},
-  ProjectPathsConfig,
-};
-use foundry_config::{Config as FoundryConfig, SolcReq};
 use napi::Result;
 use serde_json::{json, Value};
 
-use crate::ast::utils::sanitize_ast_value;
-use crate::compile::output::{from_standard_json, CoreCompileOutput};
+use crate::ast::orchestrator::AstOrchestrator;
 use crate::compiler::input::CompilationInput;
 use crate::compiler::project_runner::ProjectRunner;
+use crate::compiler::{from_standard_json, CoreCompileOutput};
 use crate::internal::{
-  config::{CompilerConfig, ConfigOverrides, ResolvedCompilerConfig, SolcConfig},
+  config::{
+    CompilerConfig, CompilerConfigBuilder, ConfigOverrides, ResolvedCompilerConfig, SolcConfig,
+  },
   errors::{map_napi_error, napi_error},
-  project::{ProjectContext, ProjectLayout},
-  settings::CompilerSettings,
+  project::{FoundryAdapter, HardhatAdapter, ProjectContext, ProjectLayout},
   solc,
 };
 
@@ -70,7 +61,9 @@ impl CompilerCore {
     &self,
     overrides: Option<&CompilerConfig>,
   ) -> Result<ResolvedCompilerConfig> {
-    self.config.merge_options(overrides)
+    CompilerConfigBuilder::with_base(self.config.clone())
+      .apply_options(overrides)?
+      .build()
   }
 
   pub fn compile_input(
@@ -110,16 +103,18 @@ impl CompilerCore {
   }
 
   pub fn with_context(
-    mut config: ResolvedCompilerConfig,
+    config: ResolvedCompilerConfig,
     context_loader: impl FnOnce() -> Result<(ConfigOverrides, ProjectContext)>,
   ) -> Result<CompilerWithContext> {
     let (project_overrides, context) = context_loader()?;
-    config = config.merged(&project_overrides)?;
-    let compiler = CompilerCore::new(config.clone(), Some(context.clone()))?;
+    let resolved = CompilerConfigBuilder::with_base(config)
+      .apply_overrides(project_overrides)?
+      .build()?;
+    let compiler = CompilerCore::new(resolved.clone(), Some(context.clone()))?;
     Ok(CompilerWithContext {
       compiler,
       context,
-      resolved: config,
+      resolved,
     })
   }
 
@@ -127,14 +122,14 @@ impl CompilerCore {
     config: ResolvedCompilerConfig,
     root: &Path,
   ) -> Result<CompilerWithContext> {
-    Self::with_context(config, || load_foundry_project(root))
+    Self::with_context(config, || FoundryAdapter::load(root))
   }
 
   pub fn from_hardhat_root(
     config: ResolvedCompilerConfig,
     root: &Path,
   ) -> Result<CompilerWithContext> {
-    Self::with_context(config, || load_hardhat_project(root))
+    Self::with_context(config, || HardhatAdapter::load(root))
   }
 
   fn project_runner(&self) -> Result<ProjectRunner<'_>> {
@@ -213,7 +208,7 @@ impl CompilerCore {
     for (file_name, unit) in ast_sources {
       let mut ast_value =
         map_napi_error(serde_json::to_value(&unit), "Failed to serialise AST value")?;
-      sanitize_ast_value(&mut ast_value);
+      AstOrchestrator::sanitize_ast_value(&mut ast_value);
       sources_value.insert(file_name, json!({ "ast": ast_value }));
     }
 
@@ -363,253 +358,4 @@ fn sources_from_map(entries: BTreeMap<String, String>) -> Sources {
     sources.insert(PathBuf::from(path), Source::new(source));
   }
   sources
-}
-
-fn load_foundry_project(root: &Path) -> Result<(ConfigOverrides, ProjectContext)> {
-  let figment = FoundryConfig::figment_with_root(root);
-  let config = map_napi_error(
-    FoundryConfig::try_from(figment),
-    "Failed to load foundry configuration",
-  )?
-  .sanitized()
-  .canonic();
-
-  let mut overrides = ConfigOverrides::default();
-  let base_dir = config.__root.0.clone();
-  overrides.base_dir = Some(base_dir.clone());
-  overrides.cache_enabled = Some(config.cache);
-  overrides.offline_mode = Some(config.offline);
-  overrides.no_artifacts = Some(false);
-  overrides.build_info_enabled = Some(config.build_info);
-  overrides.sparse_output = Some(config.sparse_mode);
-
-  if let Some(SolcReq::Version(version)) = &config.solc {
-    overrides.solc_version = Some(version.clone());
-  }
-
-  let ethers_settings = map_napi_error(
-    config.solc_settings(),
-    "Failed to derive foundry compiler settings",
-  )?;
-  let settings_json = map_napi_error(
-    serde_json::to_value(&ethers_settings),
-    "Failed to serialise foundry compiler settings",
-  )?;
-  let settings: Settings = map_napi_error(
-    serde_json::from_value(settings_json),
-    "Failed to convert foundry compiler settings",
-  )?;
-  overrides.resolved_settings = Some(settings);
-
-  overrides.allow_paths = Some(
-    config
-      .allow_paths
-      .iter()
-      .map(|p| canonicalize_with_root(&base_dir, p))
-      .collect::<BTreeSet<_>>(),
-  );
-  if let Some(allow) = overrides.allow_paths.as_mut() {
-    allow.insert(base_dir.clone());
-  }
-  overrides.include_paths = Some(
-    config
-      .include_paths
-      .iter()
-      .map(|p| canonicalize_with_root(&base_dir, p))
-      .collect::<BTreeSet<_>>(),
-  );
-  overrides.library_paths = Some(
-    config
-      .libs
-      .iter()
-      .map(|p| canonicalize_with_root(&base_dir, p))
-      .collect::<Vec<_>>(),
-  );
-  overrides.remappings = Some(
-    config
-      .remappings
-      .iter()
-      .filter_map(|remapping| Remapping::from_str(&remapping.to_string()).ok())
-      .collect(),
-  );
-  overrides.ignored_error_codes = Some(
-    config
-      .ignored_error_codes
-      .iter()
-      .map(|code| (*code).into())
-      .collect(),
-  );
-  if config.deny_warnings {
-    overrides.compiler_severity_filter = Some(Severity::Warning);
-  }
-
-  let config_paths = config.project_paths();
-  let mut paths = ProjectPathsConfig::builder()
-    .root(config_paths.root.clone())
-    .cache(config_paths.cache.clone())
-    .artifacts(config_paths.artifacts.clone())
-    .build_infos(config_paths.build_infos.clone())
-    .sources(config_paths.sources.clone())
-    .tests(config_paths.tests.clone())
-    .scripts(config_paths.scripts.clone())
-    .libs(config_paths.libraries.clone())
-    .remappings(
-      config_paths
-        .remappings
-        .iter()
-        .filter_map(|remapping| Remapping::from_str(&remapping.to_string()).ok())
-        .collect::<Vec<_>>(),
-    )
-    .build_with_root::<FoundrySolcLanguage>(&config_paths.root);
-  paths.slash_paths();
-  let context = ProjectContext {
-    layout: ProjectLayout::Foundry,
-    root: base_dir,
-    paths,
-    virtual_sources_dir: None,
-  };
-
-  Ok((overrides, context))
-}
-
-fn load_hardhat_project(root: &Path) -> Result<(ConfigOverrides, ProjectContext)> {
-  let mut paths = map_napi_error(
-    ProjectPathsConfig::hardhat(root),
-    "Failed to create hardhat project paths",
-  )?;
-  paths.slash_paths();
-
-  let mut overrides = ConfigOverrides::default();
-  overrides.base_dir = Some(paths.root.clone());
-  overrides.cache_enabled = Some(true);
-  overrides.build_info_enabled = Some(true);
-  overrides.no_artifacts = Some(false);
-
-  if let Some((solc_config, cli_settings)) = infer_hardhat_build_info(&paths) {
-    overrides.solc_version = Some(solc_config.version);
-    let settings_json = map_napi_error(
-      serde_json::to_value(&solc_config.settings),
-      "Failed to serialise hardhat compiler settings",
-    )?;
-    let compiler_settings: CompilerSettings = map_napi_error(
-      serde_json::from_value(settings_json),
-      "Failed to convert hardhat compiler settings",
-    )?;
-    overrides.solc_settings = Some(compiler_settings);
-    overrides.allow_paths = Some(
-      cli_settings
-        .allow_paths
-        .into_iter()
-        .map(|p| canonicalize_with_root(&paths.root, &p))
-        .collect::<BTreeSet<_>>(),
-    );
-    if let Some(allow) = overrides.allow_paths.as_mut() {
-      allow.insert(paths.root.clone());
-    }
-    overrides.include_paths = Some(
-      cli_settings
-        .include_paths
-        .into_iter()
-        .map(|p| canonicalize_with_root(&paths.root, &p))
-        .collect::<BTreeSet<_>>(),
-    );
-  }
-
-  overrides.library_paths = Some(
-    paths
-      .libraries
-      .iter()
-      .map(|p| canonicalize_with_root(&paths.root, p))
-      .collect::<Vec<_>>(),
-  );
-
-  let context = ProjectContext {
-    layout: ProjectLayout::Hardhat,
-    root: paths.root.clone(),
-    paths,
-    virtual_sources_dir: None,
-  };
-
-  Ok((overrides, context))
-}
-
-fn infer_hardhat_build_info(
-  paths: &ProjectPathsConfig<FoundrySolcLanguage>,
-) -> Option<(SolcConfig, CliSettingsData)> {
-  let entries = fs::read_dir(&paths.build_infos).ok()?;
-  let mut latest: Option<(SystemTime, PathBuf)> = None;
-
-  for entry in entries.flatten() {
-    let file_type = entry.file_type().ok()?;
-    if !file_type.is_file() {
-      continue;
-    }
-
-    if entry
-      .path()
-      .extension()
-      .and_then(|ext| ext.to_str())
-      .map(|ext| ext != "json")
-      .unwrap_or(true)
-    {
-      continue;
-    }
-
-    let modified = entry
-      .metadata()
-      .and_then(|meta| meta.modified())
-      .unwrap_or(SystemTime::UNIX_EPOCH);
-
-    match &mut latest {
-      Some((time, path)) => {
-        if modified > *time {
-          *time = modified;
-          *path = entry.path();
-        }
-      }
-      None => latest = Some((modified, entry.path())),
-    }
-  }
-
-  let (_, path) = latest?;
-  let build_info: BuildInfo<SolcVersionedInput, CompilerOutput> = BuildInfo::read(&path).ok()?;
-
-  let compiler_config = SolcConfig {
-    version: build_info.solc_version.clone(),
-    settings: build_info.input.input.settings.clone(),
-    language: build_info.input.input.language,
-  };
-
-  let cli_settings = CliSettingsData {
-    allow_paths: build_info
-      .input
-      .cli_settings
-      .allow_paths
-      .iter()
-      .cloned()
-      .collect(),
-    include_paths: build_info
-      .input
-      .cli_settings
-      .include_paths
-      .iter()
-      .cloned()
-      .collect(),
-  };
-
-  Some((compiler_config, cli_settings))
-}
-
-struct CliSettingsData {
-  allow_paths: BTreeSet<PathBuf>,
-  include_paths: BTreeSet<PathBuf>,
-}
-
-fn canonicalize_with_root(root: &Path, path: &Path) -> PathBuf {
-  let joined = if path.is_absolute() {
-    path.to_path_buf()
-  } else {
-    root.join(path)
-  };
-  joined.canonicalize().unwrap_or(joined)
 }

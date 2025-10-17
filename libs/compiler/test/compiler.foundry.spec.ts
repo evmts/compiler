@@ -55,10 +55,10 @@ describe("Compiler.fromFoundryRoot", () => {
     const root = cloneFoundryProject();
     const compiler = Compiler.fromFoundryRoot(root);
     const optimized = compiler.compileContract("Counter", {
-      settings: { optimizer: { enabled: true, runs: 200 } },
+      solcSettings: { optimizer: { enabled: true, runs: 200 } },
     });
     const unoptimized = compiler.compileContract("Counter", {
-      settings: { optimizer: { enabled: false } },
+      solcSettings: { optimizer: { enabled: false } },
     });
 
     const optimizedBytecode = optimized.artifacts[0]?.bytecode?.hex;
@@ -73,7 +73,7 @@ describe("Compiler.fromFoundryRoot", () => {
     const root = cloneFoundryProject();
     const baseline = Compiler.fromFoundryRoot(root);
     const overridden = Compiler.fromFoundryRoot(root, {
-      settings: { optimizer: { runs: 1 } },
+      solcSettings: { optimizer: { runs: 1 } },
     });
 
     const baselineOutput = baseline.compileContract("Counter");

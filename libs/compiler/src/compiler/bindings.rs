@@ -8,18 +8,16 @@ use napi::{Env, JsObject, JsUnknown};
 use serde_json::Value;
 
 use crate::ast::utils::from_js_value;
-use crate::compile::output::{
-  CoreCompileOutput, CoreCompilerError, CoreContractArtifact, CoreSourceLocation,
-};
 use crate::compiler::core::{CompilerCore, CompilerWithContext};
 use crate::compiler::input::CompilationInput;
+use crate::compiler::{
+  CompileOutput, CompilerError, ContractArtifact as JsContractArtifact, ContractBytecode,
+  CoreCompileOutput, CoreCompilerError, CoreContractArtifact, CoreSourceLocation,
+  SourceLocation as JsSourceLocation,
+};
 use crate::internal::config::{parse_compiler_config, CompilerConfig, ResolvedCompilerConfig};
 use crate::internal::errors::{map_napi_error, napi_error};
 use crate::internal::solc;
-use crate::types::{
-  CompileOutput, CompilerError, ContractArtifact as JsContractArtifact, ContractBytecode,
-  SourceLocation as JsSourceLocation,
-};
 
 #[napi]
 pub struct Compiler {

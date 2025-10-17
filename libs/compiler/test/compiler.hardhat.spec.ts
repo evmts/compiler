@@ -54,10 +54,10 @@ describe("Compiler.fromHardhatRoot", () => {
   test("per-call overrides take precedence over inferred build info", () => {
     const compiler = Compiler.fromHardhatRoot(HARDHAT_PROJECT);
     const optimized = compiler.compileContract("SimpleStorage", {
-      settings: { optimizer: { enabled: true, runs: 200 } },
+      solcSettings: { optimizer: { enabled: true, runs: 200 } },
     });
     const unoptimized = compiler.compileContract("SimpleStorage", {
-      settings: { optimizer: { enabled: false } },
+      solcSettings: { optimizer: { enabled: false } },
     });
 
     const optimizedBytecode = optimized.artifacts[0]?.bytecode?.hex;

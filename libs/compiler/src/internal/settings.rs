@@ -1,18 +1,12 @@
 use std::collections::BTreeMap;
 
-use foundry_compilers::artifacts::Settings;
+use foundry_compilers::artifacts::{output_selection::OutputSelection, Settings};
 use napi::bindgen_prelude::Result;
 use serde::{Deserialize, Serialize};
 
-use super::errors::map_napi_error;
+use crate::internal::errors::map_napi_error;
 
 /// Full compiler settings accepted by Foundry's solc wrapper.
-///
-/// This struct mirrors [`foundry_compilers::artifacts::Settings`] and the nested
-/// configuration types, but it is shaped for ergonomic consumption from
-/// JavaScript. All fields are optional so callers can provide partial objects;
-/// omitted values fall back to solc's defaults when converted back into the
-/// Foundry representation.
 #[napi(object)]
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -63,7 +57,7 @@ impl CompilerSettings {
   }
 }
 
-fn merge_settings_json(base: &mut serde_json::Value, overrides: serde_json::Value) {
+pub(crate) fn merge_settings_json(base: &mut serde_json::Value, overrides: serde_json::Value) {
   match (base, overrides) {
     (serde_json::Value::Object(base_map), serde_json::Value::Object(overrides_map)) => {
       for (key, value) in overrides_map {
@@ -201,10 +195,8 @@ pub enum RevertStrings {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ModelCheckerEngine {
-  Default,
-  All,
   Bmc,
-  Chc,
+  None,
 }
 
 #[napi(string_enum)]
@@ -212,13 +204,9 @@ pub enum ModelCheckerEngine {
 #[serde(rename_all = "camelCase")]
 pub enum ModelCheckerTarget {
   Assert,
-  Underflow,
-  Overflow,
-  DivByZero,
-  ConstantCondition,
-  PopEmptyArray,
-  OutOfBounds,
-  Balance,
+  Contract,
+  External,
+  Public,
 }
 
 #[napi(string_enum)]
@@ -233,19 +221,24 @@ pub enum ModelCheckerInvariant {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ModelCheckerSolver {
-  Cvc4,
-  Eld,
-  Smtlib2,
   Z3,
+  Eld,
+  Cvc4,
+  EldStrict,
+}
+
+#[napi(string_enum)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ModelCheckerTargetType {
+  RecursiveDepth,
+  BoundedLoop,
 }
 
 #[napi(string_enum)]
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum EvmVersion {
-  Homestead,
-  TangerineWhistle,
-  SpuriousDragon,
   Byzantium,
   Constantinople,
   Petersburg,
@@ -253,9 +246,48 @@ pub enum EvmVersion {
   Berlin,
   London,
   Paris,
-  Prague,
   Shanghai,
   Cancun,
+  Prague,
+}
+
+#[napi(string_enum)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ModelCheckerInvariantKind {
+  Reentrancy,
+  Contract,
+}
+
+pub fn merge_settings(base: &Settings, overrides: Option<&CompilerSettings>) -> Result<Settings> {
+  match overrides {
+    Some(settings) => {
+      let merged = settings.clone().overlay(base)?;
+      sanitize_settings(&merged)
+    }
+    None => Ok(base.clone()),
+  }
+}
+
+pub fn sanitize_settings(settings: &Settings) -> Result<Settings> {
+  let mut merged = settings.clone();
+  if output_selection_is_effectively_empty(&merged.output_selection) {
+    merged.output_selection = Settings::default().output_selection;
+  }
+  Ok(merged)
+}
+
+pub fn output_selection_is_effectively_empty(selection: &OutputSelection) -> bool {
+  let map = selection.as_ref();
+  if map.is_empty() {
+    return true;
+  }
+
+  map.values().all(|contracts| {
+    contracts
+      .values()
+      .all(|outputs| outputs.iter().all(|output| output.trim().is_empty()))
+  })
 }
 
 #[cfg(test)]
@@ -263,35 +295,43 @@ mod tests {
   use super::*;
 
   #[test]
-  fn optimizer_override_retains_default_outputs() {
-    let mut settings = CompilerSettings::default();
-    settings.optimizer = Some(OptimizerSettings {
-      enabled: Some(true),
-      runs: Some(1),
-      details: None,
-    });
+  fn sanitize_restores_default_output_selection() {
+    let mut base = Settings::default();
+    base.output_selection = OutputSelection::default();
+    assert!(output_selection_is_effectively_empty(
+      &base.output_selection
+    ));
 
-    let merged = settings.overlay(&Settings::default()).expect("settings");
+    let sanitised = sanitize_settings(&base).expect("sanitize");
     assert!(
-      !merged.output_selection.as_ref().is_empty(),
-      "output selection should contain default entries"
+      !output_selection_is_effectively_empty(&sanitised.output_selection),
+      "sanitised selection should fall back to defaults"
     );
   }
 
   #[test]
-  fn overlay_preserves_existing_defaults() {
+  fn merge_preserves_base_when_no_overrides() {
+    let base = Settings::default();
+    let merged = merge_settings(&base, None).expect("merge");
+    assert_eq!(
+      serde_json::to_value(&base).unwrap(),
+      serde_json::to_value(&merged).unwrap()
+    );
+  }
+
+  #[test]
+  fn merge_applies_overrides() {
     let base = Settings::default();
     let mut overrides = CompilerSettings::default();
+    overrides.via_ir = Some(true);
     overrides.optimizer = Some(OptimizerSettings {
       enabled: Some(true),
-      runs: Some(1),
+      runs: Some(200),
       details: None,
     });
-
-    let merged = overrides.overlay(&base).expect("settings");
-    assert!(
-      !merged.output_selection.as_ref().is_empty(),
-      "output selection should not be empty after overlay"
-    );
+    let merged = merge_settings(&base, Some(&overrides)).expect("merge");
+    assert_eq!(merged.via_ir, Some(true));
+    assert_eq!(merged.optimizer.enabled, Some(true));
+    assert_eq!(merged.optimizer.runs, Some(200));
   }
 }
