@@ -6,9 +6,9 @@ use foundry_compilers::artifacts::{
 };
 use napi::bindgen_prelude::*;
 use napi::{JsObject, JsUnknown};
-use serde_json::json;
+use serde_json::{json, Value};
 
-use crate::ast::utils::sanitize_ast_value;
+use crate::ast::utils::{from_js_value, sanitize_ast_value};
 use crate::compile::from_standard_json;
 use crate::internal::{
   errors::{map_napi_error, napi_error},
@@ -160,6 +160,70 @@ impl Compiler {
       CompileInput::Ast(ast_sources) => self.compile_ast_sources(config, ast_sources),
     }
   }
+
+  /// Compile multiple sources supplied as a path keyed lookup.
+  #[napi(
+    ts_args_type = "sources: Record<string, string | object>, options?: CompilerOptions | undefined"
+  )]
+  pub fn compile_sources(
+    &self,
+    env: Env,
+    sources: JsObject,
+    options: Option<JsUnknown>,
+  ) -> Result<CompileOutput> {
+    let parsed = parse_compiler_options(&env, options)?;
+    let config = self.resolve_config(parsed.as_ref())?;
+
+    let raw_entries: BTreeMap<String, Value> =
+      from_js_value(&env, sources.into_unknown()).map_err(|err| napi_error(err.to_string()))?;
+    if raw_entries.is_empty() {
+      return Err(napi_error("compileSources requires at least one entry."));
+    }
+
+    let mut string_entries: BTreeMap<String, String> = BTreeMap::new();
+    let mut ast_entries: BTreeMap<String, SourceUnit> = BTreeMap::new();
+
+    for (path, value) in raw_entries {
+      match value {
+        Value::String(source) => {
+          string_entries.insert(path, source);
+        }
+        Value::Object(_) => {
+          let unit: SourceUnit =
+            map_napi_error(serde_json::from_value(value), "Failed to parse AST entry")?;
+          ast_entries.insert(path, unit);
+        }
+        _ => {
+          return Err(napi_error(
+            "compileSources expects each entry to be a Solidity/Yul source string or a Solidity AST object.",
+          ));
+        }
+      }
+    }
+
+    if !string_entries.is_empty() && !ast_entries.is_empty() {
+      return Err(napi_error(
+        "compileSources does not support mixing inline source strings with AST entries in the same call.",
+      ));
+    }
+
+    if !ast_entries.is_empty() {
+      return self.compile_ast_sources(config, ast_entries);
+    }
+
+    let solc_sources = sources_from_map(string_entries);
+    match config.language {
+      FoundrySolcLanguage::Solidity => {
+        self.compile_standard_sources(config, solc_sources, FoundrySolcLanguage::Solidity)
+      }
+      FoundrySolcLanguage::Yul => {
+        self.compile_standard_sources(config, solc_sources, FoundrySolcLanguage::Yul)
+      }
+      other => Err(napi_error(format!(
+        "Unsupported solcLanguage \"{other:?}\" for compileSources."
+      ))),
+    }
+  }
 }
 
 enum CompileInput {
@@ -167,10 +231,10 @@ enum CompileInput {
   Ast(BTreeMap<String, SourceUnit>),
 }
 
-const DEFAULT_VIRTUAL_SOURCE: &str = "__VIRTUAL__.sol";
+const VIRTUAL_SOURCE_PATH: &str = "__VIRTUAL__.sol";
 
 fn single_virtual_source(source: String) -> Sources {
-  let path = PathBuf::from(DEFAULT_VIRTUAL_SOURCE);
+  let path = PathBuf::from(VIRTUAL_SOURCE_PATH);
   let mut sources = Sources::new();
   sources.insert(path, Source::new(source));
   sources
@@ -178,6 +242,14 @@ fn single_virtual_source(source: String) -> Sources {
 
 fn single_virtual_ast(ast: SourceUnit) -> BTreeMap<String, SourceUnit> {
   let mut sources = BTreeMap::new();
-  sources.insert(DEFAULT_VIRTUAL_SOURCE.to_string(), ast);
+  sources.insert(VIRTUAL_SOURCE_PATH.to_string(), ast);
+  sources
+}
+
+fn sources_from_map(entries: BTreeMap<String, String>) -> Sources {
+  let mut sources = Sources::new();
+  for (path, source) in entries {
+    sources.insert(PathBuf::from(path), Source::new(source));
+  }
   sources
 }

@@ -18,7 +18,7 @@ use crate::internal::{
   solc,
 };
 
-const DEFAULT_VIRTUAL_SOURCE: &str = "__VIRTUAL__.sol";
+const VIRTUAL_SOURCE_PATH: &str = "__VIRTUAL__.sol";
 
 /// High-level helper for manipulating Solidity ASTs prior to recompilation.
 #[napi]
@@ -216,7 +216,7 @@ impl Ast {
     let settings = Self::sanitize_settings(Some(config.settings.clone()));
 
     let ast = map_napi_error(
-      parser::parse_source_ast(source, DEFAULT_VIRTUAL_SOURCE, &solc, &settings),
+      parser::parse_source_ast(source, VIRTUAL_SOURCE_PATH, &solc, &settings),
       "Failed to parse target source",
     )?;
 
@@ -606,7 +606,7 @@ contract Target {
     let input = json!({
       "language": "SolidityAST",
       "sources": {
-        DEFAULT_VIRTUAL_SOURCE: {
+        VIRTUAL_SOURCE_PATH: {
           "ast": ast_value
         }
       },

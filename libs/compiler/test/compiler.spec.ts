@@ -425,6 +425,56 @@ describe("Compiler.compileSource with AST and Yul inputs", () => {
   });
 });
 
+describe("Compiler.compileSources", () => {
+  const createAst = () => new Ast({ solcVersion: DEFAULT_SOLC_VERSION });
+
+  test("compiles multiple solidity entries by path", () => {
+    const compiler = new Compiler();
+    const output = compiler.compileSources({
+      "InlineExample.sol": INLINE_SOURCE,
+      "WarningContract.sol": WARNING_SOURCE,
+    });
+
+    const names = output.artifacts.map((artifact) => artifact.contractName);
+    expect(names).toEqual(
+      expect.arrayContaining(["InlineExample", "WarningContract"]),
+    );
+  });
+
+  test("compiles Yul sources when supplied as a map", () => {
+    const compiler = new Compiler();
+    const output = compiler.compileSources(
+      {
+        "Echo.yul": YUL_SOURCE,
+      },
+      { solcLanguage: SolcLanguage.Yul },
+    );
+
+    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.artifacts).toHaveLength(1);
+  });
+
+  test("compiles AST entries keyed by path", () => {
+    const ast = createAst().fromSource(INLINE_SOURCE).ast();
+    const compiler = new Compiler();
+    const output = compiler.compileSources({ "InlineExample.sol": ast });
+
+    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.artifacts[0].contractName).toBe("InlineExample");
+  });
+
+  test("rejects mixing ast and source strings", () => {
+    const ast = createAst().fromSource(INLINE_SOURCE).ast();
+    const compiler = new Compiler();
+    expect(() =>
+      compiler.compileSources({
+        "InlineExample.sol": INLINE_SOURCE,
+        "InlineExample.ast": ast,
+      }),
+    ).toThrow(/does not support mixing inline source strings/i);
+  });
+});
+
 describe("Path helpers", () => {
   test("createHardhatPaths mirrors the expected project layout", () => {
     const paths = createHardhatPaths(HARDHAT_PROJECT);
