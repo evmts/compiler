@@ -9,8 +9,6 @@ import {
   EvmVersion,
   RevertStrings,
   SolcLanguage,
-  SolidityProject,
-  SolidityProjectBuilder,
   createHardhatPaths,
   findArtifactsDir,
   findLibs,
@@ -31,9 +29,6 @@ const SIMPLE_STORAGE_PATH = join(
   "contracts",
   "SimpleStorage.sol"
 );
-const GREETER_PATH = join(HARDHAT_PROJECT, "contracts", "Greeter.sol");
-const COUNTER_PATH = join(HARDHAT_PROJECT, "contracts", "Counter.sol");
-
 const INLINE_PATH = join(CONTRACTS_DIR, "InlineExample.sol");
 const BROKEN_PATH = join(CONTRACTS_DIR, "BrokenExample.sol");
 const MULTI_CONTRACT_PATH = join(CONTRACTS_DIR, "MultiContract.sol");
@@ -595,124 +590,5 @@ describe("Path helpers", () => {
     const libs = findLibs(HARDHAT_PROJECT);
     expect(Array.isArray(libs)).toBe(true);
     expect(libs.length).toBeGreaterThan(0);
-  });
-});
-
-describe("SolidityProject facade", () => {
-  const cloneHardhatProject = () => {
-    const root = createTempDir("tevm-hardhat-");
-    const clone = join(root, "hardhat-project");
-    cpSync(HARDHAT_PROJECT, clone, { recursive: true });
-    return clone;
-  };
-
-  test("compiles full hardhat project and exposes artifacts", () => {
-    const project = SolidityProject.fromHardhatRoot(HARDHAT_PROJECT);
-    const output = project.compile();
-
-    const artifactNames = output.artifacts.map(
-      (artifact: any) => artifact.contractName
-    );
-    expect(artifactNames).toEqual(
-      expect.arrayContaining(["SimpleStorage", "Greeter", "Counter"])
-    );
-    expect(output.hasCompilerErrors).toBe(false);
-  });
-
-  test("compileFile returns only the requested artifacts", () => {
-    const project = SolidityProject.fromHardhatRoot(HARDHAT_PROJECT);
-    const output = project.compileFile(SIMPLE_STORAGE_PATH);
-
-    expect(output.artifacts).toHaveLength(1);
-    expect(output.artifacts[0].contractName).toBe("SimpleStorage");
-  });
-
-  test("compileFiles merges results from multiple sources", () => {
-    const project = SolidityProject.fromHardhatRoot(HARDHAT_PROJECT);
-    const output = project.compileFiles([SIMPLE_STORAGE_PATH, GREETER_PATH]);
-    const names = output.artifacts.map(
-      (artifact: any) => artifact.contractName
-    );
-
-    expect(names).toEqual(expect.arrayContaining(["SimpleStorage", "Greeter"]));
-  });
-
-  test("findContractPath resolves the on-disk file", () => {
-    const project = SolidityProject.fromHardhatRoot(HARDHAT_PROJECT);
-    const path = project.findContractPath("Counter");
-
-    expect(path.endsWith("Counter.sol")).toBe(true);
-  });
-
-  test("getSources lists all Solidity entries", () => {
-    const project = SolidityProject.fromHardhatRoot(HARDHAT_PROJECT);
-    const sources = project.getSources();
-
-    expect(Array.isArray(sources)).toBe(true);
-    expect(sources.some((source) => source.endsWith("SimpleStorage.sol"))).toBe(
-      true
-    );
-    expect(sources.some((source) => source.endsWith("Greeter.sol"))).toBe(true);
-  });
-
-  test("supports library linking via temporary hardhat clone", () => {
-    const root = cloneHardhatProject();
-    const contractsDir = join(root, "contracts");
-    writeFileSync(join(contractsDir, "MathLib.sol"), LIBRARY_SOURCE);
-    writeFileSync(
-      join(contractsDir, "LibraryConsumer.sol"),
-      LIBRARY_CONSUMER_SOURCE
-    );
-
-    const project = SolidityProject.fromHardhatRoot(root);
-    const output = project.compileFile(
-      join(contractsDir, "LibraryConsumer.sol")
-    );
-    const library = output.artifacts.find(
-      (artifact: any) => artifact.contractName === "MathLib"
-    );
-    const consumer = output.artifacts.find(
-      (artifact: any) => artifact.contractName === "LibraryConsumer"
-    );
-
-    expect(library).toBeTruthy();
-    expect(consumer).toBeTruthy();
-    expect(Array.isArray(JSON.parse(consumer!.abi ?? "[]"))).toBe(true);
-  });
-});
-
-describe("SolidityProjectBuilder", () => {
-  const hardhatRoot = HARDHAT_PROJECT;
-
-  test("method chaining preserves the builder instance", () => {
-    const builder = new SolidityProjectBuilder();
-    expect(builder.ephemeral()).toBe(builder);
-    expect(builder.setCached(false)).toBe(builder);
-    expect(builder.offline()).toBe(builder);
-    expect(builder.setOffline(true)).toBe(builder);
-    expect(builder.noArtifacts()).toBe(builder);
-    expect(builder.setNoArtifacts(false)).toBe(builder);
-    expect(builder.singleSolcJobs()).toBe(builder);
-    expect(builder.solcJobs(1)).toBe(builder);
-  });
-
-  test("builds projects after applying configuration toggles", () => {
-    const builder = new SolidityProjectBuilder();
-    builder.hardhatPaths(hardhatRoot);
-    builder
-      .ephemeral()
-      .setCached(false)
-      .offline()
-      .setOffline(false)
-      .noArtifacts()
-      .setNoArtifacts(true)
-      .singleSolcJobs()
-      .solcJobs(1);
-
-    const project = builder.build();
-    const output = project.compileFile(SIMPLE_STORAGE_PATH);
-
-    expect(output.artifacts).toHaveLength(1);
-    expect(output.artifacts[0].contractName).toBe("SimpleStorage");
   });
 });

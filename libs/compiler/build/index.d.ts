@@ -59,6 +59,8 @@ export declare class Compiler {
    * once and cached for subsequent compilations.
    */
   constructor(options?: CompilerOptions | undefined)
+  static fromFoundryRoot(root: string, options?: CompilerOptions | undefined): Compiler
+  static fromHardhatRoot(root: string, options?: CompilerOptions | undefined): Compiler
   /**
    * Compile Solidity/Yul source text or a pre-existing AST using the configured solc version.
    *
@@ -75,6 +77,8 @@ export declare class Compiler {
   compileSources(sources: Record<string, string | object>, options?: CompilerOptions | undefined): CompileOutput
   /** Compile sources from on-disk files identified by their paths. */
   compileFiles(paths: string[], options?: CompilerOptions | undefined): CompileOutput
+  compileProject(options?: unknown | undefined | null): CompileOutput
+  compileContract(contractName: string, options?: unknown | undefined | null): CompileOutput
 }
 
 export declare class SolidityProject {

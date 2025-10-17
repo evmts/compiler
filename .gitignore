@@ -10,6 +10,8 @@ libs/compiler/target
 # Hardhat cache
 libs/compiler/test/fixtures/hardhat-project/artifacts/
 libs/compiler/test/fixtures/hardhat-project/cache/
+libs/compiler/test/fixtures/foundry-project/cache/
+libs/compiler/test/fixtures/foundry-project/out/
 
 # dependencies
 node_modules

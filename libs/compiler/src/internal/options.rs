@@ -160,6 +160,16 @@ impl SolcConfig {
   }
 }
 
+impl SolcConfig {
+  pub fn overlay(&self, overrides: &SolcConfig) -> Self {
+    SolcConfig {
+      version: overrides.version.clone(),
+      settings: overrides.settings.clone(),
+      language: overrides.language,
+    }
+  }
+}
+
 pub(crate) fn default_compiler_settings() -> Settings {
   Settings::default()
 }

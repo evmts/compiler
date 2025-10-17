@@ -1,16 +1,25 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
+use std::str::FromStr;
 
-use foundry_compilers::artifacts::{
-  ast::SourceUnit, CompilerOutput, SolcInput, SolcLanguage as FoundrySolcLanguage, Source, Sources,
+use foundry_compilers::{
+  artifacts::{
+    ast::SourceUnit, remappings::Remapping as FoundryRemapping, CompilerOutput, SolcInput,
+    SolcLanguage as FoundrySolcLanguage, Source, Sources,
+  },
+  buildinfo::BuildInfo,
+  solc::{CliSettings, SolcCompiler, SolcSettings, SolcVersionedInput},
+  Project, ProjectBuilder, ProjectCompileOutput, ProjectPathsConfig,
 };
+use foundry_config::{Config as FoundryConfig, SolcReq};
 use napi::bindgen_prelude::*;
 use napi::{JsObject, JsUnknown};
 use serde_json::{json, Value};
 
 use crate::ast::utils::{from_js_value, sanitize_ast_value};
-use crate::compile::from_standard_json;
+use crate::compile::{from_standard_json, output};
 use crate::internal::{
   errors::{map_napi_error, napi_error},
   options::{
@@ -23,12 +32,26 @@ use crate::types::CompileOutput;
 /// High-level façade for compiling Solidity sources with a pre-selected solc version.
 #[napi]
 pub struct Compiler {
-  config: SolcConfig,
+  default_config: SolcConfig,
+  constructor_overrides: Option<CompilerOptions>,
+  project: Option<ProjectState>,
 }
 
 impl Compiler {
   fn resolve_config(&self, overrides: Option<&CompilerOptions>) -> Result<SolcConfig> {
-    self.config.merge(overrides)
+    let mut config = self.default_config.clone();
+
+    if let Some(constructor) = &self.constructor_overrides {
+      config = config.merge(Some(constructor))?;
+    }
+
+    if let Some(project) = &self.project {
+      if let Some(inferred) = &project.inferred {
+        config = config.overlay(inferred);
+      }
+    }
+
+    config.merge(overrides)
   }
 
   fn compile_standard_sources(
@@ -74,6 +97,247 @@ impl Compiler {
       map_napi_error(solc.compile_as(&input), "Solc compilation failed")?;
     Ok(from_standard_json(output))
   }
+
+  fn compile_with_project<F>(
+    &self,
+    config: SolcConfig,
+    compile_fn: F,
+    context: &str,
+  ) -> Result<CompileOutput>
+  where
+    F: FnOnce(
+      &Project<SolcCompiler>,
+    ) -> std::result::Result<
+      ProjectCompileOutput<SolcCompiler>,
+      foundry_compilers::error::SolcError,
+    >,
+  {
+    let state = self
+      .project
+      .as_ref()
+      .ok_or_else(|| napi_error("Project-aware compilation requires a root-bound compiler"))?;
+
+    solc::ensure_installed(&config.version)?;
+
+    let project = map_napi_error(
+      state.build_project(&config),
+      "Failed to configure Solidity project",
+    )?;
+    let output = map_napi_error(compile_fn(&project), context)?;
+
+    Ok(output::into_compile_output(output))
+  }
+}
+
+#[derive(Clone, Copy)]
+enum ProjectLayout {
+  Hardhat,
+  Foundry,
+}
+
+struct ProjectState {
+  _layout: ProjectLayout,
+  _root: PathBuf,
+  paths: ProjectPathsConfig<FoundrySolcLanguage>,
+  cached: bool,
+  offline: bool,
+  no_artifacts: bool,
+  solc_jobs: Option<usize>,
+  cli_settings: Option<CliSettings>,
+  inferred: Option<SolcConfig>,
+}
+
+impl ProjectState {
+  fn build_project(
+    &self,
+    config: &SolcConfig,
+  ) -> std::result::Result<Project<SolcCompiler>, foundry_compilers::error::SolcError> {
+    let mut builder = ProjectBuilder::default().paths(self.paths.clone());
+
+    if !self.cached {
+      builder = builder.set_cached(false);
+    }
+    if self.offline {
+      builder = builder.set_offline(true);
+    }
+    if self.no_artifacts {
+      builder = builder.set_no_artifacts(true);
+    }
+    if let Some(jobs) = self.solc_jobs {
+      if jobs == 1 {
+        builder = builder.single_solc_jobs();
+      } else {
+        builder = builder.solc_jobs(jobs);
+      }
+    }
+
+    let cli_settings = self.cli_settings.clone().unwrap_or_default();
+    let settings = SolcSettings {
+      settings: config.settings.clone(),
+      cli_settings,
+    };
+
+    builder.settings(settings).build(SolcCompiler::default())
+  }
+}
+
+fn build_foundry_state(root: &Path, base_config: &SolcConfig) -> Result<ProjectState> {
+  let figment = FoundryConfig::figment_with_root(root);
+  let config = map_napi_error(
+    FoundryConfig::try_from(figment),
+    "Failed to load foundry configuration",
+  )?
+  .sanitized()
+  .canonic();
+
+  let config_paths = config.project_paths();
+  let remappings: Vec<FoundryRemapping> = config_paths
+    .remappings
+    .iter()
+    .filter_map(|remapping| FoundryRemapping::from_str(&remapping.to_string()).ok())
+    .collect();
+
+  let paths_builder = ProjectPathsConfig::builder()
+    .root(config_paths.root.clone())
+    .cache(config_paths.cache.clone())
+    .artifacts(config_paths.artifacts.clone())
+    .build_infos(config_paths.build_infos.clone())
+    .sources(config_paths.sources.clone())
+    .tests(config_paths.tests.clone())
+    .scripts(config_paths.scripts.clone())
+    .libs(config_paths.libraries.clone())
+    .remappings(remappings);
+
+  let mut paths =
+    paths_builder.build_with_root::<FoundrySolcLanguage>(config_paths.root.clone());
+  paths.slash_paths();
+  let ethers_settings = map_napi_error(
+    config.solc_settings(),
+    "Failed to derive foundry compiler settings",
+  )?;
+  let settings_json = map_napi_error(
+    serde_json::to_value(&ethers_settings),
+    "Failed to serialise foundry compiler settings",
+  )?;
+  let settings: foundry_compilers::artifacts::Settings = map_napi_error(
+    serde_json::from_value(settings_json),
+    "Failed to convert foundry compiler settings",
+  )?;
+
+  let version = config
+    .solc
+    .as_ref()
+    .and_then(|req| match req {
+      SolcReq::Version(version) => Some(version.clone()),
+      _ => None,
+    })
+    .unwrap_or_else(|| base_config.version.clone());
+
+  let inferred = SolcConfig {
+    version,
+    settings,
+    language: FoundrySolcLanguage::Solidity,
+  };
+
+  Ok(ProjectState {
+    _layout: ProjectLayout::Foundry,
+    _root: paths.root.clone(),
+    paths,
+    cached: config.cache,
+    offline: config.offline,
+    no_artifacts: false,
+    solc_jobs: None,
+    cli_settings: Some(CliSettings {
+      extra_args: Vec::new(),
+      allow_paths: config
+        .allow_paths
+        .iter()
+        .cloned()
+        .chain(std::iter::once(config.__root.0.clone()))
+        .collect::<BTreeSet<_>>(),
+      base_path: Some(config.__root.0.clone()),
+      include_paths: config
+        .include_paths
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>(),
+    }),
+    inferred: Some(inferred),
+  })
+}
+
+fn build_hardhat_state(root: &Path, _base_config: &SolcConfig) -> Result<ProjectState> {
+  let mut paths = map_napi_error(
+    ProjectPathsConfig::hardhat(root),
+    "Failed to create hardhat project paths",
+  )?;
+  paths.slash_paths();
+
+  let inferred = infer_hardhat_config(&paths);
+
+  Ok(ProjectState {
+    _layout: ProjectLayout::Hardhat,
+    _root: paths.root.clone(),
+    paths,
+    cached: true,
+    offline: false,
+    no_artifacts: false,
+    solc_jobs: None,
+    cli_settings: inferred.as_ref().map(|(_, cli)| cli.clone()),
+    inferred: inferred.map(|(config, _)| config),
+  })
+}
+
+fn infer_hardhat_config(
+  paths: &ProjectPathsConfig<FoundrySolcLanguage>,
+) -> Option<(SolcConfig, CliSettings)> {
+  let entries = fs::read_dir(&paths.build_infos).ok()?;
+  let mut latest: Option<(SystemTime, PathBuf)> = None;
+
+  for entry in entries.flatten() {
+    let file_type = entry.file_type().ok()?;
+    if !file_type.is_file() {
+      continue;
+    }
+
+    if entry
+      .path()
+      .extension()
+      .and_then(|ext| ext.to_str())
+      .map(|ext| ext != "json")
+      .unwrap_or(true)
+    {
+      continue;
+    }
+
+    let modified = entry
+      .metadata()
+      .and_then(|meta| meta.modified())
+      .unwrap_or(SystemTime::UNIX_EPOCH);
+
+    match &mut latest {
+      Some((time, path)) => {
+        if modified > *time {
+          *time = modified;
+          *path = entry.path();
+        }
+      }
+      None => latest = Some((modified, entry.path())),
+    }
+  }
+
+  let (_, path) = latest?;
+
+  let build_info: BuildInfo<SolcVersionedInput, CompilerOutput> =
+    BuildInfo::read(&path).ok()?;
+
+  let inferred = SolcConfig {
+    version: build_info.solc_version.clone(),
+    settings: build_info.input.input.settings.clone(),
+    language: build_info.input.input.language,
+  };
+
+  Some((inferred, build_info.input.cli_settings.clone()))
 }
 
 /// Static helpers and configurable entry points exposed to JavaScript.
@@ -112,11 +376,77 @@ impl Compiler {
     let parsed = parse_compiler_options(&env, options)?;
     let default_settings = default_compiler_settings();
     let default_language = solc::default_language();
-    let config = SolcConfig::new(&default_language, &default_settings, parsed.as_ref())?;
+    let default_config =
+      SolcConfig::new::<CompilerOptions>(&default_language, &default_settings, None)?;
 
-    solc::ensure_installed(&config.version)?;
+    let constructor_overrides = parsed;
+    let effective_config = default_config.merge(constructor_overrides.as_ref())?;
 
-    Ok(Compiler { config })
+    solc::ensure_installed(&effective_config.version)?;
+
+    Ok(Compiler {
+      default_config,
+      constructor_overrides,
+      project: None,
+    })
+  }
+
+  #[napi(
+    factory,
+    ts_args_type = "root: string, options?: CompilerOptions | undefined"
+  )]
+  pub fn from_foundry_root(env: Env, root: String, options: Option<JsUnknown>) -> Result<Self> {
+    let parsed = parse_compiler_options(&env, options)?;
+    let default_settings = default_compiler_settings();
+    let default_language = solc::default_language();
+    let default_config =
+      SolcConfig::new::<CompilerOptions>(&default_language, &default_settings, None)?;
+    let constructor_overrides = parsed;
+    let effective_config = default_config.merge(constructor_overrides.as_ref())?;
+
+    solc::ensure_installed(&effective_config.version)?;
+
+    let root_path = PathBuf::from(&root);
+    let state = build_foundry_state(&root_path, &effective_config)?;
+
+    if let Some(inferred) = &state.inferred {
+      solc::ensure_installed(&inferred.version)?;
+    }
+
+    Ok(Compiler {
+      default_config,
+      constructor_overrides,
+      project: Some(state),
+    })
+  }
+
+  #[napi(
+    factory,
+    ts_args_type = "root: string, options?: CompilerOptions | undefined"
+  )]
+  pub fn from_hardhat_root(env: Env, root: String, options: Option<JsUnknown>) -> Result<Self> {
+    let parsed = parse_compiler_options(&env, options)?;
+    let default_settings = default_compiler_settings();
+    let default_language = solc::default_language();
+    let default_config =
+      SolcConfig::new::<CompilerOptions>(&default_language, &default_settings, None)?;
+    let constructor_overrides = parsed;
+    let effective_config = default_config.merge(constructor_overrides.as_ref())?;
+
+    solc::ensure_installed(&effective_config.version)?;
+
+    let root_path = PathBuf::from(&root);
+    let state = build_hardhat_state(&root_path, &effective_config)?;
+
+    if let Some(inferred) = &state.inferred {
+      solc::ensure_installed(&inferred.version)?;
+    }
+
+    Ok(Compiler {
+      default_config,
+      constructor_overrides,
+      project: Some(state),
+    })
   }
 
   /// Compile Solidity/Yul source text or a pre-existing AST using the configured solc version.
@@ -324,6 +654,7 @@ impl Compiler {
           detected_language = Some(language);
         }
       }
+
     }
 
     if !ast_entries.is_empty() {
@@ -344,6 +675,39 @@ impl Compiler {
 
     let sources = sources_from_map(string_entries);
     self.compile_standard_sources(config, sources, final_language)
+  }
+
+  #[napi]
+  pub fn compile_project(
+    &self,
+    env: Env,
+    options: Option<JsUnknown>,
+  ) -> Result<CompileOutput> {
+    let parsed = parse_compiler_options(&env, options)?;
+    let config = self.resolve_config(parsed.as_ref())?;
+
+    self.compile_with_project(config, |project| project.compile(), "Project compilation failed")
+  }
+
+  #[napi]
+  pub fn compile_contract(
+    &self,
+    env: Env,
+    contract_name: String,
+    options: Option<JsUnknown>,
+  ) -> Result<CompileOutput> {
+    let parsed = parse_compiler_options(&env, options)?;
+    let config = self.resolve_config(parsed.as_ref())?;
+    let name = contract_name.clone();
+
+    self.compile_with_project(
+      config,
+      move |project| {
+        let path = project.find_contract_path(&name)?;
+        project.compile_file(path)
+      },
+      "Contract compilation failed",
+    )
   }
 }
 
