@@ -23,26 +23,26 @@ ast/
 ```rust
 let mut ast = Ast::new(Default::default())
     .from_source(target_source.to_owned(), None)
-    .inject_shadow_source(fragment.to_owned(), None)
+    .inject_shadow(fragment.to_owned(), None)
     .expose_internal_variables(None)
     .expose_internal_functions(None);
 
-let instrumented = ast.get();
+let instrumented = ast.ast();
 ```
 
 Key entry points:
 
-- `from_source` / `from_ast` – hydrate the helper
-- `inject_shadow_source` / `inject_shadow_ast` – stitch fragment nodes
+- `from_source` – hydrate from Solidity text or an existing AST object
+- `inject_shadow` – stitch fragment nodes into the target contract
 - `expose_internal_*` – promote private members to `public`
-- `get` – retrieve the JSON representation for compilation
+- `ast` – retrieve the JSON representation for compilation
 
 ## Implementation Notes
 
 1. **Parsing** – uses `stopAfter = "parsing"` to obtain syntax-only `SourceUnit`s.
 2. **Stitching** – renumbers fragment IDs before inserting so they remain unique.
 3. **Sanitising** – removes `null` fields and restores empty structures solc expects.
-4. **Recompilation** – callers feed `get()` into `Compiler::compileAst` to produce bytecode.
+4. **Recompilation** – callers feed `ast()` into `Compiler::compile_source` with an object target to produce bytecode.
 
 ## Testing
 

@@ -1,23 +1,21 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use foundry_compilers::artifacts::{
-  ast::SourceUnit, CompilerOutput, Settings, SolcInput, SolcLanguage, Source, Sources,
+  ast::SourceUnit, CompilerOutput, SolcInput, SolcLanguage as FoundrySolcLanguage, Source, Sources,
 };
-use foundry_compilers::solc::Solc;
 use napi::bindgen_prelude::*;
+use napi::{JsObject, JsUnknown};
 use serde_json::json;
 
 use crate::ast::utils::sanitize_ast_value;
 use crate::compile::from_standard_json;
 use crate::internal::{
-  errors::map_napi_error,
+  errors::{map_napi_error, napi_error},
   options::{default_compiler_settings, parse_compiler_options, CompilerOptions, SolcConfig},
   solc,
 };
 use crate::types::CompileOutput;
-use napi::JsUnknown;
-
-const DEFAULT_VIRTUAL_SOURCE: &str = "Instrumented.sol";
 
 /// High-level façade for compiling Solidity sources with a pre-selected solc version.
 #[napi]
@@ -28,6 +26,50 @@ pub struct Compiler {
 impl Compiler {
   fn resolve_config(&self, overrides: Option<&CompilerOptions>) -> Result<SolcConfig> {
     self.config.merge(overrides)
+  }
+
+  fn compile_standard_sources(
+    &self,
+    config: SolcConfig,
+    sources: Sources,
+    language: FoundrySolcLanguage,
+  ) -> Result<CompileOutput> {
+    let solc = solc::ensure_installed(&config.version)?;
+    let mut input = SolcInput::new(language, sources, config.settings.clone());
+    input.sanitize(&solc.version);
+    let output: CompilerOutput =
+      map_napi_error(solc.compile_as(&input), "Solc compilation failed")?;
+    Ok(from_standard_json(output))
+  }
+
+  fn compile_ast_sources(
+    &self,
+    config: SolcConfig,
+    ast_sources: BTreeMap<String, SourceUnit>,
+  ) -> Result<CompileOutput> {
+    let solc = solc::ensure_installed(&config.version)?;
+    let settings_value = map_napi_error(
+      serde_json::to_value(&config.settings),
+      "Failed to serialize settings",
+    )?;
+
+    let mut sources_value = serde_json::Map::new();
+    for (file_name, unit) in ast_sources {
+      let mut ast_value =
+        map_napi_error(serde_json::to_value(&unit), "Failed to serialise AST value")?;
+      sanitize_ast_value(&mut ast_value);
+      sources_value.insert(file_name, json!({ "ast": ast_value }));
+    }
+
+    let input = json!({
+      "language": "SolidityAST",
+      "sources": sources_value,
+      "settings": settings_value
+    });
+
+    let output: CompilerOutput =
+      map_napi_error(solc.compile_as(&input), "Solc compilation failed")?;
+    Ok(from_standard_json(output))
   }
 }
 
@@ -66,92 +108,76 @@ impl Compiler {
   pub fn new(env: Env, options: Option<JsUnknown>) -> Result<Self> {
     let parsed = parse_compiler_options(&env, options)?;
     let default_settings = default_compiler_settings();
-    let config = SolcConfig::new(&default_settings, parsed.as_ref())?;
+    let default_language = solc::default_language();
+    let config = SolcConfig::new(&default_language, &default_settings, parsed.as_ref())?;
 
     solc::ensure_installed(&config.version)?;
 
     Ok(Compiler { config })
   }
 
-  /// Compile an in-memory Solidity source file using the configured solc version.
+  /// Compile Solidity/Yul source text or a pre-existing AST using the configured solc version.
   ///
-  /// - `source` is the Solidity text to compile.
+  /// - When `target` is a string, the optional `solcLanguage` controls whether it is treated as
+  ///   Solidity (default) or Yul.
+  /// - Passing an object is interpreted as a Solidity AST and compiled directly.
   /// - `options` allows per-call overrides that merge on top of the constructor defaults.
   ///
   /// The return value mirrors Foundry's standard JSON output and includes ABI,
   /// bytecode, deployed bytecode and any solc diagnostics.
-  #[napi(ts_args_type = "source: string, options?: CompilerOptions | undefined")]
+  #[napi(ts_args_type = "target: string | object, options?: CompilerOptions | undefined")]
   pub fn compile_source(
     &self,
     env: Env,
-    source: String,
+    target: Either<String, JsObject>,
     options: Option<JsUnknown>,
   ) -> Result<CompileOutput> {
     let parsed = parse_compiler_options(&env, options)?;
     let config = self.resolve_config(parsed.as_ref())?;
-    let solc = solc::ensure_installed(&config.version)?;
-    let sources = build_sources(source);
-    let input = build_input(&solc, config.settings.clone(), sources);
+    let input = match target {
+      Either::A(source) => CompileInput::Source(single_virtual_source(source)),
+      Either::B(object) => {
+        let ast_unit: SourceUnit = env.from_js_value(object.into_unknown())?;
+        CompileInput::Ast(single_virtual_ast(ast_unit))
+      }
+    };
 
-    let output: CompilerOutput =
-      map_napi_error(solc.compile_as(&input), "Solc compilation failed")?;
-    Ok(from_standard_json(output))
-  }
-
-  /// Compile a Solidity AST (`SourceUnit`) using the configured solc version.
-  ///
-  /// - `options` allows per-call overrides that merge on top of the constructor defaults.
-  #[napi(
-    ts_args_type = "ast: import('./ast-types').SourceUnit, options?: CompilerOptions | undefined"
-  )]
-  pub fn compile_ast(
-    &self,
-    env: Env,
-    ast: JsUnknown,
-    options: Option<JsUnknown>,
-  ) -> Result<CompileOutput> {
-    let parsed = parse_compiler_options(&env, options)?;
-    let config = self.resolve_config(parsed.as_ref())?;
-    let solc = solc::ensure_installed(&config.version)?;
-
-    let ast_unit: SourceUnit = env.from_js_value(ast)?;
-    let mut ast_value = map_napi_error(
-      serde_json::to_value(&ast_unit),
-      "Failed to serialise AST value",
-    )?;
-    sanitize_ast_value(&mut ast_value);
-    let file_name = DEFAULT_VIRTUAL_SOURCE.to_string();
-
-    let settings_value = map_napi_error(
-      serde_json::to_value(&config.settings),
-      "Failed to serialize settings",
-    )?;
-
-    let input = json!({
-      "language": "SolidityAST",
-      "sources": {
-        file_name.clone(): {
-          "ast": ast_value
+    match input {
+      CompileInput::Source(source) => match config.language {
+        FoundrySolcLanguage::Solidity => {
+          self.compile_standard_sources(config, source, FoundrySolcLanguage::Solidity)
+        }
+        FoundrySolcLanguage::Yul => {
+          self.compile_standard_sources(config, source, FoundrySolcLanguage::Yul)
+        }
+        other => {
+          let _ = source;
+          Err(napi_error(format!(
+            "Unsupported solcLanguage \"{other:?}\" for inline sources"
+          )))
         }
       },
-      "settings": settings_value
-    });
-
-    let output: CompilerOutput =
-      map_napi_error(solc.compile_as(&input), "Solc compilation failed")?;
-    Ok(from_standard_json(output))
+      CompileInput::Ast(ast_sources) => self.compile_ast_sources(config, ast_sources),
+    }
   }
 }
 
-fn build_sources(source: String) -> Sources {
+enum CompileInput {
+  Source(Sources),
+  Ast(BTreeMap<String, SourceUnit>),
+}
+
+const DEFAULT_VIRTUAL_SOURCE: &str = "__VIRTUAL__.sol";
+
+fn single_virtual_source(source: String) -> Sources {
   let path = PathBuf::from(DEFAULT_VIRTUAL_SOURCE);
   let mut sources = Sources::new();
   sources.insert(path, Source::new(source));
   sources
 }
 
-fn build_input(solc: &Solc, settings: Settings, sources: Sources) -> SolcInput {
-  let mut input = SolcInput::new(SolcLanguage::Solidity, sources, settings);
-  input.sanitize(&solc.version);
-  input
+fn single_virtual_ast(ast: SourceUnit) -> BTreeMap<String, SourceUnit> {
+  let mut sources = BTreeMap::new();
+  sources.insert(DEFAULT_VIRTUAL_SOURCE.to_string(), ast);
+  sources
 }

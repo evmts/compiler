@@ -7,8 +7,9 @@ use foundry_compilers::artifacts::ast::{
   ContractDefinition, ContractDefinitionPart, SourceUnit, SourceUnitPart, Visibility,
 };
 use foundry_compilers::artifacts::{output_selection::OutputSelection, Settings};
+use foundry_compilers::solc::SolcLanguage;
 use napi::bindgen_prelude::*;
-use napi::{Env, JsUnknown};
+use napi::{Env, JsObject, JsUnknown};
 
 use self::utils::{from_js_value, sanitize_ast_value, to_js_value};
 use crate::internal::{
@@ -17,7 +18,7 @@ use crate::internal::{
   solc,
 };
 
-const DEFAULT_VIRTUAL_SOURCE: &str = "Instrumented.sol";
+const DEFAULT_VIRTUAL_SOURCE: &str = "__VIRTUAL__.sol";
 
 /// High-level helper for manipulating Solidity ASTs prior to recompilation.
 #[napi]
@@ -51,6 +52,11 @@ impl Ast {
 
   fn resolve_config(&self, overrides: Option<&AstOptions>) -> Result<SolcConfig> {
     let mut config = self.config.merge(overrides)?;
+    if config.language != SolcLanguage::Solidity {
+      return Err(napi_error(
+        "Ast helpers only support solcLanguage \"Solidity\".",
+      ));
+    }
     config.settings = Self::sanitize_settings(Some(config.settings));
     Ok(config)
   }
@@ -59,14 +65,14 @@ impl Ast {
     self
       .ast
       .as_mut()
-      .ok_or_else(|| napi_error("Ast has no target AST. Call fromSource or fromAst first."))
+      .ok_or_else(|| napi_error("Ast has no target AST. Call fromSource first."))
   }
 
   fn target_ast(&self) -> Result<&SourceUnit> {
     self
       .ast
       .as_ref()
-      .ok_or_else(|| napi_error("Ast has no target AST. Call fromSource or fromAst first."))
+      .ok_or_else(|| napi_error("Ast has no target AST. Call fromSource first."))
   }
 
   fn find_contract_index(&self, ast: &SourceUnit, contract_name: Option<&str>) -> Result<usize> {
@@ -198,7 +204,11 @@ impl Ast {
     Ok(())
   }
 
-  pub(crate) fn load_source(&mut self, source: &str, overrides: Option<&AstOptions>) -> Result<()> {
+  pub(crate) fn from_source_string(
+    &mut self,
+    source: &str,
+    overrides: Option<&AstOptions>,
+  ) -> Result<()> {
     self.update_options(overrides);
     let mut config = self.resolve_config(overrides)?;
     let solc = solc::ensure_installed(&config.version)?;
@@ -216,29 +226,26 @@ impl Ast {
     Ok(())
   }
 
-  pub(crate) fn load_ast(
+  pub(crate) fn from_source_ast(
     &mut self,
-    env: &Env,
-    target_ast: JsUnknown,
+    target_ast: SourceUnit,
     overrides: Option<&AstOptions>,
   ) -> Result<()> {
     self.update_options(overrides);
     let config = self.resolve_config(overrides)?;
     solc::ensure_installed(&config.version)?;
 
-    let ast_unit: SourceUnit = from_js_value(env, target_ast)?;
-
     map_napi_error(
-      stitcher::find_instrumented_contract_index(&ast_unit, self.contract_override(overrides)),
+      stitcher::find_instrumented_contract_index(&target_ast, self.contract_override(overrides)),
       "Failed to locate target contract",
     )?;
 
     self.config = config;
-    self.ast = Some(ast_unit);
+    self.ast = Some(target_ast);
     Ok(())
   }
 
-  pub(crate) fn inject_fragment_from_source(
+  pub(crate) fn inject_fragment_string(
     &mut self,
     fragment_source: &str,
     overrides: Option<&AstOptions>,
@@ -257,7 +264,7 @@ impl Ast {
     self.inject_fragment_contract(fragment_contract, overrides)
   }
 
-  pub(crate) fn inject_fragment_from_ast_value(
+  pub(crate) fn inject_fragment_ast(
     &mut self,
     fragment_ast: SourceUnit,
     overrides: Option<&AstOptions>,
@@ -284,8 +291,14 @@ impl Ast {
   pub fn new(env: Env, options: Option<JsUnknown>) -> Result<Self> {
     let parsed = parse_ast_options(&env, options)?;
     let default_settings = Self::sanitize_settings(None);
-    let mut config = SolcConfig::new(&default_settings, parsed.as_ref())?;
+    let default_language = solc::default_language();
+    let mut config = SolcConfig::new(&default_language, &default_settings, parsed.as_ref())?;
     config.settings = Self::sanitize_settings(Some(config.settings));
+    if config.language != SolcLanguage::Solidity {
+      return Err(napi_error(
+        "Ast helpers only support solcLanguage \"Solidity\".",
+      ));
+    }
     solc::ensure_installed(&config.version)?;
 
     let ast = Ast {
@@ -300,67 +313,46 @@ impl Ast {
   /// When no `instrumentedContract` is provided, later operations apply to all
   /// contracts in the file.
   #[napi(
-    ts_args_type = "targetSource: string, options?: AstOptions | undefined",
+    ts_args_type = "target: string | object, options?: AstOptions | undefined",
     ts_return_type = "this"
   )]
   pub fn from_source(
     &mut self,
     env: Env,
-    target_source: String,
+    target: Either<String, JsObject>,
     options: Option<JsUnknown>,
   ) -> Result<Ast> {
     let parsed = parse_ast_options(&env, options)?;
-    self.load_source(&target_source, parsed.as_ref())?;
+    match target {
+      Either::A(source) => self.from_source_string(&source, parsed.as_ref())?,
+      Either::B(object) => {
+        let target_unit: SourceUnit = from_js_value(&env, object.into_unknown())?;
+        self.from_source_ast(target_unit, parsed.as_ref())?;
+      }
+    }
     Ok(self.clone())
   }
 
-  /// Load a pre-existing `SourceUnit` for AST.
+  /// Parse an AST fragment from source text or inject a pre-parsed AST fragment
+  /// into the targeted contract.
   #[napi(
-    ts_args_type = "targetAst: import('./ast-types').SourceUnit, options?: AstOptions | undefined",
+    ts_args_type = "fragment: string | object, options?: AstOptions | undefined",
     ts_return_type = "this"
   )]
-  pub fn from_ast(
+  pub fn inject_shadow(
     &mut self,
     env: Env,
-    target_ast: JsUnknown,
+    fragment: Either<String, JsObject>,
     options: Option<JsUnknown>,
   ) -> Result<Ast> {
     let parsed = parse_ast_options(&env, options)?;
-    self.load_ast(&env, target_ast, parsed.as_ref())?;
-    Ok(self.clone())
-  }
-
-  /// Parse an AST fragment from source text and inject it into the
-  /// targeted contract.
-  #[napi(
-    ts_args_type = "fragmentSource: string, options?: AstOptions | undefined",
-    ts_return_type = "this"
-  )]
-  pub fn inject_shadow_source(
-    &mut self,
-    env: Env,
-    fragment_source: String,
-    options: Option<JsUnknown>,
-  ) -> Result<Ast> {
-    let parsed = parse_ast_options(&env, options)?;
-    self.inject_fragment_from_source(&fragment_source, parsed.as_ref())?;
-    Ok(self.clone())
-  }
-
-  /// Inject a pre-parsed AST fragment into the targeted contract.
-  #[napi(
-    ts_args_type = "fragmentAst: import('./ast-types').SourceUnit, options?: AstOptions | undefined",
-    ts_return_type = "this"
-  )]
-  pub fn inject_shadow_ast(
-    &mut self,
-    env: Env,
-    fragment_ast: JsUnknown,
-    options: Option<JsUnknown>,
-  ) -> Result<Ast> {
-    let parsed = parse_ast_options(&env, options)?;
-    let fragment_unit: SourceUnit = from_js_value(&env, fragment_ast)?;
-    self.inject_fragment_from_ast_value(fragment_unit, parsed.as_ref())?;
+    match fragment {
+      Either::A(source) => self.inject_fragment_string(&source, parsed.as_ref())?,
+      Either::B(object) => {
+        let fragment_unit: SourceUnit = from_js_value(&env, object.into_unknown())?;
+        self.inject_fragment_ast(fragment_unit, parsed.as_ref())?;
+      }
+    }
     Ok(self.clone())
   }
 
@@ -394,7 +386,7 @@ impl Ast {
     let ast = self
       .ast
       .as_ref()
-      .ok_or_else(|| napi_error("Ast has no target unit. Call fromSource or fromAst first."))?;
+      .ok_or_else(|| napi_error("Ast has no target unit. Call fromSource first."))?;
     let mut ast_value = map_napi_error(serde_json::to_value(ast), "Failed to serialize AST value")?;
     sanitize_ast_value(&mut ast_value);
     to_js_value(&env, &ast_value)
@@ -434,8 +426,13 @@ contract Target {
     }
 
     let default_settings = Ast::sanitize_settings(None);
-    let mut config =
-      SolcConfig::new(&default_settings, Option::<&AstOptions>::None).expect("config");
+    let default_language = solc::default_language();
+    let mut config = SolcConfig::new(
+      &default_language,
+      &default_settings,
+      Option::<&AstOptions>::None,
+    )
+    .expect("config");
     config.settings = Ast::sanitize_settings(Some(config.settings));
     solc::ensure_installed(&config.version).expect("ensure solc");
 
@@ -446,17 +443,18 @@ contract Target {
     };
 
     instrument
-      .load_source(INSTRUMENTED_CONTRACT, None)
+      .from_source_string(INSTRUMENTED_CONTRACT, None)
       .expect("load source");
 
     let overrides = AstOptions {
       solc_version: None,
+      solc_language: None,
       settings: None,
       instrumented_contract: Some("Target".into()),
     };
 
     instrument
-      .inject_fragment_from_source(
+      .inject_fragment_string(
         "function extra() public view returns (uint256) { return value; }",
         Some(&overrides),
       )
@@ -508,8 +506,13 @@ contract Target {
       return;
     }
     let default_settings = Ast::sanitize_settings(None);
-    let mut config =
-      SolcConfig::new(&default_settings, Option::<&AstOptions>::None).expect("config");
+    let default_language = solc::default_language();
+    let mut config = SolcConfig::new(
+      &default_language,
+      &default_settings,
+      Option::<&AstOptions>::None,
+    )
+    .expect("config");
     config.settings = Ast::sanitize_settings(Some(config.settings));
     solc::ensure_installed(&config.version).expect("ensure solc");
 
@@ -520,10 +523,11 @@ contract Target {
     };
 
     instrument
-      .load_source(INSTRUMENTED_CONTRACT, None)
+      .from_source_string(INSTRUMENTED_CONTRACT, None)
       .expect("load source");
     let overrides = AstOptions {
       solc_version: None,
+      solc_language: None,
       settings: None,
       instrumented_contract: Some("Target".into()),
     };
@@ -567,8 +571,13 @@ contract Target {
     };
 
     let default_settings = Ast::sanitize_settings(None);
-    let mut config =
-      SolcConfig::new(&default_settings, Option::<&AstOptions>::None).expect("config");
+    let default_language = solc::default_language();
+    let mut config = SolcConfig::new(
+      &default_language,
+      &default_settings,
+      Option::<&AstOptions>::None,
+    )
+    .expect("config");
     config.settings = Ast::sanitize_settings(Some(config.settings));
     solc::ensure_installed(&config.version).expect("ensure solc");
 
@@ -578,7 +587,7 @@ contract Target {
       options: AstOptions::default(),
     };
     instrument
-      .load_source(INSTRUMENTED_CONTRACT, None)
+      .from_source_string(INSTRUMENTED_CONTRACT, None)
       .expect("load source");
     instrument
       .expose_variables_internal(None)

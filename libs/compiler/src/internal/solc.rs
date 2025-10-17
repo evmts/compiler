@@ -2,13 +2,17 @@ use std::sync::{Mutex, OnceLock};
 
 use semver::Version;
 
-use foundry_compilers::solc::Solc;
+use foundry_compilers::solc::{Solc, SolcLanguage};
 use napi::bindgen_prelude::Result;
 use napi::{bindgen_prelude::AsyncTask, Env, Task};
 
 use super::errors::{map_napi_error, napi_error};
 
 pub(crate) const DEFAULT_SOLC_VERSION: &str = "0.8.30";
+
+pub(crate) fn default_language() -> SolcLanguage {
+  SolcLanguage::Solidity
+}
 
 pub(crate) fn parse_version(version: &str) -> Result<Version> {
   let trimmed = version.trim().trim_start_matches('v');

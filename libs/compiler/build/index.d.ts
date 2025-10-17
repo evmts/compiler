@@ -12,16 +12,12 @@ export declare class Ast {
    * When no `instrumentedContract` is provided, later operations apply to all
    * contracts in the file.
    */
-  fromSource(targetSource: string, options?: AstOptions | undefined): this
-  /** Load a pre-existing `SourceUnit` for AST. */
-  fromAst(targetAst: import('./ast-types').SourceUnit, options?: AstOptions | undefined): this
+  fromSource(target: string | object, options?: AstOptions | undefined): this
   /**
-   * Parse an AST fragment from source text and inject it into the
-   * targeted contract.
+   * Parse an AST fragment from source text or inject a pre-parsed AST fragment
+   * into the targeted contract.
    */
-  injectShadowSource(fragmentSource: string, options?: AstOptions | undefined): this
-  /** Inject a pre-parsed AST fragment into the targeted contract. */
-  injectShadowAst(fragmentAst: import('./ast-types').SourceUnit, options?: AstOptions | undefined): this
+  injectShadow(fragment: string | object, options?: AstOptions | undefined): this
   /**
    * Promote private/internal state variables to public visibility. Omitting
    * `instrumentedContract` applies the change to all contracts.
@@ -64,21 +60,17 @@ export declare class Compiler {
    */
   constructor(options?: CompilerOptions | undefined)
   /**
-   * Compile an in-memory Solidity source file using the configured solc version.
+   * Compile Solidity/Yul source text or a pre-existing AST using the configured solc version.
    *
-   * - `source` is the Solidity text to compile.
+   * - When `target` is a string, the optional `solcLanguage` controls whether it is treated as
+   *   Solidity (default) or Yul.
+   * - Passing an object is interpreted as a Solidity AST and compiled directly.
    * - `options` allows per-call overrides that merge on top of the constructor defaults.
    *
    * The return value mirrors Foundry's standard JSON output and includes ABI,
    * bytecode, deployed bytecode and any solc diagnostics.
    */
-  compileSource(source: string, options?: CompilerOptions | undefined): CompileOutput
-  /**
-   * Compile a Solidity AST (`SourceUnit`) using the configured solc version.
-   *
-   * - `options` allows per-call overrides that merge on top of the constructor defaults.
-   */
-  compileAst(ast: import('./ast-types').SourceUnit, options?: CompilerOptions | undefined): CompileOutput
+  compileSource(target: string | object, options?: CompilerOptions | undefined): CompileOutput
 }
 
 export declare class SolidityProject {
@@ -127,6 +119,7 @@ export declare class SolidityProjectBuilder {
 
 export interface AstOptions {
   solcVersion?: string | undefined
+  solcLanguage?: import('./index').SolcLanguage | undefined
   settings?: import('./index').CompilerSettings | undefined
   instrumentedContract?: string | undefined
 }
@@ -152,6 +145,7 @@ export interface CompilerError {
 /**r" Shared solc configuration accepted by compiler entry points. */
 export interface CompilerOptions {
   solcVersion?: string | undefined
+  solcLanguage?: import('./index').SolcLanguage | undefined
   settings?: import('./index').CompilerSettings | undefined
 }
 
@@ -301,6 +295,11 @@ export interface SettingsMetadata {
   useLiteralContent?: boolean
   bytecodeHash?: BytecodeHash
   cborMetadata?: boolean
+}
+
+export declare const enum SolcLanguage {
+  Solidity = 'Solidity',
+  Yul = 'Yul'
 }
 
 export interface SourceLocation {

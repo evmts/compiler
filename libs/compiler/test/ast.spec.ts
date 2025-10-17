@@ -80,7 +80,7 @@ describe("Ast construction", () => {
   test("hydrates from source using standalone constructor", () => {
     const instrumented = createAst()
       .fromSource(TARGET_CONTRACT)
-      .injectShadowSource(AST_FUNCTION);
+      .injectShadow(AST_FUNCTION);
     const contract = findContract(instrumented.ast(), "MyContract");
     expect(contract).toBeTruthy();
     const functionNames = contract!.nodes
@@ -97,12 +97,12 @@ describe("Ast construction", () => {
 
   test("hydrates from typed ast values", () => {
     const sourceAst = createAst().fromSource(TARGET_CONTRACT).ast();
-    expect(createAst().fromAst(sourceAst).ast()).toEqual(sourceAst);
+    expect(createAst().fromSource(sourceAst).ast()).toEqual(sourceAst);
   });
 });
 
 describe("Ast operations", () => {
-  test("injectShadowAst merges prebuilt ast fragments", () => {
+  test("injectShadow merges prebuilt ast fragments", () => {
     const fragment = createAst()
       .fromSource(
         `// SPDX-License-Identifier: UNLICENSED
@@ -117,7 +117,7 @@ contract __AstFragment {
 
     const instrumented = createAst()
       .fromSource(TARGET_CONTRACT)
-      .injectShadowAst(fragment);
+      .injectShadow(fragment);
 
     const contract = findContract(instrumented.ast(), "MyContract");
     const functionNames = contract!.nodes
@@ -128,8 +128,8 @@ contract __AstFragment {
 
   test("exposeInternalVariables promotes visibility", () => {
     const instrumented = createAst()
-      .fromSource(MULTI_CONTRACT, { targetContract: "Target" })
-      .exposeInternalVariables({ targetContract: "Target" });
+      .fromSource(MULTI_CONTRACT, { instrumentedContract: "Target" })
+      .exposeInternalVariables({ instrumentedContract: "Target" });
 
     const target = findContract(instrumented.ast(), "Target")!;
     const visibility = target.nodes
@@ -146,8 +146,8 @@ contract __AstFragment {
 
   test("exposeInternalFunctions promotes visibility", () => {
     const instrumented = createAst()
-      .fromSource(MULTI_CONTRACT, { targetContract: "Target" })
-      .exposeInternalFunctions({ targetContract: "Target" });
+      .fromSource(MULTI_CONTRACT, { instrumentedContract: "Target" })
+      .exposeInternalFunctions({ instrumentedContract: "Target" });
 
     const target = findContract(instrumented.ast(), "Target")!;
     const functionVis = target.nodes
@@ -159,8 +159,8 @@ contract __AstFragment {
   test("ids remain unique after sequential injections", () => {
     const instrumented = createAst()
       .fromSource(TARGET_CONTRACT)
-      .injectShadowSource(AST_FUNCTION)
-      .injectShadowSource(AST_VARIABLE);
+      .injectShadow(AST_FUNCTION)
+      .injectShadow(AST_VARIABLE);
 
     const ast = instrumented.ast();
     const ids: number[] = [];
@@ -172,11 +172,11 @@ contract __AstFragment {
   test("transformed ast compiles successfully", () => {
     const instrumented = createAst()
       .fromSource(TARGET_CONTRACT)
-      .injectShadowSource(AST_FUNCTION)
-      .injectShadowSource(AST_VARIABLE);
+      .injectShadow(AST_FUNCTION)
+      .injectShadow(AST_VARIABLE);
 
     const ast = instrumented.ast();
-    const output = sharedCompiler.compileAst(ast);
+    const output = sharedCompiler.compileSource(ast);
     expect(output.hasCompilerErrors).toBe(false);
   });
 });

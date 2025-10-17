@@ -1,4 +1,5 @@
 use foundry_compilers::artifacts::Settings;
+use foundry_compilers::solc::SolcLanguage as FoundrySolcLanguage;
 use napi::bindgen_prelude::*;
 use napi::{Env, JsObject, JsUnknown, NapiRaw, ValueType};
 use semver::Version;
@@ -7,7 +8,24 @@ use super::{errors::napi_error, settings::CompilerSettings, solc};
 
 pub(crate) trait SolcUserOptions {
   fn solc_version(&self) -> Option<&str>;
+  fn solc_language(&self) -> Option<SolcLanguage>;
   fn settings(&self) -> Option<&CompilerSettings>;
+}
+
+#[napi(string_enum)]
+#[derive(Debug, Eq, PartialEq)]
+pub enum SolcLanguage {
+  Solidity,
+  Yul,
+}
+
+impl From<SolcLanguage> for FoundrySolcLanguage {
+  fn from(language: SolcLanguage) -> Self {
+    match language {
+      SolcLanguage::Solidity => FoundrySolcLanguage::Solidity,
+      SolcLanguage::Yul => FoundrySolcLanguage::Yul,
+    }
+  }
 }
 
 macro_rules! define_options_struct {
@@ -18,6 +36,8 @@ macro_rules! define_options_struct {
     pub struct $name {
       #[napi(ts_type = "string | undefined")]
       pub solc_version: Option<String>,
+      #[napi(ts_type = "import('./index').SolcLanguage | undefined")]
+      pub solc_language: Option<SolcLanguage>,
       #[napi(ts_type = "import('./index').CompilerSettings | undefined")]
       pub settings: Option<CompilerSettings>,
     }
@@ -25,6 +45,10 @@ macro_rules! define_options_struct {
     impl SolcUserOptions for $name {
       fn solc_version(&self) -> Option<&str> {
         self.solc_version.as_deref()
+      }
+
+      fn solc_language(&self) -> Option<SolcLanguage> {
+        self.solc_language
       }
 
       fn settings(&self) -> Option<&CompilerSettings> {
@@ -44,6 +68,8 @@ define_options_struct!(
 pub struct AstOptions {
   #[napi(ts_type = "string | undefined")]
   pub solc_version: Option<String>,
+  #[napi(ts_type = "import('./index').SolcLanguage | undefined")]
+  pub solc_language: Option<SolcLanguage>,
   #[napi(ts_type = "import('./index').CompilerSettings | undefined")]
   pub settings: Option<CompilerSettings>,
   #[napi(ts_type = "string | undefined")]
@@ -55,6 +81,10 @@ impl SolcUserOptions for AstOptions {
     self.solc_version.as_deref()
   }
 
+  fn solc_language(&self) -> Option<SolcLanguage> {
+    self.solc_language
+  }
+
   fn settings(&self) -> Option<&CompilerSettings> {
     self.settings.as_ref()
   }
@@ -64,18 +94,26 @@ impl SolcUserOptions for AstOptions {
 pub(crate) struct SolcConfig {
   pub version: Version,
   pub settings: Settings,
+  pub language: FoundrySolcLanguage,
 }
 
 impl SolcConfig {
   pub fn new<O: SolcUserOptions>(
+    default_language: &FoundrySolcLanguage,
     default_settings: &Settings,
     overrides: Option<&O>,
   ) -> Result<Self> {
     let default_version = solc::default_version()?;
-    Self::with_defaults(&default_version, default_settings, overrides)
+    Self::with_defaults(
+      default_language,
+      &default_version,
+      default_settings,
+      overrides,
+    )
   }
 
   pub fn with_defaults<O: SolcUserOptions>(
+    default_language: &FoundrySolcLanguage,
     default_version: &Version,
     default_settings: &Settings,
     overrides: Option<&O>,
@@ -86,9 +124,18 @@ impl SolcConfig {
       .transpose()?
       .unwrap_or_else(|| default_version.clone());
 
+    let language = overrides
+      .and_then(|opts| opts.solc_language())
+      .map(FoundrySolcLanguage::from)
+      .unwrap_or_else(|| default_language.clone());
+
     let settings = resolve_settings(default_settings, overrides.and_then(|opts| opts.settings()))?;
 
-    Ok(SolcConfig { version, settings })
+    Ok(SolcConfig {
+      version,
+      settings,
+      language,
+    })
   }
 
   pub fn merge<O: SolcUserOptions>(&self, overrides: Option<&O>) -> Result<Self> {
@@ -98,9 +145,18 @@ impl SolcConfig {
       .transpose()?
       .unwrap_or_else(|| self.version.clone());
 
+    let language = overrides
+      .and_then(|opts| opts.solc_language())
+      .map(FoundrySolcLanguage::from)
+      .unwrap_or_else(|| self.language.clone());
+
     let settings = resolve_settings(&self.settings, overrides.and_then(|opts| opts.settings()))?;
 
-    Ok(SolcConfig { version, settings })
+    Ok(SolcConfig {
+      version,
+      settings,
+      language,
+    })
   }
 }
 
@@ -158,6 +214,18 @@ fn parse_options(value: Option<JsUnknown>) -> Result<Option<JsUnknown>> {
           ValueType::Undefined | ValueType::Null | ValueType::String => {}
           _ => {
             return Err(napi_error("solcVersion must be a string when provided."));
+          }
+        }
+      }
+
+      if object.has_named_property("solcLanguage")? {
+        let language_value = object.get_named_property::<JsUnknown>("solcLanguage")?;
+        match language_value.get_type()? {
+          ValueType::Undefined | ValueType::Null | ValueType::String => {}
+          _ => {
+            return Err(napi_error(
+              "solcLanguage must be provided as a string when set.",
+            ));
           }
         }
       }

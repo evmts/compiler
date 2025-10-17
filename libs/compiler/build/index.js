@@ -379,3 +379,4 @@ module.exports.ModelCheckerInvariant = nativeBinding.ModelCheckerInvariant
 module.exports.ModelCheckerSolver = nativeBinding.ModelCheckerSolver
 module.exports.ModelCheckerTarget = nativeBinding.ModelCheckerTarget
 module.exports.RevertStrings = nativeBinding.RevertStrings
+module.exports.SolcLanguage = nativeBinding.SolcLanguage
