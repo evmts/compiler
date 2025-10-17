@@ -1,3 +1,5 @@
+use serde_json::Value;
+
 #[napi(object)]
 #[derive(Debug, Clone)]
 pub struct CompilerError {
@@ -16,11 +18,21 @@ pub struct SourceLocation {
 
 #[napi(object)]
 #[derive(Debug, Clone)]
+pub struct ContractBytecode {
+  pub hex: Option<String>,
+  #[napi(ts_type = "Uint8Array | undefined")]
+  pub bytes: Option<Vec<u8>>,
+}
+
+#[napi(object)]
+#[derive(Debug, Clone)]
 pub struct ContractArtifact {
   pub contract_name: String,
-  pub abi: Option<String>,
-  pub bytecode: Option<String>,
-  pub deployed_bytecode: Option<String>,
+  #[napi(ts_type = "unknown | undefined")]
+  pub abi: Option<Value>,
+  pub abi_json: Option<String>,
+  pub bytecode: Option<ContractBytecode>,
+  pub deployed_bytecode: Option<ContractBytecode>,
 }
 
 #[napi(object)]

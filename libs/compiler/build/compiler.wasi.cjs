@@ -86,9 +86,9 @@ function __napi_rs_initialize_modules(__napiInstance) {
   __napiInstance.exports['__napi_register__Ast_impl_7']?.()
   __napiInstance.exports['__napi_register__Compiler_struct_8']?.()
   __napiInstance.exports['__napi_register__Compiler_impl_19']?.()
-  __napiInstance.exports['__napi_register__SolcLanguage_20']?.()
-  __napiInstance.exports['__napi_register__CompilerOptions_struct_21']?.()
-  __napiInstance.exports['__napi_register__AstOptions_struct_22']?.()
+  __napiInstance.exports['__napi_register__CompilerConfig_struct_20']?.()
+  __napiInstance.exports['__napi_register__AstOptions_struct_21']?.()
+  __napiInstance.exports['__napi_register__SolcLanguage_22']?.()
   __napiInstance.exports['__napi_register__CompilerSettings_struct_23']?.()
   __napiInstance.exports['__napi_register__OptimizerSettings_struct_24']?.()
   __napiInstance.exports['__napi_register__OptimizerDetails_struct_25']?.()
@@ -103,27 +103,22 @@ function __napi_rs_initialize_modules(__napiInstance) {
   __napiInstance.exports['__napi_register__ModelCheckerInvariant_34']?.()
   __napiInstance.exports['__napi_register__ModelCheckerSolver_35']?.()
   __napiInstance.exports['__napi_register__EvmVersion_36']?.()
-  __napiInstance.exports['__napi_register__SolidityProjectBuilder_struct_37']?.()
-  __napiInstance.exports['__napi_register__SolidityProjectBuilder_impl_50']?.()
-  __napiInstance.exports['__napi_register__SolidityProject_struct_51']?.()
-  __napiInstance.exports['__napi_register__SolidityProject_impl_59']?.()
-  __napiInstance.exports['__napi_register__create_hardhat_paths_60']?.()
-  __napiInstance.exports['__napi_register__create_dapptools_paths_61']?.()
-  __napiInstance.exports['__napi_register__create_current_hardhat_paths_62']?.()
-  __napiInstance.exports['__napi_register__create_current_dapptools_paths_63']?.()
-  __napiInstance.exports['__napi_register__find_artifacts_dir_64']?.()
-  __napiInstance.exports['__napi_register__find_source_dir_65']?.()
-  __napiInstance.exports['__napi_register__find_libs_66']?.()
-  __napiInstance.exports['__napi_register__CompilerError_struct_67']?.()
-  __napiInstance.exports['__napi_register__SourceLocation_struct_68']?.()
-  __napiInstance.exports['__napi_register__ContractArtifact_struct_69']?.()
-  __napiInstance.exports['__napi_register__CompileOutput_struct_70']?.()
-  __napiInstance.exports['__napi_register__ProjectPaths_struct_71']?.()
+  __napiInstance.exports['__napi_register__create_hardhat_paths_37']?.()
+  __napiInstance.exports['__napi_register__create_dapptools_paths_38']?.()
+  __napiInstance.exports['__napi_register__create_current_hardhat_paths_39']?.()
+  __napiInstance.exports['__napi_register__create_current_dapptools_paths_40']?.()
+  __napiInstance.exports['__napi_register__find_artifacts_dir_41']?.()
+  __napiInstance.exports['__napi_register__find_source_dir_42']?.()
+  __napiInstance.exports['__napi_register__find_libs_43']?.()
+  __napiInstance.exports['__napi_register__CompilerError_struct_44']?.()
+  __napiInstance.exports['__napi_register__SourceLocation_struct_45']?.()
+  __napiInstance.exports['__napi_register__ContractBytecode_struct_46']?.()
+  __napiInstance.exports['__napi_register__ContractArtifact_struct_47']?.()
+  __napiInstance.exports['__napi_register__CompileOutput_struct_48']?.()
+  __napiInstance.exports['__napi_register__ProjectPaths_struct_49']?.()
 }
 module.exports.Ast = __napiModule.exports.Ast
 module.exports.Compiler = __napiModule.exports.Compiler
-module.exports.SolidityProject = __napiModule.exports.SolidityProject
-module.exports.SolidityProjectBuilder = __napiModule.exports.SolidityProjectBuilder
 module.exports.BytecodeHash = __napiModule.exports.BytecodeHash
 module.exports.createCurrentDapptoolsPaths = __napiModule.exports.createCurrentDapptoolsPaths
 module.exports.createCurrentHardhatPaths = __napiModule.exports.createCurrentHardhatPaths

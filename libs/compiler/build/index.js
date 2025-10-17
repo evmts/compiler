@@ -363,8 +363,6 @@ if (!nativeBinding) {
 
 module.exports.Ast = nativeBinding.Ast
 module.exports.Compiler = nativeBinding.Compiler
-module.exports.SolidityProject = nativeBinding.SolidityProject
-module.exports.SolidityProjectBuilder = nativeBinding.SolidityProjectBuilder
 module.exports.BytecodeHash = nativeBinding.BytecodeHash
 module.exports.createCurrentDapptoolsPaths = nativeBinding.createCurrentDapptoolsPaths
 module.exports.createCurrentHardhatPaths = nativeBinding.createCurrentHardhatPaths

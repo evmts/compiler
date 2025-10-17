@@ -32,99 +32,20 @@ export declare class Ast {
   ast(): import('./ast-types').SourceUnit
 }
 
-/** High-level façade for compiling Solidity sources with a pre-selected solc version. */
 export declare class Compiler {
-  /**
-   * Download and cache the specified solc release via Foundry's SVM backend.
-   *
-   * Returns a Bun-friendly `AsyncTask` that resolves when the toolchain is
-   * ready. If the release is already cached, the task resolves immediately.
-   * Parsing errors and installation failures surface as JavaScript exceptions.
-   */
   static installSolcVersion(version: string): Promise<unknown>
-  /**
-   * Determine whether a specific solc release is already present in the local SVM cache.
-   *
-   * This helper never triggers downloads; it simply probes the cache, making it
-   * suitable for test suites to fail fast when prerequisites are missing.
-   */
   static isSolcVersionInstalled(version: string): boolean
-  /**
-   * Construct a compiler bound to a solc version and default compiler settings.
-   *
-   * Passing `solcVersion` is optional – when omitted, the default
-   * `DEFAULT_SOLC_VERSION` is enforced. The constructor validates that the
-   * requested version is already present; callers should invoke
-   * `installSolcVersion` ahead of time. Optional `settings` are parsed exactly
-   * once and cached for subsequent compilations.
-   */
-  constructor(options?: CompilerOptions | undefined)
-  static fromFoundryRoot(root: string, options?: CompilerOptions | undefined): Compiler
-  static fromHardhatRoot(root: string, options?: CompilerOptions | undefined): Compiler
-  /**
-   * Compile Solidity/Yul source text or a pre-existing AST using the configured solc version.
-   *
-   * - When `target` is a string, the optional `solcLanguage` controls whether it is treated as
-   *   Solidity (default) or Yul.
-   * - Passing an object is interpreted as a Solidity AST and compiled directly.
-   * - `options` allows per-call overrides that merge on top of the constructor defaults.
-   *
-   * The return value mirrors Foundry's standard JSON output and includes ABI,
-   * bytecode, deployed bytecode and any solc diagnostics.
-   */
-  compileSource(target: string | object, options?: CompilerOptions | undefined): CompileOutput
-  /** Compile multiple sources supplied as a path keyed lookup. */
-  compileSources(sources: Record<string, string | object>, options?: CompilerOptions | undefined): CompileOutput
-  /** Compile sources from on-disk files identified by their paths. */
-  compileFiles(paths: string[], options?: CompilerOptions | undefined): CompileOutput
-  compileProject(options?: unknown | undefined | null): CompileOutput
-  compileContract(contractName: string, options?: unknown | undefined | null): CompileOutput
+  constructor(options?: CompilerConfig | undefined)
+  static fromFoundryRoot(root: string, options?: CompilerConfig | undefined): Compiler
+  static fromHardhatRoot(root: string, options?: CompilerConfig | undefined): Compiler
+  compileSource(target: string | object, options?: CompilerConfig | undefined): CompileOutput
+  compileSources(sources: Record<string, string | object>, options?: CompilerConfig | undefined): CompileOutput
+  compileFiles(paths: string[], options?: CompilerConfig | undefined): CompileOutput
+  compileProject(options?: CompilerConfig | undefined): CompileOutput
+  compileContract(contractName: string, options?: CompilerConfig | undefined): CompileOutput
 }
 
-export declare class SolidityProject {
-  /** Create a new project from a root path using Hardhat layout */
-  static fromHardhatRoot(rootPath: string): SolidityProject
-  /** Create a new project from a root path using Dapptools layout */
-  static fromDapptoolsRoot(rootPath: string): SolidityProject
-  /** Compile all contracts in the project */
-  compile(): CompileOutput
-  /** Compile a single file */
-  compileFile(filePath: string): CompileOutput
-  /** Compile multiple files */
-  compileFiles(filePaths: Array<string>): CompileOutput
-  /** Find the path of a contract by its name */
-  findContractPath(contractName: string): string
-  /** Get all source files in the project */
-  getSources(): Array<string>
-}
-
-export declare class SolidityProjectBuilder {
-  /** Create a new project builder */
-  constructor()
-  /** Set the project paths using hardhat layout */
-  hardhatPaths(rootPath: string): void
-  /** Set the project paths using dapptools layout */
-  dapptoolsPaths(rootPath: string): void
-  /** Enable ephemeral mode (disable caching) */
-  ephemeral(): this
-  /** Set cached mode */
-  setCached(cached: boolean): this
-  /** Enable offline mode */
-  offline(): this
-  /** Set offline mode */
-  setOffline(offline: boolean): this
-  /** Disable writing artifacts to disk */
-  noArtifacts(): this
-  /** Set whether to write artifacts */
-  setNoArtifacts(noArtifacts: boolean): this
-  /** Set the number of parallel solc jobs */
-  solcJobs(jobs: number): this
-  /** Limit to single solc job */
-  singleSolcJobs(): this
-  /** Build the project */
-  build(): SolidityProject
-}
-
+/** JavaScript-facing AST options. */
 export interface AstOptions {
   solcVersion?: string | undefined
   solcLanguage?: import('./index').SolcLanguage | undefined
@@ -144,17 +65,33 @@ export interface CompileOutput {
   hasCompilerErrors: boolean
 }
 
+/** JavaScript-facing compiler configuration shared by all entry points. */
+export interface CompilerConfig {
+  solcVersion?: string | undefined
+  solcLanguage?: import('./index').SolcLanguage | undefined
+  solcSettings?: import('./index').CompilerSettings | undefined
+  settings?: import('./index').CompilerSettings | undefined
+  cacheEnabled?: boolean | undefined
+  baseDir?: string | undefined
+  offlineMode?: boolean | undefined
+  noArtifacts?: boolean | undefined
+  buildInfoEnabled?: boolean | undefined
+  slashPaths?: boolean | undefined
+  solcJobs?: number | undefined
+  sparseOutput?: boolean | undefined
+  allowPaths?: string[] | undefined
+  includePaths?: string[] | undefined
+  libraryPaths?: string[] | undefined
+  remappings?: string[] | undefined
+  ignoredErrorCodes?: number[] | undefined
+  ignoredPaths?: string[] | undefined
+  compilerSeverity?: string | undefined
+}
+
 export interface CompilerError {
   message: string
   severity: string
   sourceLocation?: SourceLocation
-}
-
-/**r" Shared solc configuration accepted by compiler entry points. */
-export interface CompilerOptions {
-  solcVersion?: string | undefined
-  solcLanguage?: import('./index').SolcLanguage | undefined
-  settings?: import('./index').CompilerSettings | undefined
 }
 
 /**
@@ -181,9 +118,15 @@ export interface CompilerSettings {
 
 export interface ContractArtifact {
   contractName: string
-  abi?: string
-  bytecode?: string
-  deployedBytecode?: string
+  abi?: unknown | undefined
+  abiJson?: string
+  bytecode?: ContractBytecode
+  deployedBytecode?: ContractBytecode
+}
+
+export interface ContractBytecode {
+  hex?: string
+  bytes?: Uint8Array | undefined
 }
 
 export declare export declare function createCurrentDapptoolsPaths(): ProjectPaths
@@ -210,6 +153,7 @@ export declare const enum EvmVersion {
   Berlin = 'Berlin',
   London = 'London',
   Paris = 'Paris',
+  Prague = 'Prague',
   Shanghai = 'Shanghai',
   Cancun = 'Cancun'
 }
@@ -305,6 +249,7 @@ export interface SettingsMetadata {
   cborMetadata?: boolean
 }
 
+/** Supported solc languages. */
 export declare const enum SolcLanguage {
   Solidity = 'Solidity',
   Yul = 'Yul'

@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { cpSync, mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { Compiler, SolidityProject } from "../build/index.js";
+import { Compiler } from "../build/index.js";
 
 const FIXTURES_DIR = join(__dirname, "fixtures");
 const FOUNDRY_PROJECT = join(FIXTURES_DIR, "foundry-project");
@@ -28,25 +28,17 @@ afterAll(() => {
 });
 
 describe("Compiler.fromFoundryRoot", () => {
-  test("matches artifacts emitted by SolidityProject", () => {
+  test("compileProject returns expected artifacts", () => {
     const root = cloneFoundryProject();
     const compiler = Compiler.fromFoundryRoot(root);
-    const project = SolidityProject.fromDapptoolsRoot(root);
+    const output = compiler.compileProject();
 
-    const compilerOutput = compiler.compileProject();
-    const projectOutput = project.compile();
-
-    const compilerContracts = compilerOutput.artifacts.map(
-      (artifact: any) => artifact.contractName
-    );
-    const projectContracts = projectOutput.artifacts.map(
+    const contractNames = output.artifacts.map(
       (artifact: any) => artifact.contractName
     );
 
-    expect(compilerContracts).toEqual(
-      expect.arrayContaining(projectContracts)
-    );
-    expect(compilerOutput.hasCompilerErrors).toBe(false);
+    expect(contractNames).toEqual(expect.arrayContaining(["Counter"]));
+    expect(output.hasCompilerErrors).toBe(false);
   });
 
   test("compileContract resolves a single counter artifact", () => {
@@ -69,8 +61,8 @@ describe("Compiler.fromFoundryRoot", () => {
       settings: { optimizer: { enabled: false } },
     });
 
-    const optimizedBytecode = optimized.artifacts[0]?.bytecode;
-    const unoptimizedBytecode = unoptimized.artifacts[0]?.bytecode;
+    const optimizedBytecode = optimized.artifacts[0]?.bytecode?.hex;
+    const unoptimizedBytecode = unoptimized.artifacts[0]?.bytecode?.hex;
 
     expect(optimizedBytecode).toBeTruthy();
     expect(unoptimizedBytecode).toBeTruthy();
@@ -87,8 +79,8 @@ describe("Compiler.fromFoundryRoot", () => {
     const baselineOutput = baseline.compileContract("Counter");
     const overriddenOutput = overridden.compileContract("Counter");
 
-    const baselineBytecode = baselineOutput.artifacts[0]?.bytecode;
-    const overriddenBytecode = overriddenOutput.artifacts[0]?.bytecode;
+    const baselineBytecode = baselineOutput.artifacts[0]?.bytecode?.hex;
+    const overriddenBytecode = overriddenOutput.artifacts[0]?.bytecode?.hex;
 
     expect(overriddenBytecode).toBe(baselineBytecode);
   });

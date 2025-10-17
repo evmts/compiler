@@ -13,8 +13,8 @@ use napi::{Env, JsObject, JsUnknown};
 
 use self::utils::{from_js_value, sanitize_ast_value, to_js_value};
 use crate::internal::{
+  config::{parse_ast_options, AstOptions, SolcConfig},
   errors::{map_napi_error, napi_error},
-  options::{parse_ast_options, AstOptions, SolcConfig},
   solc,
 };
 
@@ -396,7 +396,7 @@ impl Ast {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::internal::options::{AstOptions, SolcConfig};
+  use crate::internal::config::{AstOptions, SolcConfig};
   use crate::internal::solc;
   use foundry_compilers::artifacts::CompilerOutput;
   use foundry_compilers::solc::Solc;

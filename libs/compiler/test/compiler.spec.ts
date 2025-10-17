@@ -85,6 +85,28 @@ const createTempDir = (prefix: string) => {
   return dir;
 };
 
+type BytecodeView = {
+  hex?: string | null;
+  bytes?: Uint8Array | null;
+};
+
+const expectBytecodeShape = (bytecode?: BytecodeView) => {
+  expect(bytecode).toBeTruthy();
+  expect(bytecode?.hex).toMatch(/^0x[0-9a-f]+$/i);
+  if (bytecode?.bytes instanceof Uint8Array) {
+    expect(bytecode.bytes.length).toBeGreaterThan(0);
+  } else {
+    expect(Array.isArray(bytecode?.bytes)).toBe(true);
+    expect((bytecode?.bytes as number[] | undefined)?.length).toBeGreaterThan(0);
+  }
+};
+
+const expectAbiShape = (abi: unknown, abiJson?: string | null) => {
+  expect(Array.isArray(abi)).toBe(true);
+  expect(typeof abiJson === "string").toBe(true);
+  expect(abiJson && abiJson.startsWith("[")).toBe(true);
+};
+
 let altVersionInstalled = false;
 
 beforeAll(async () => {
@@ -171,7 +193,7 @@ describe("Compiler static helpers", () => {
 
 describe("Compiler constructor", () => {
   test("rejects invalid settings shape", () => {
-    expect(() => new Compiler({ settings: 42 as unknown as any })).toThrow(
+    expect(() => new Compiler({ solcSettings: 42 as unknown as any })).toThrow(
       /settings override must be provided/i
     );
   });
@@ -191,7 +213,7 @@ describe("Compiler constructor", () => {
   test("accepts nested settings without mutating defaults", () => {
     const compiler = new Compiler({
       solcVersion: DEFAULT_SOLC_VERSION,
-      settings: {
+      solcSettings: {
         optimizer: { enabled: true, runs: 9 },
         metadata: { bytecodeHash: BytecodeHash.None },
         debug: {
@@ -219,7 +241,7 @@ describe("Compiler constructor", () => {
     const compiler = new Compiler();
     const first = compiler.compileSource(INLINE_SOURCE);
     const second = compiler.compileSource(INLINE_SOURCE, {
-      settings: {
+      solcSettings: {
         optimizer: { enabled: true, runs: 1 },
         outputSelection: {
           "*": { "*": [], "": [] },
@@ -229,7 +251,8 @@ describe("Compiler constructor", () => {
     const third = compiler.compileSource(INLINE_SOURCE);
 
     expect(first.artifacts).toHaveLength(1);
-    expect(second.artifacts).toHaveLength(0);
+    expect(second.hasCompilerErrors).toBe(false);
+    expect(second.artifacts).toHaveLength(1);
     expect(third.artifacts).toHaveLength(1);
   });
 
@@ -272,9 +295,9 @@ describe("Compiler.compileSource with Solidity strings", () => {
 
     const artifact = output.artifacts[0];
     expect(artifact.contractName).toBe("InlineExample");
-    expect(artifact.bytecode).toMatch(/^0x[0-9a-f]+$/i);
-    expect(artifact.deployedBytecode).toMatch(/^0x[0-9a-f]+$/i);
-    expect(artifact.abi).toBeTruthy();
+    expectBytecodeShape(artifact.bytecode);
+    expectBytecodeShape(artifact.deployedBytecode);
+    expectAbiShape(artifact.abi, artifact.abiJson);
   });
 
   test("produces warnings without marking compilation as failed", () => {
@@ -301,7 +324,7 @@ describe("Compiler.compileSource with Solidity strings", () => {
   test("supports stopAfter parsing while keeping diagnostics", () => {
     const compiler = new Compiler();
     const parsingOnly = compiler.compileSource(INLINE_SOURCE, {
-      settings: { stopAfter: "parsing" },
+      solcSettings: { stopAfter: "parsing" },
     });
     expect(parsingOnly.artifacts).toHaveLength(0);
     expect(parsingOnly.hasCompilerErrors).toBe(true);
@@ -313,14 +336,14 @@ describe("Compiler.compileSource with Solidity strings", () => {
 
   test("respects per-call optimizer overrides", () => {
     const compiler = new Compiler({
-      settings: {
+      solcSettings: {
         optimizer: { enabled: false },
       },
     });
 
     const withoutOptimizer = compiler.compileSource(INLINE_SOURCE);
     const withOptimizer = compiler.compileSource(INLINE_SOURCE, {
-      settings: {
+      solcSettings: {
         optimizer: { enabled: true, runs: 200 },
       },
     });
@@ -333,7 +356,7 @@ describe("Compiler.compileSource with Solidity strings", () => {
   test("allows metadata and evm version overrides", () => {
     const compiler = new Compiler();
     const output = compiler.compileSource(INLINE_SOURCE, {
-      settings: {
+      solcSettings: {
         metadata: { bytecodeHash: BytecodeHash.None },
         evmVersion: EvmVersion.London,
       },
@@ -412,7 +435,7 @@ describe("Compiler.compileSource with AST and Yul inputs", () => {
     });
     expect(output.hasCompilerErrors).toBe(false);
     expect(output.artifacts).toHaveLength(1);
-    expect(output.artifacts[0].bytecode).toMatch(/^0x[0-9a-f]+$/i);
+    expectBytecodeShape(output.artifacts[0].bytecode);
   });
 });
 

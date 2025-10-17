@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { cpSync, mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { Compiler, SolidityProject } from "../build/index.js";
+import { Compiler } from "../build/index.js";
 
 const FIXTURES_DIR = join(__dirname, "fixtures");
 const HARDHAT_PROJECT = join(FIXTURES_DIR, "hardhat-project");
@@ -28,21 +28,17 @@ afterAll(() => {
 });
 
 describe("Compiler.fromHardhatRoot", () => {
-  test("produces the same artifacts as SolidityProject", () => {
-    const project = SolidityProject.fromHardhatRoot(HARDHAT_PROJECT);
-    const projectOutput = project.compile();
-
+  test("compileProject returns expected artifacts", () => {
     const compiler = Compiler.fromHardhatRoot(HARDHAT_PROJECT);
     const output = compiler.compileProject();
 
-    const expectedNames = projectOutput.artifacts.map(
-      (artifact: any) => artifact.contractName
-    );
     const artifactNames = output.artifacts.map(
       (artifact: any) => artifact.contractName
     );
 
-    expect(artifactNames).toEqual(expect.arrayContaining(expectedNames));
+    expect(artifactNames).toEqual(
+      expect.arrayContaining(["SimpleStorage", "Greeter", "Counter"])
+    );
     expect(output.hasCompilerErrors).toBe(false);
   });
 
@@ -64,8 +60,8 @@ describe("Compiler.fromHardhatRoot", () => {
       settings: { optimizer: { enabled: false } },
     });
 
-    const optimizedBytecode = optimized.artifacts[0]?.bytecode;
-    const unoptimizedBytecode = unoptimized.artifacts[0]?.bytecode;
+    const optimizedBytecode = optimized.artifacts[0]?.bytecode?.hex;
+    const unoptimizedBytecode = unoptimized.artifacts[0]?.bytecode?.hex;
 
     expect(optimizedBytecode).toBeTruthy();
     expect(unoptimizedBytecode).toBeTruthy();

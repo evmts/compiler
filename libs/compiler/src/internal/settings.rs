@@ -253,6 +253,7 @@ pub enum EvmVersion {
   Berlin,
   London,
   Paris,
+  Prague,
   Shanghai,
   Cancun,
 }
