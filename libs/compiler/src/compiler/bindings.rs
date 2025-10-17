@@ -41,7 +41,7 @@ impl Compiler {
     config: &ResolvedCompilerConfig,
     input: CompilationInput,
   ) -> napi::Result<CompileOutput> {
-    let core_output = self.core.compile_input(config, input)?;
+    let core_output = self.core.compile_as(config, input)?;
     Ok(map_compile_output(core_output))
   }
 

@@ -66,7 +66,7 @@ impl CompilerCore {
       .build()
   }
 
-  pub fn compile_input(
+  pub fn compile_as(
     &self,
     config: &ResolvedCompilerConfig,
     input: CompilationInput,
@@ -80,7 +80,7 @@ impl CompilerCore {
         Cow::Borrowed(config)
       };
       let runner = ProjectRunner::new(context);
-      if let Some(result) = runner.compile_input(config_cow.as_ref(), &input)? {
+      if let Some(result) = runner.compile_as(config_cow.as_ref(), &input)? {
         return Ok(result);
       }
     }

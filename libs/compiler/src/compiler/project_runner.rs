@@ -25,7 +25,7 @@ impl<'a> ProjectRunner<'a> {
     Self { context }
   }
 
-  pub fn compile_input(
+  pub fn compile_as(
     &self,
     config: &ResolvedCompilerConfig,
     input: &CompilationInput,
