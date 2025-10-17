@@ -34,25 +34,19 @@ const SIMPLE_STORAGE_PATH = join(
 const GREETER_PATH = join(HARDHAT_PROJECT, "contracts", "Greeter.sol");
 const COUNTER_PATH = join(HARDHAT_PROJECT, "contracts", "Counter.sol");
 
-const INLINE_SOURCE = readFileSync(
-  join(CONTRACTS_DIR, "InlineExample.sol"),
-  "utf8"
-);
-const BROKEN_SOURCE = readFileSync(
-  join(CONTRACTS_DIR, "BrokenExample.sol"),
-  "utf8"
-);
-const MULTI_CONTRACT_SOURCE = readFileSync(
-  join(CONTRACTS_DIR, "MultiContract.sol"),
-  "utf8"
-);
-const WARNING_SOURCE = readFileSync(
-  join(CONTRACTS_DIR, "WarningContract.sol"),
-  "utf8"
-);
-const LIBRARY_SOURCE = readFileSync(join(CONTRACTS_DIR, "MathLib.sol"), "utf8");
+const INLINE_PATH = join(CONTRACTS_DIR, "InlineExample.sol");
+const BROKEN_PATH = join(CONTRACTS_DIR, "BrokenExample.sol");
+const MULTI_CONTRACT_PATH = join(CONTRACTS_DIR, "MultiContract.sol");
+const WARNING_PATH = join(CONTRACTS_DIR, "WarningContract.sol");
+const LIBRARY_PATH = join(CONTRACTS_DIR, "MathLib.sol");
+const LIBRARY_CONSUMER_PATH = join(CONTRACTS_DIR, "LibraryConsumer.sol");
+const INLINE_SOURCE = readFileSync(INLINE_PATH, "utf8");
+const BROKEN_SOURCE = readFileSync(BROKEN_PATH, "utf8");
+const MULTI_CONTRACT_SOURCE = readFileSync(MULTI_CONTRACT_PATH, "utf8");
+const WARNING_SOURCE = readFileSync(WARNING_PATH, "utf8");
+const LIBRARY_SOURCE = readFileSync(LIBRARY_PATH, "utf8");
 const LIBRARY_CONSUMER_SOURCE = readFileSync(
-  join(CONTRACTS_DIR, "LibraryConsumer.sol"),
+  LIBRARY_CONSUMER_PATH,
   "utf8"
 );
 const FUNCTION_FRAGMENT = readFileSync(
@@ -69,7 +63,10 @@ const EMPTY_SOURCE_UNIT = JSON.parse(
 const FRAGMENT_WITHOUT_TARGET = JSON.parse(
   readFileSync(join(AST_DIR, "fragment_without_contract.json"), "utf8")
 );
-const YUL_SOURCE = readFileSync(join(YUL_DIR, "Echo.yul"), "utf8");
+const YUL_PATH = join(YUL_DIR, "Echo.yul");
+const YUL_SOURCE = readFileSync(YUL_PATH, "utf8");
+
+const createAst = () => new Ast({ solcVersion: DEFAULT_SOLC_VERSION });
 
 const DEFAULT_OUTPUT_SELECTION = {
   "*": {
@@ -375,7 +372,6 @@ describe("Compiler.compileSource with Solidity strings", () => {
 });
 
 describe("Compiler.compileSource with AST and Yul inputs", () => {
-  const createAst = () => new Ast({ solcVersion: DEFAULT_SOLC_VERSION });
 
   test("accepts pre-parsed AST values", () => {
     const ast = createAst().fromSource(INLINE_SOURCE).ast();
@@ -426,7 +422,6 @@ describe("Compiler.compileSource with AST and Yul inputs", () => {
 });
 
 describe("Compiler.compileSources", () => {
-  const createAst = () => new Ast({ solcVersion: DEFAULT_SOLC_VERSION });
 
   test("compiles multiple solidity entries by path", () => {
     const compiler = new Compiler();
@@ -472,6 +467,114 @@ describe("Compiler.compileSources", () => {
         "InlineExample.ast": ast,
       }),
     ).toThrow(/does not support mixing inline source strings/i);
+  });
+});
+
+describe("Compiler.compileFiles", () => {
+  const createCompiler = () => new Compiler();
+
+  test("compiles solidity files from disk", () => {
+    const compiler = createCompiler();
+    const output = compiler.compileFiles([INLINE_PATH, WARNING_PATH]);
+
+    const names = output.artifacts.map((artifact) => artifact.contractName);
+    expect(names).toEqual(
+      expect.arrayContaining(["InlineExample", "WarningContract"])
+    );
+  });
+
+  test("compiles yul files when language override is provided", () => {
+    const compiler = createCompiler();
+    const output = compiler.compileFiles([YUL_PATH], {
+      solcLanguage: SolcLanguage.Yul,
+    });
+
+    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.artifacts).toHaveLength(1);
+  });
+
+  test("throws when a path cannot be read", () => {
+    const compiler = createCompiler();
+    expect(() =>
+      compiler.compileFiles(["/non-existent/path.sol"])
+    ).toThrow(/Failed to read source file/i);
+  });
+
+  test("compiles json ast files", () => {
+    const ast = createAst().fromSource(INLINE_SOURCE).ast();
+    const dir = createTempDir("tevm-compile-files-ast-");
+    const astPath = join(dir, "InlineExample.ast.json");
+    writeFileSync(astPath, JSON.stringify(ast));
+
+    const compiler = createCompiler();
+    const output = compiler.compileFiles([astPath]);
+
+    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.artifacts[0].contractName).toBe("InlineExample");
+  });
+
+  test("compiles ast files with unrecognized extensions", () => {
+    const ast = createAst().fromSource(INLINE_SOURCE).ast();
+    const dir = createTempDir("tevm-compile-files-ast-ext-");
+    const astPath = join(dir, "InlineExample.ast");
+    writeFileSync(astPath, JSON.stringify(ast));
+
+    const compiler = createCompiler();
+    const output = compiler.compileFiles([astPath]);
+
+    expect(output.artifacts[0].contractName).toBe("InlineExample");
+  });
+
+  test("errors when mixing ast and source inputs", () => {
+    const ast = createAst().fromSource(INLINE_SOURCE).ast();
+    const dir = createTempDir("tevm-compile-files-mix-");
+    const astPath = join(dir, "InlineExample.ast.json");
+    writeFileSync(astPath, JSON.stringify(ast));
+    const compiler = createCompiler();
+
+    expect(() =>
+      compiler.compileFiles([INLINE_PATH, astPath])
+    ).toThrow(/does not support mixing AST entries/i);
+  });
+
+  test("errors when extension is unknown and no language override is provided", () => {
+    const dir = createTempDir("tevm-compile-files-unknown-");
+    const unknownPath = join(dir, "InlineExample.txt");
+    writeFileSync(unknownPath, INLINE_SOURCE);
+    const compiler = createCompiler();
+
+    expect(() => compiler.compileFiles([unknownPath])).toThrow(
+      /Unable to infer solc language/i
+    );
+  });
+
+  test("errors when multiple languages are detected", () => {
+    const compiler = createCompiler();
+    expect(() =>
+      compiler.compileFiles([INLINE_PATH, YUL_PATH])
+    ).toThrow(/share the same solc language/i);
+  });
+
+  test("ignores constructor language preference", () => {
+    const compiler = new Compiler({
+      solcVersion: DEFAULT_SOLC_VERSION,
+      solcLanguage: SolcLanguage.Yul,
+    });
+    const output = compiler.compileFiles([INLINE_PATH]);
+
+    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.artifacts[0].contractName).toBe("InlineExample");
+  });
+
+  test("rejects json files that are not objects", () => {
+    const dir = createTempDir("tevm-compile-files-json-");
+    const jsonPath = join(dir, "Invalid.json");
+    writeFileSync(jsonPath, "[]");
+    const compiler = createCompiler();
+
+    expect(() => compiler.compileFiles([jsonPath])).toThrow(
+      /JSON sources must contain a Solidity AST object/i
+    );
   });
 });
 

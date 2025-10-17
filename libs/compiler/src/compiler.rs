@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use foundry_compilers::artifacts::{
   ast::SourceUnit, CompilerOutput, SolcInput, SolcLanguage as FoundrySolcLanguage, Source, Sources,
@@ -12,7 +13,9 @@ use crate::ast::utils::{from_js_value, sanitize_ast_value};
 use crate::compile::from_standard_json;
 use crate::internal::{
   errors::{map_napi_error, napi_error},
-  options::{default_compiler_settings, parse_compiler_options, CompilerOptions, SolcConfig},
+  options::{
+    default_compiler_settings, parse_compiler_options, CompilerOptions, SolcConfig, SolcUserOptions,
+  },
   solc,
 };
 use crate::types::CompileOutput;
@@ -133,7 +136,7 @@ impl Compiler {
     options: Option<JsUnknown>,
   ) -> Result<CompileOutput> {
     let parsed = parse_compiler_options(&env, options)?;
-    let config = self.resolve_config(parsed.as_ref())?;
+    let mut config = self.resolve_config(parsed.as_ref())?;
     let input = match target {
       Either::A(source) => CompileInput::Source(single_virtual_source(source)),
       Either::B(object) => {
@@ -157,7 +160,10 @@ impl Compiler {
           )))
         }
       },
-      CompileInput::Ast(ast_sources) => self.compile_ast_sources(config, ast_sources),
+      CompileInput::Ast(ast_sources) => {
+        config.language = FoundrySolcLanguage::Solidity;
+        self.compile_ast_sources(config, ast_sources)
+      }
     }
   }
 
@@ -208,21 +214,136 @@ impl Compiler {
     }
 
     if !ast_entries.is_empty() {
-      return self.compile_ast_sources(config, ast_entries);
+      let mut ast_config = config;
+      ast_config.language = FoundrySolcLanguage::Solidity;
+      return self.compile_ast_sources(ast_config, ast_entries);
     }
 
-    let solc_sources = sources_from_map(string_entries);
-    match config.language {
+    let final_config = config;
+    let sources = sources_from_map(string_entries);
+    match final_config.language {
       FoundrySolcLanguage::Solidity => {
-        self.compile_standard_sources(config, solc_sources, FoundrySolcLanguage::Solidity)
+        self.compile_standard_sources(final_config, sources, FoundrySolcLanguage::Solidity)
       }
       FoundrySolcLanguage::Yul => {
-        self.compile_standard_sources(config, solc_sources, FoundrySolcLanguage::Yul)
+        self.compile_standard_sources(final_config, sources, FoundrySolcLanguage::Yul)
       }
       other => Err(napi_error(format!(
         "Unsupported solcLanguage \"{other:?}\" for compileSources."
       ))),
     }
+  }
+
+  /// Compile sources from on-disk files identified by their paths.
+  #[napi(ts_args_type = "paths: string[], options?: CompilerOptions | undefined")]
+  pub fn compile_files(
+    &self,
+    env: Env,
+    paths: Vec<String>,
+    options: Option<JsUnknown>,
+  ) -> Result<CompileOutput> {
+    if paths.is_empty() {
+      return Err(napi_error("compileFiles requires at least one path."));
+    }
+
+    let parsed = parse_compiler_options(&env, options)?;
+    let explicit_language = parsed
+      .as_ref()
+      .and_then(|opts| opts.solc_language())
+      .map(FoundrySolcLanguage::from);
+    let mut config = self.resolve_config(parsed.as_ref())?;
+
+    let mut string_entries: BTreeMap<String, String> = BTreeMap::new();
+    let mut ast_entries: BTreeMap<String, SourceUnit> = BTreeMap::new();
+    let mut detected_language: Option<FoundrySolcLanguage> = None;
+
+    for original in paths {
+      let content = map_napi_error(fs::read_to_string(&original), "Failed to read source file")?;
+      let canonical = fs::canonicalize(&original)
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| original.clone());
+
+      let extension = Path::new(&original)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase());
+      let trimmed = content.trim_start();
+      let maybe_json = trimmed.starts_with('{');
+
+      if matches!(extension.as_deref(), Some("json")) {
+        if !maybe_json {
+          return Err(napi_error(
+            "JSON sources must contain a Solidity AST object.",
+          ));
+        }
+        let value: Value =
+          map_napi_error(serde_json::from_str(&content), "Failed to parse JSON input")?;
+        if !value.is_object() {
+          return Err(napi_error(
+            "JSON sources must contain a Solidity AST object.",
+          ));
+        }
+        let unit: SourceUnit =
+          map_napi_error(serde_json::from_value(value), "Failed to parse AST entry")?;
+        ast_entries.insert(canonical.clone(), unit);
+        continue;
+      }
+
+      let recognized_source_extension = matches!(extension.as_deref(), Some("sol") | Some("yul"));
+      if !recognized_source_extension && maybe_json {
+        let value: Value =
+          map_napi_error(serde_json::from_str(&content), "Failed to parse JSON input")?;
+        if value.is_object() {
+          let unit: SourceUnit =
+            map_napi_error(serde_json::from_value(value), "Failed to parse AST entry")?;
+          ast_entries.insert(canonical.clone(), unit);
+          continue;
+        }
+      }
+
+      string_entries.insert(canonical.clone(), content);
+
+      if explicit_language.is_none() {
+        let language = match extension.as_deref() {
+          Some("sol") => FoundrySolcLanguage::Solidity,
+          Some("yul") => FoundrySolcLanguage::Yul,
+          _ => {
+            return Err(napi_error(format!(
+              "Unable to infer solc language for \"{canonical}\". Provide solcLanguage explicitly.",
+            )));
+          }
+        };
+
+        if let Some(existing) = detected_language {
+          if existing != language {
+            return Err(napi_error(
+              "compileFiles requires all non-AST sources to share the same solc language. Provide solcLanguage explicitly to disambiguate.",
+            ));
+          }
+        } else {
+          detected_language = Some(language);
+        }
+      }
+    }
+
+    if !ast_entries.is_empty() {
+      if !string_entries.is_empty() {
+        return Err(napi_error(
+          "compileFiles does not support mixing AST entries with source files. Split the call per input type.",
+        ));
+      }
+      config.language = FoundrySolcLanguage::Solidity;
+      return self.compile_ast_sources(config, ast_entries);
+    }
+
+    let final_language = explicit_language
+      .or(detected_language)
+      .unwrap_or(FoundrySolcLanguage::Solidity);
+
+    config.language = final_language;
+
+    let sources = sources_from_map(string_entries);
+    self.compile_standard_sources(config, sources, final_language)
   }
 }
 

@@ -73,6 +73,8 @@ export declare class Compiler {
   compileSource(target: string | object, options?: CompilerOptions | undefined): CompileOutput
   /** Compile multiple sources supplied as a path keyed lookup. */
   compileSources(sources: Record<string, string | object>, options?: CompilerOptions | undefined): CompileOutput
+  /** Compile sources from on-disk files identified by their paths. */
+  compileFiles(paths: string[], options?: CompilerOptions | undefined): CompileOutput
 }
 
 export declare class SolidityProject {
