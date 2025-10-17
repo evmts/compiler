@@ -9,6 +9,7 @@ pub enum AstError {
   InvalidContractStructure(String),
   JsonError(String),
   CompilerError(String),
+  ConfigError(String),
 }
 
 impl std::fmt::Display for AstError {
@@ -20,6 +21,7 @@ impl std::fmt::Display for AstError {
       Self::InvalidContractStructure(msg) => write!(f, "Invalid contract structure: {}", msg),
       Self::JsonError(msg) => write!(f, "JSON error: {}", msg),
       Self::CompilerError(msg) => write!(f, "Compiler error: {}", msg),
+      Self::ConfigError(msg) => write!(f, "Invalid AST configuration: {}", msg),
     }
   }
 }

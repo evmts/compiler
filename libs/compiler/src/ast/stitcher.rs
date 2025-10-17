@@ -71,7 +71,7 @@ fn resolve_contract_part(part: ContractDefinitionPart) -> ContractDefinitionPart
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::ast::{parser, utils, Ast};
+  use crate::ast::{orchestrator::AstOrchestrator, parser, utils};
   use crate::internal::solc;
   use foundry_compilers::solc::Solc;
 
@@ -96,7 +96,7 @@ contract Target {}
     let Some(solc) = find_default_solc() else {
       return;
     };
-    let settings = Ast::sanitize_settings(None);
+    let settings = AstOrchestrator::sanitize_settings(None).expect("sanitize default settings");
     let unit = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol", &solc, &settings).unwrap();
     let idx = find_instrumented_contract_index(&unit, Some("Target")).unwrap();
     let SourceUnitPart::ContractDefinition(contract) = &unit.nodes[idx] else {
@@ -110,7 +110,7 @@ contract Target {}
     let Some(solc) = find_default_solc() else {
       return;
     };
-    let settings = Ast::sanitize_settings(None);
+    let settings = AstOrchestrator::sanitize_settings(None).expect("sanitize default settings");
     let unit = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol", &solc, &settings).unwrap();
     let idx = find_instrumented_contract_index(&unit, None).unwrap();
     let SourceUnitPart::ContractDefinition(contract) = &unit.nodes[idx] else {
@@ -124,7 +124,7 @@ contract Target {}
     let Some(solc) = find_default_solc() else {
       return;
     };
-    let settings = Ast::sanitize_settings(None);
+    let settings = AstOrchestrator::sanitize_settings(None).expect("sanitize default settings");
     let mut unit = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol", &solc, &settings).unwrap();
     let fragment = parser::parse_fragment_contract(FRAGMENT, &solc, &settings).unwrap();
     let idx = find_instrumented_contract_index(&unit, Some("Target")).unwrap();

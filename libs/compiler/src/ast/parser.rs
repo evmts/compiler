@@ -81,7 +81,7 @@ pub fn extract_fragment_contract(unit: &SourceUnit) -> Result<&ContractDefinitio
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::{ast::Ast, internal::solc};
+  use crate::{ast::orchestrator::AstOrchestrator, internal::solc};
   use foundry_compilers::artifacts::ast::ContractDefinitionPart;
 
   const SAMPLE_FRAGMENT: &str = r#"function demo() public pure returns (uint256) { return 1; }"#;
@@ -112,7 +112,7 @@ contract Example {
     let Some(solc) = find_default_solc() else {
       return;
     };
-    let settings = Ast::sanitize_settings(None);
+    let settings = AstOrchestrator::sanitize_settings(None).expect("sanitize default settings");
     let ast = parse_source_ast(SAMPLE_CONTRACT, "Example.sol", &solc, &settings)
       .expect("should parse contract");
     assert!(ast
@@ -126,7 +126,7 @@ contract Example {
     let Some(solc) = find_default_solc() else {
       return;
     };
-    let settings = Ast::sanitize_settings(None);
+    let settings = AstOrchestrator::sanitize_settings(None).expect("sanitize default settings");
     let contract =
       parse_fragment_contract(SAMPLE_FRAGMENT, &solc, &settings).expect("parse fragment");
     assert_eq!(contract.name, "__AstFragment");

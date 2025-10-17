@@ -9,7 +9,7 @@ use foundry_compilers::artifacts::{
 use napi::Result;
 use serde_json::{json, Value};
 
-use crate::ast::orchestrator::AstOrchestrator;
+use crate::ast::utils;
 use crate::compiler::input::CompilationInput;
 use crate::compiler::project_runner::ProjectRunner;
 use crate::compiler::{from_standard_json, CoreCompileOutput};
@@ -208,7 +208,7 @@ impl CompilerCore {
     for (file_name, unit) in ast_sources {
       let mut ast_value =
         map_napi_error(serde_json::to_value(&unit), "Failed to serialise AST value")?;
-      AstOrchestrator::sanitize_ast_value(&mut ast_value);
+      utils::sanitize_ast_value(&mut ast_value);
       sources_value.insert(file_name, json!({ "ast": ast_value }));
     }
 

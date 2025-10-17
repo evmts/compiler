@@ -210,7 +210,7 @@ pub struct AstOptions {
   #[napi(ts_type = "import('./index').SolcLanguage | undefined")]
   pub solc_language: Option<SolcLanguage>,
   #[napi(ts_type = "import('./index').CompilerSettings | undefined")]
-  pub settings: Option<CompilerSettings>,
+  pub solc_settings: Option<CompilerSettings>,
   #[napi(ts_type = "string | undefined")]
   pub instrumented_contract: Option<String>,
 }
@@ -261,7 +261,7 @@ impl SolcUserOptions for AstOptions {
   }
 
   fn compiler_settings(&self) -> Option<&CompilerSettings> {
-    self.settings.as_ref()
+    self.solc_settings.as_ref()
   }
 }
 

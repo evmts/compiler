@@ -48,7 +48,7 @@ export declare class Compiler {
 export interface AstOptions {
   solcVersion?: string | undefined
   solcLanguage?: import('./index').SolcLanguage | undefined
-  settings?: import('./index').CompilerSettings | undefined
+  solcSettings?: import('./index').CompilerSettings | undefined
   instrumentedContract?: string | undefined
 }
 
