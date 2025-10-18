@@ -2,387 +2,323 @@ use foundry_compilers::artifacts::ast::{
   ContractDefinition, ContractDefinitionPart, SourceUnit, SourceUnitPart, Visibility,
 };
 use foundry_compilers::solc::SolcLanguage;
-use napi::bindgen_prelude::*;
-use napi::{Env, JsObject, JsUnknown};
 
-use super::{
-  orchestrator::AstOrchestrator,
-  stitcher,
-  utils::{from_js_value, sanitize_ast_value, to_js_value},
-};
-use crate::internal::{
-  config::{parse_ast_options, AstOptions, SolcConfig},
-  errors::{map_napi_error, napi_error},
-  solc,
-};
+use super::{orchestrator::AstOrchestrator, stitcher};
+use crate::internal::config::{AstOptions, SolcConfig};
+use crate::internal::errors::{map_err_with_context, Error, Result};
+use crate::internal::solc;
 
 const VIRTUAL_SOURCE_PATH: &str = "__VIRTUAL__.sol";
 
-/// High-level helper for manipulating Solidity ASTs prior to recompilation.
-#[napi]
 #[derive(Clone)]
-pub struct Ast {
-  config: SolcConfig,
-  ast: Option<SourceUnit>,
-  options: AstOptions,
+pub struct State {
+  pub config: SolcConfig,
+  pub ast: Option<SourceUnit>,
+  pub options: AstOptions,
 }
 
-impl Ast {
-  fn contract_override<'a>(&'a self, overrides: Option<&'a AstOptions>) -> Option<&'a str> {
-    overrides
-      .and_then(|opts| opts.instrumented_contract())
-      .or_else(|| self.options.instrumented_contract())
+#[derive(Clone)]
+pub enum SourceTarget {
+  Text(String),
+  Ast(SourceUnit),
+}
+
+#[derive(Clone)]
+pub enum FragmentTarget {
+  Text(String),
+  Ast(SourceUnit),
+}
+
+pub fn init(options: Option<AstOptions>) -> Result<State> {
+  let default_settings = AstOrchestrator::sanitize_settings(None).map_err(Error::from)?;
+  let default_language = solc::default_language();
+  let mut config =
+    SolcConfig::new(&default_language, &default_settings, options.as_ref()).map_err(Error::from)?;
+  config.settings =
+    AstOrchestrator::sanitize_settings(Some(config.settings.clone())).map_err(Error::from)?;
+  if config.language != SolcLanguage::Solidity {
+    return Err(Error::new(
+      "Ast helpers only support solcLanguage \"Solidity\".",
+    ));
   }
+  solc::ensure_installed(&config.version)?;
 
-  fn update_options(&mut self, overrides: Option<&AstOptions>) {
-    if let Some(opts) = overrides {
-      self.options = opts.clone();
-    }
+  Ok(State {
+    config,
+    ast: None,
+    options: options.unwrap_or_default(),
+  })
+}
+
+pub fn from_source(
+  state: &mut State,
+  target: SourceTarget,
+  overrides: Option<&AstOptions>,
+) -> Result<()> {
+  match target {
+    SourceTarget::Text(source) => load_source_text(state, &source, overrides)?,
+    SourceTarget::Ast(unit) => load_source_ast(state, unit, overrides)?,
   }
+  Ok(())
+}
 
-  fn resolve_config(&self, overrides: Option<&AstOptions>) -> Result<SolcConfig> {
-    let mut config = self.config.merge(overrides)?;
-    if config.language != SolcLanguage::Solidity {
-      return Err(napi_error(
-        "Ast helpers only support solcLanguage \"Solidity\".",
-      ));
-    }
-    config.settings = map_napi_error(
-      AstOrchestrator::sanitize_settings(Some(config.settings.clone())),
-      "Failed to sanitize compiler settings",
-    )?;
-    Ok(config)
+pub fn inject_shadow(
+  state: &mut State,
+  fragment: FragmentTarget,
+  overrides: Option<&AstOptions>,
+) -> Result<()> {
+  match fragment {
+    FragmentTarget::Text(source) => inject_fragment_string(state, &source, overrides)?,
+    FragmentTarget::Ast(unit) => inject_fragment_ast(state, unit, overrides)?,
   }
+  Ok(())
+}
 
-  fn target_ast_mut(&mut self) -> Result<&mut SourceUnit> {
-    self
-      .ast
-      .as_mut()
-      .ok_or_else(|| napi_error("Ast has no target AST. Call fromSource first."))
+pub fn expose_internal_variables(state: &mut State, overrides: Option<&AstOptions>) -> Result<()> {
+  expose_variables_internal(state, overrides)
+}
+
+pub fn expose_internal_functions(state: &mut State, overrides: Option<&AstOptions>) -> Result<()> {
+  expose_functions_internal(state, overrides)
+}
+
+pub fn source_unit(state: &State) -> Option<&SourceUnit> {
+  state.ast.as_ref()
+}
+
+pub fn source_unit_mut(state: &mut State) -> Option<&mut SourceUnit> {
+  state.ast.as_mut()
+}
+
+fn contract_override<'a>(state: &'a State, overrides: Option<&'a AstOptions>) -> Option<&'a str> {
+  overrides
+    .and_then(|opts| opts.instrumented_contract())
+    .or_else(|| state.options.instrumented_contract())
+}
+
+fn update_options(state: &mut State, overrides: Option<&AstOptions>) {
+  if let Some(opts) = overrides {
+    state.options = opts.clone();
   }
+}
 
-  fn target_ast(&self) -> Result<&SourceUnit> {
-    self
-      .ast
-      .as_ref()
-      .ok_or_else(|| napi_error("Ast has no target AST. Call fromSource first."))
+fn resolve_config(state: &State, overrides: Option<&AstOptions>) -> Result<SolcConfig> {
+  let mut config = state.config.merge(overrides).map_err(Error::from)?;
+  if config.language != SolcLanguage::Solidity {
+    return Err(Error::new(
+      "Ast helpers only support solcLanguage \"Solidity\".",
+    ));
   }
+  config.settings = map_err_with_context(
+    AstOrchestrator::sanitize_settings(Some(config.settings.clone())),
+    "Failed to sanitize compiler settings",
+  )?;
+  Ok(config)
+}
 
-  fn find_contract_index(&self, ast: &SourceUnit, contract_name: Option<&str>) -> Result<usize> {
-    map_napi_error(
-      stitcher::find_instrumented_contract_index(ast, contract_name),
-      "Failed to locate target contract",
-    )
-  }
+fn target_ast_mut(state: &mut State) -> Result<&mut SourceUnit> {
+  state
+    .ast
+    .as_mut()
+    .ok_or_else(|| Error::new("Ast has no target AST. Call from_source first."))
+}
 
-  fn inject_fragment_contract(
-    &mut self,
-    fragment_contract: ContractDefinition,
-    overrides: Option<&AstOptions>,
-  ) -> Result<()> {
-    let contract_name = self
-      .contract_override(overrides)
-      .map(|name| name.to_owned());
-    let contract_idx = {
-      let target_ast = self.target_ast()?;
-      self.find_contract_index(target_ast, contract_name.as_deref())?
-    };
+fn target_ast(state: &State) -> Result<&SourceUnit> {
+  state
+    .ast
+    .as_ref()
+    .ok_or_else(|| Error::new("Ast has no target AST. Call from_source first."))
+}
 
-    let target_ast = self.target_ast_mut()?;
-    map_napi_error(
-      AstOrchestrator::stitch_fragment_into_contract(target_ast, contract_idx, &fragment_contract),
-      "Failed to stitch AST nodes",
-    )?;
+fn find_contract_index(
+  state: &State,
+  ast: &SourceUnit,
+  contract_name: Option<&str>,
+) -> Result<usize> {
+  map_err_with_context(
+    stitcher::find_instrumented_contract_index(
+      ast,
+      contract_name.or_else(|| contract_override(state, None)),
+    ),
+    "Failed to locate target contract",
+  )
+}
 
-    Ok(())
-  }
+fn inject_fragment_contract(
+  state: &mut State,
+  fragment_contract: ContractDefinition,
+  overrides: Option<&AstOptions>,
+) -> Result<()> {
+  let contract_name = contract_override(state, overrides).map(|name| name.to_owned());
+  let contract_idx = {
+    let target_ast = target_ast(state)?;
+    find_contract_index(state, target_ast, contract_name.as_deref())?
+  };
 
-  fn contract_indices(
-    &self,
-    ast: &SourceUnit,
-    overrides: Option<&AstOptions>,
-  ) -> Result<Vec<usize>> {
-    if let Some(name) = self.contract_override(overrides) {
-      let idx = stitcher::find_instrumented_contract_index(ast, Some(name))?;
-      Ok(vec![idx])
+  let target_ast = target_ast_mut(state)?;
+  map_err_with_context(
+    AstOrchestrator::stitch_fragment_into_contract(target_ast, contract_idx, &fragment_contract),
+    "Failed to stitch AST nodes",
+  )
+}
+
+fn contract_indices(
+  state: &State,
+  ast: &SourceUnit,
+  overrides: Option<&AstOptions>,
+) -> Result<Vec<usize>> {
+  if let Some(name) = contract_override(state, overrides) {
+    let idx = stitcher::find_instrumented_contract_index(ast, Some(name))?;
+    Ok(vec![idx])
+  } else {
+    let indices = ast
+      .nodes
+      .iter()
+      .enumerate()
+      .filter_map(|(idx, part)| {
+        matches!(part, SourceUnitPart::ContractDefinition(_)).then_some(idx)
+      })
+      .collect::<Vec<_>>();
+
+    if indices.is_empty() {
+      Err(Error::new(
+        "Target AST does not contain any contract definitions",
+      ))
     } else {
-      let indices = ast
-        .nodes
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, part)| {
-          if matches!(part, SourceUnitPart::ContractDefinition(_)) {
-            Some(idx)
-          } else {
-            None
-          }
-        })
-        .collect::<Vec<_>>();
-
-      if indices.is_empty() {
-        Err(napi_error(
-          "Target AST does not contain any contract definitions",
-        ))
-      } else {
-        Ok(indices)
-      }
+      Ok(indices)
     }
-  }
-
-  fn mutate_contracts<F>(&mut self, overrides: Option<&AstOptions>, mut mutator: F) -> Result<()>
-  where
-    F: FnMut(&mut ContractDefinition),
-  {
-    self.update_options(overrides);
-    let indices = {
-      let unit = self.target_ast()?;
-      self.contract_indices(unit, overrides)?
-    };
-    let unit = self.target_ast_mut()?;
-    for idx in indices {
-      let SourceUnitPart::ContractDefinition(contract) = unit
-        .nodes
-        .get_mut(idx)
-        .ok_or_else(|| napi_error("Invalid contract index"))?
-      else {
-        continue;
-      };
-      mutator(contract);
-    }
-    Ok(())
-  }
-
-  fn expose_variables_internal(&mut self, overrides: Option<&AstOptions>) -> Result<()> {
-    self.mutate_contracts(overrides, |contract| {
-      for member in &mut contract.nodes {
-        if let ContractDefinitionPart::VariableDeclaration(variable) = member {
-          if matches!(
-            variable.visibility,
-            Visibility::Private | Visibility::Internal
-          ) {
-            variable.visibility = Visibility::Public;
-          }
-        }
-      }
-    })
-  }
-
-  fn expose_functions_internal(&mut self, overrides: Option<&AstOptions>) -> Result<()> {
-    self.mutate_contracts(overrides, |contract| {
-      for member in &mut contract.nodes {
-        if let ContractDefinitionPart::FunctionDefinition(function) = member {
-          if matches!(
-            function.visibility,
-            Visibility::Private | Visibility::Internal
-          ) {
-            function.visibility = Visibility::Public;
-          }
-        }
-      }
-    })
-  }
-
-  pub(crate) fn from_source_string(
-    &mut self,
-    source: &str,
-    overrides: Option<&AstOptions>,
-  ) -> Result<()> {
-    self.update_options(overrides);
-    let config = self.resolve_config(overrides)?;
-    let solc = solc::ensure_installed(&config.version)?;
-
-    let ast = map_napi_error(
-      AstOrchestrator::parse_source_unit(source, VIRTUAL_SOURCE_PATH, &solc, &config.settings),
-      "Failed to parse target source",
-    )?;
-
-    self.config = config;
-    self.ast = Some(ast);
-    Ok(())
-  }
-
-  pub(crate) fn from_source_ast(
-    &mut self,
-    target_ast: SourceUnit,
-    overrides: Option<&AstOptions>,
-  ) -> Result<()> {
-    self.update_options(overrides);
-    let config = self.resolve_config(overrides)?;
-    solc::ensure_installed(&config.version)?;
-
-    map_napi_error(
-      stitcher::find_instrumented_contract_index(&target_ast, self.contract_override(overrides)),
-      "Failed to locate target contract",
-    )?;
-
-    self.config = config;
-    self.ast = Some(target_ast);
-    Ok(())
-  }
-
-  pub(crate) fn inject_fragment_string(
-    &mut self,
-    fragment_source: &str,
-    overrides: Option<&AstOptions>,
-  ) -> Result<()> {
-    let config = self.resolve_config(overrides)?;
-    let solc = solc::ensure_installed(&config.version)?;
-
-    let fragment_contract = map_napi_error(
-      AstOrchestrator::parse_fragment_contract(fragment_source, &solc, &config.settings),
-      "Failed to parse AST fragment",
-    )?;
-
-    self.config = config;
-    self.inject_fragment_contract(fragment_contract, overrides)
-  }
-
-  pub(crate) fn inject_fragment_ast(
-    &mut self,
-    fragment_ast: SourceUnit,
-    overrides: Option<&AstOptions>,
-  ) -> Result<()> {
-    let config = self.resolve_config(overrides)?;
-    solc::ensure_installed(&config.version)?;
-    self.config = config;
-
-    let fragment_contract = map_napi_error(
-      AstOrchestrator::extract_fragment_contract(&fragment_ast),
-      "Failed to locate fragment contract",
-    )?;
-
-    self.inject_fragment_contract(fragment_contract, overrides)
-  }
-
-  pub fn source_unit(&self) -> Option<&SourceUnit> {
-    self.ast.as_ref()
-  }
-
-  pub fn source_unit_mut(&mut self) -> Option<&mut SourceUnit> {
-    self.ast.as_mut()
   }
 }
 
-/// JavaScript-facing API surface.
-#[napi]
-impl Ast {
-  /// Create a new AST helper. Providing `instrumentedContract`
-  /// establishes the instrumented contract targeted by subsequent operations.
-  #[napi(constructor, ts_args_type = "options?: AstOptions | undefined")]
-  pub fn new(env: Env, options: Option<JsUnknown>) -> Result<Self> {
-    let parsed = parse_ast_options(&env, options)?;
-    let default_settings = map_napi_error(
-      AstOrchestrator::sanitize_settings(None),
-      "Failed to sanitize default compiler settings",
-    )?;
-    let default_language = solc::default_language();
-    let mut config = SolcConfig::new(&default_language, &default_settings, parsed.as_ref())?;
-    config.settings = map_napi_error(
-      AstOrchestrator::sanitize_settings(Some(config.settings.clone())),
-      "Failed to sanitize compiler settings",
-    )?;
-    if config.language != SolcLanguage::Solidity {
-      return Err(napi_error(
-        "Ast helpers only support solcLanguage \"Solidity\".",
-      ));
-    }
-    solc::ensure_installed(&config.version)?;
-
-    let ast = Ast {
-      config,
-      ast: None,
-      options: parsed.unwrap_or_default(),
+fn mutate_contracts<F>(
+  state: &mut State,
+  overrides: Option<&AstOptions>,
+  mut mutator: F,
+) -> Result<()>
+where
+  F: FnMut(&mut ContractDefinition),
+{
+  update_options(state, overrides);
+  let indices = {
+    let unit = target_ast(state)?;
+    contract_indices(state, unit, overrides)?
+  };
+  let unit = target_ast_mut(state)?;
+  for idx in indices {
+    let SourceUnitPart::ContractDefinition(contract) = unit
+      .nodes
+      .get_mut(idx)
+      .ok_or_else(|| Error::new("Invalid contract index"))?
+    else {
+      continue;
     };
-    Ok(ast)
+    mutator(contract);
   }
+  Ok(())
+}
 
-  /// Parse Solidity source into an AST using the configured solc version.
-  /// When no `instrumentedContract` is provided, later operations apply to all
-  /// contracts in the file.
-  #[napi(
-    ts_args_type = "target: string | object, options?: AstOptions | undefined",
-    ts_return_type = "this"
-  )]
-  pub fn from_source(
-    &mut self,
-    env: Env,
-    target: Either<String, JsObject>,
-    options: Option<JsUnknown>,
-  ) -> Result<Ast> {
-    let parsed = parse_ast_options(&env, options)?;
-    match target {
-      Either::A(source) => self.from_source_string(&source, parsed.as_ref())?,
-      Either::B(object) => {
-        let target_unit: SourceUnit = from_js_value(&env, object.into_unknown())?;
-        self.from_source_ast(target_unit, parsed.as_ref())?;
+fn expose_variables_internal(state: &mut State, overrides: Option<&AstOptions>) -> Result<()> {
+  mutate_contracts(state, overrides, |contract| {
+    for member in &mut contract.nodes {
+      if let ContractDefinitionPart::VariableDeclaration(variable) = member {
+        if matches!(
+          variable.visibility,
+          Visibility::Private | Visibility::Internal
+        ) {
+          variable.visibility = Visibility::Public;
+        }
       }
     }
-    Ok(self.clone())
-  }
+  })
+}
 
-  /// Parse an AST fragment from source text or inject a pre-parsed AST fragment
-  /// into the targeted contract.
-  #[napi(
-    ts_args_type = "fragment: string | object, options?: AstOptions | undefined",
-    ts_return_type = "this"
-  )]
-  pub fn inject_shadow(
-    &mut self,
-    env: Env,
-    fragment: Either<String, JsObject>,
-    options: Option<JsUnknown>,
-  ) -> Result<Ast> {
-    let parsed = parse_ast_options(&env, options)?;
-    match fragment {
-      Either::A(source) => self.inject_fragment_string(&source, parsed.as_ref())?,
-      Either::B(object) => {
-        let fragment_unit: SourceUnit = from_js_value(&env, object.into_unknown())?;
-        self.inject_fragment_ast(fragment_unit, parsed.as_ref())?;
+fn expose_functions_internal(state: &mut State, overrides: Option<&AstOptions>) -> Result<()> {
+  mutate_contracts(state, overrides, |contract| {
+    for member in &mut contract.nodes {
+      if let ContractDefinitionPart::FunctionDefinition(function) = member {
+        if matches!(
+          function.visibility,
+          Visibility::Private | Visibility::Internal
+        ) {
+          function.visibility = Visibility::Public;
+        }
       }
     }
-    Ok(self.clone())
-  }
+  })
+}
 
-  /// Promote private/internal state variables to public visibility. Omitting
-  /// `instrumentedContract` applies the change to all contracts.
-  #[napi(
-    ts_args_type = "options?: AstOptions | undefined",
-    ts_return_type = "this"
-  )]
-  pub fn expose_internal_variables(&mut self, env: Env, options: Option<JsUnknown>) -> Result<Ast> {
-    let parsed = parse_ast_options(&env, options)?;
-    self.expose_variables_internal(parsed.as_ref())?;
-    Ok(self.clone())
-  }
+fn load_source_text(state: &mut State, source: &str, overrides: Option<&AstOptions>) -> Result<()> {
+  update_options(state, overrides);
+  let config = resolve_config(state, overrides)?;
+  let solc = solc::ensure_installed(&config.version)?;
 
-  /// Promote private/internal functions to public visibility. Omitting
-  /// `instrumentedContract` applies the change to all contracts.
-  #[napi(
-    ts_args_type = "options?: AstOptions | undefined",
-    ts_return_type = "this"
-  )]
-  pub fn expose_internal_functions(&mut self, env: Env, options: Option<JsUnknown>) -> Result<Ast> {
-    let parsed = parse_ast_options(&env, options)?;
-    self.expose_functions_internal(parsed.as_ref())?;
-    Ok(self.clone())
-  }
+  let ast = map_err_with_context(
+    AstOrchestrator::parse_source_unit(source, VIRTUAL_SOURCE_PATH, &solc, &config.settings),
+    "Failed to parse target source",
+  )?;
 
-  /// Get the current intrumented AST.
-  #[napi(ts_return_type = "import('./ast-types').SourceUnit")]
-  pub fn ast(&self, env: Env) -> Result<JsUnknown> {
-    let ast = self
-      .source_unit()
-      .ok_or_else(|| napi_error("Ast has no target unit. Call fromSource first."))?;
-    let mut ast_value = map_napi_error(serde_json::to_value(ast), "Failed to serialize AST value")?;
-    sanitize_ast_value(&mut ast_value);
-    to_js_value(&env, &ast_value)
-  }
+  state.config = config;
+  state.ast = Some(ast);
+  Ok(())
+}
+
+fn load_source_ast(
+  state: &mut State,
+  target_ast: SourceUnit,
+  overrides: Option<&AstOptions>,
+) -> Result<()> {
+  update_options(state, overrides);
+  let config = resolve_config(state, overrides)?;
+  solc::ensure_installed(&config.version)?;
+
+  map_err_with_context(
+    stitcher::find_instrumented_contract_index(&target_ast, contract_override(state, overrides)),
+    "Failed to locate target contract",
+  )?;
+
+  state.config = config;
+  state.ast = Some(target_ast);
+  Ok(())
+}
+
+fn inject_fragment_string(
+  state: &mut State,
+  fragment_source: &str,
+  overrides: Option<&AstOptions>,
+) -> Result<()> {
+  let config = resolve_config(state, overrides)?;
+  let solc = solc::ensure_installed(&config.version)?;
+
+  let fragment_contract = map_err_with_context(
+    AstOrchestrator::parse_fragment_contract(fragment_source, &solc, &config.settings),
+    "Failed to parse AST fragment",
+  )?;
+
+  state.config = config;
+  inject_fragment_contract(state, fragment_contract, overrides)
+}
+
+fn inject_fragment_ast(
+  state: &mut State,
+  fragment_ast: SourceUnit,
+  overrides: Option<&AstOptions>,
+) -> Result<()> {
+  let config = resolve_config(state, overrides)?;
+  solc::ensure_installed(&config.version)?;
+  state.config = config;
+
+  let fragment_contract = map_err_with_context(
+    AstOrchestrator::extract_fragment_contract(&fragment_ast),
+    "Failed to locate fragment contract",
+  )?;
+
+  inject_fragment_contract(state, fragment_contract, overrides)
 }
 
 #[cfg(test)]
 mod tests {
-  use super::AstOrchestrator;
   use super::*;
+  use crate::ast::utils;
   use crate::internal::config::{AstOptions, SolcConfig};
   use crate::internal::solc;
   use foundry_compilers::artifacts::CompilerOutput;
@@ -421,19 +357,18 @@ contract Target {
       Option::<&AstOptions>::None,
     )
     .expect("config");
-    config.settings =
-      AstOrchestrator::sanitize_settings(Some(config.settings)).expect("sanitize config settings");
+    config.settings = AstOrchestrator::sanitize_settings(Some(config.settings.clone()))
+      .expect("sanitize config settings");
     solc::ensure_installed(&config.version).expect("ensure solc");
 
-    let mut instrument = Ast {
-      config,
-      ast: None,
-      options: AstOptions::default(),
-    };
+    let mut state = init(None).expect("init ast");
 
-    instrument
-      .from_source_string(INSTRUMENTED_CONTRACT, None)
-      .expect("load source");
+    from_source(
+      &mut state,
+      SourceTarget::Text(INSTRUMENTED_CONTRACT.into()),
+      None,
+    )
+    .expect("load source");
 
     let overrides = AstOptions {
       solc_version: None,
@@ -442,14 +377,16 @@ contract Target {
       instrumented_contract: Some("Target".into()),
     };
 
-    instrument
-      .inject_fragment_string(
-        "function extra() public view returns (uint256) { return value; }",
-        Some(&overrides),
-      )
-      .expect("inject fragment");
+    inject_shadow(
+      &mut state,
+      FragmentTarget::Text(
+        "function extra() public view returns (uint256) { return value; }".into(),
+      ),
+      Some(&overrides),
+    )
+    .expect("inject fragment");
 
-    let ast = instrument.source_unit().expect("ast");
+    let ast = source_unit(&state).expect("ast");
     let contract = ast
       .nodes
       .iter()
@@ -464,7 +401,6 @@ contract Target {
       ContractDefinitionPart::FunctionDefinition(function) if function.name == "extra"
     )));
 
-    // Ensure uniqueness of ids
     fn collect_ids(value: &Value, out: &mut Vec<i64>) {
       match value {
         Value::Object(map) => {
@@ -503,33 +439,28 @@ contract Target {
       Option::<&AstOptions>::None,
     )
     .expect("config");
-    config.settings =
-      AstOrchestrator::sanitize_settings(Some(config.settings)).expect("sanitize config settings");
+    config.settings = AstOrchestrator::sanitize_settings(Some(config.settings.clone()))
+      .expect("sanitize config settings");
     solc::ensure_installed(&config.version).expect("ensure solc");
 
-    let mut instrument = Ast {
-      config,
-      ast: None,
-      options: AstOptions::default(),
-    };
+    let mut state = init(None).expect("init ast");
 
-    instrument
-      .from_source_string(INSTRUMENTED_CONTRACT, None)
-      .expect("load source");
+    from_source(
+      &mut state,
+      SourceTarget::Text(INSTRUMENTED_CONTRACT.into()),
+      None,
+    )
+    .expect("load source");
     let overrides = AstOptions {
       solc_version: None,
       solc_language: None,
       solc_settings: None,
       instrumented_contract: Some("Target".into()),
     };
-    instrument
-      .expose_variables_internal(Some(&overrides))
-      .expect("expose vars");
-    instrument
-      .expose_functions_internal(Some(&overrides))
-      .expect("expose funcs");
+    expose_internal_variables(&mut state, Some(&overrides)).expect("expose vars");
+    expose_internal_functions(&mut state, Some(&overrides)).expect("expose funcs");
 
-    let ast = instrument.source_unit().expect("ast");
+    let ast = source_unit(&state).expect("ast");
     let contract = ast
       .nodes
       .iter()
@@ -570,31 +501,25 @@ contract Target {
       Option::<&AstOptions>::None,
     )
     .expect("config");
-    config.settings =
-      AstOrchestrator::sanitize_settings(Some(config.settings)).expect("sanitize config settings");
+    config.settings = AstOrchestrator::sanitize_settings(Some(config.settings.clone()))
+      .expect("sanitize config settings");
     solc::ensure_installed(&config.version).expect("ensure solc");
 
-    let mut instrument = Ast {
-      config,
-      ast: None,
-      options: AstOptions::default(),
-    };
-    instrument
-      .from_source_string(INSTRUMENTED_CONTRACT, None)
-      .expect("load source");
-    instrument
-      .expose_variables_internal(None)
-      .expect("expose vars");
-    instrument
-      .expose_functions_internal(None)
-      .expect("expose funcs");
+    let mut state = init(None).expect("init ast");
+    from_source(
+      &mut state,
+      SourceTarget::Text(INSTRUMENTED_CONTRACT.into()),
+      None,
+    )
+    .expect("load source");
+    expose_internal_variables(&mut state, None).expect("expose vars");
+    expose_internal_functions(&mut state, None).expect("expose funcs");
 
-    let ast = instrument.source_unit().expect("ast");
+    let ast = source_unit(&state).expect("ast");
     let mut ast_value = serde_json::to_value(ast).expect("serialize ast");
-    sanitize_ast_value(&mut ast_value);
+    utils::sanitize_ast_value(&mut ast_value);
 
-    let settings_value =
-      serde_json::to_value(&instrument.config.settings).expect("serialize settings");
+    let settings_value = serde_json::to_value(&state.config.settings).expect("serialize settings");
 
     let input = json!({
       "language": "SolidityAST",
@@ -612,9 +537,8 @@ contract Target {
 
     assert!(
       output.errors.is_empty(),
-      "expected solc to compile ast without errors, but got errors: {:?}, ast: {:?}",
-      output.errors,
-      serde_json::to_string_pretty(&ast_value).unwrap_or_default()
+      "expected solc to compile ast without errors, but got errors: {:?}",
+      output.errors
     );
   }
 }

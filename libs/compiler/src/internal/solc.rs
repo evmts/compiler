@@ -3,10 +3,9 @@ use std::sync::{Mutex, OnceLock};
 use semver::Version;
 
 use foundry_compilers::solc::{Solc, SolcLanguage};
-use napi::bindgen_prelude::Result;
 use napi::{bindgen_prelude::AsyncTask, Env, Task};
 
-use super::errors::{map_napi_error, napi_error};
+use super::errors::{map_err_with_context, to_napi_result, Error, Result};
 
 pub(crate) const DEFAULT_SOLC_VERSION: &str = "0.8.30";
 
@@ -16,7 +15,7 @@ pub(crate) fn default_language() -> SolcLanguage {
 
 pub(crate) fn parse_version(version: &str) -> Result<Version> {
   let trimmed = version.trim().trim_start_matches('v');
-  map_napi_error(Version::parse(trimmed), "Failed to parse solc version")
+  map_err_with_context(Version::parse(trimmed), "Failed to parse solc version")
 }
 
 pub(crate) fn default_version() -> Result<Version> {
@@ -27,14 +26,14 @@ pub(crate) fn ensure_installed(version: &Version) -> Result<Solc> {
   if let Some(solc) = find_installed_version(version)? {
     return Ok(solc);
   }
-  Err(napi_error(format!(
+  Err(Error::new(format!(
     "Solc {} is not installed. Call installSolcVersion first.",
     version
   )))
 }
 
 pub(crate) fn find_installed_version(version: &Version) -> Result<Option<Solc>> {
-  let maybe_solc = map_napi_error(
+  let maybe_solc = map_err_with_context(
     Solc::find_svm_installed_version(version),
     "Failed to inspect solc versions",
   )?;
@@ -47,6 +46,13 @@ pub(crate) fn is_version_installed(version: &Version) -> Result<bool> {
 
 pub(crate) fn install_async(version: Version) -> AsyncTask<InstallSolcTask> {
   AsyncTask::new(InstallSolcTask { version })
+}
+
+pub(crate) fn install_version(version: &Version) -> Result<()> {
+  map_err_with_context(
+    Solc::blocking_install(version).map(|_| ()),
+    "Failed to install solc version",
+  )
 }
 
 pub struct InstallSolcTask {
@@ -62,22 +68,24 @@ impl Task for InstallSolcTask {
   type Output = ();
   type JsValue = ();
 
-  fn compute(&mut self) -> Result<Self::Output> {
-    let _guard = install_mutex()
-      .lock()
-      .map_err(|err| napi_error(format!("Solc install mutex poisoned: {err}")))?;
+  fn compute(&mut self) -> napi::Result<Self::Output> {
+    let _guard = to_napi_result(
+      install_mutex()
+        .lock()
+        .map_err(|err| Error::new(format!("Solc install mutex poisoned: {err}"))),
+    )?;
 
-    if find_installed_version(&self.version)?.is_some() {
+    if to_napi_result(find_installed_version(&self.version))?.is_some() {
       return Ok(());
     }
-    map_napi_error(
+    to_napi_result(map_err_with_context(
       Solc::blocking_install(&self.version),
       "Failed to install solc version",
-    )
+    ))
     .map(|_| ())
   }
 
-  fn resolve(&mut self, _env: Env, _output: Self::Output) -> Result<Self::JsValue> {
+  fn resolve(&mut self, _env: Env, _output: Self::Output) -> napi::Result<Self::JsValue> {
     Ok(())
   }
 }

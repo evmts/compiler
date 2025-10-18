@@ -4,14 +4,13 @@ use foundry_compilers::artifacts::sources::Source as FoundrySource;
 use foundry_compilers::artifacts::SolcLanguage as FoundrySolcLanguage;
 use foundry_compilers::solc::SolcCompiler;
 use foundry_compilers::{Project, ProjectCompileOutput};
-use napi::Result;
 use std::sync::OnceLock;
 
-use crate::compiler::input::CompilationInput;
-use crate::compiler::{into_core_compile_output, CoreCompileOutput};
+use super::input::CompilationInput;
+use super::output::{into_core_compile_output, CoreCompileOutput};
 use crate::internal::{
   config::ResolvedCompilerConfig,
-  errors::{map_napi_error, napi_error},
+  errors::{map_err_with_context, Error, Result},
   project::{build_project, ProjectContext, ProjectLayout},
   solc,
 };
@@ -25,7 +24,7 @@ impl<'a> ProjectRunner<'a> {
     Self { context }
   }
 
-  pub fn compile_as(
+  pub fn compile(
     &self,
     config: &ResolvedCompilerConfig,
     input: &CompilationInput,
@@ -91,11 +90,11 @@ impl<'a> ProjectRunner<'a> {
     >,
   {
     solc::ensure_installed(&config.solc_version)?;
-    let project = map_napi_error(
+    let project = map_err_with_context(
       build_project(config, self.context),
       "Failed to configure Solidity project",
     )?;
-    map_napi_error(compile_fn(&project), label)
+    map_err_with_context(compile_fn(&project), label)
   }
 
   fn write_virtual_source(
@@ -113,7 +112,7 @@ impl<'a> ProjectRunner<'a> {
     let path = self.context.virtual_source_path(&source_hash, extension)?;
     if !path.exists() {
       std::fs::write(&path, contents).map_err(|err| {
-        napi_error(format!(
+        Error::new(format!(
           "Failed to write virtual source {}: {err}",
           path.display()
         ))

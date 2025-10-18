@@ -169,9 +169,7 @@ describe("Compiler static helpers", () => {
   });
 
   test("isSolcVersionInstalled rejects malformed versions", () => {
-    expect(() => Compiler.isSolcVersionInstalled("not-a-version")).toThrow(
-      /failed to parse solc version/i
-    );
+    expect(() => Compiler.isSolcVersionInstalled("not-a-version")).toThrowErrorMatchingInlineSnapshot(`"Failed to parse solc version: unexpected character 'n' while parsing major version number"`);
   });
 
   test("isSolcVersionInstalled respects custom svm home", () => {
@@ -193,21 +191,15 @@ describe("Compiler static helpers", () => {
 
 describe("Compiler constructor", () => {
   test("rejects invalid settings shape", () => {
-    expect(() => new Compiler({ solcSettings: 42 as unknown as any })).toThrow(
-      /settings override must be provided/i
-    );
+    expect(() => new Compiler({ solcSettings: 42 as unknown as any })).toThrowErrorMatchingInlineSnapshot(`"solcSettings override must be provided as an object."`);
   });
 
   test("rejects malformed solc versions at construction", () => {
-    expect(() => new Compiler({ solcVersion: "bad-version" })).toThrow(
-      /failed to parse solc version/i
-    );
+    expect(() => new Compiler({ solcVersion: "bad-version" })).toThrowErrorMatchingInlineSnapshot(`"GenericFailure, Failed to parse solc version: unexpected character 'b' while parsing major version number"`);
   });
 
   test("rejects when requested solc version is not installed", () => {
-    expect(() => new Compiler({ solcVersion: "123.45.67" })).toThrow(
-      /not installed/i
-    );
+    expect(() => new Compiler({ solcVersion: "123.45.67" })).toThrowErrorMatchingInlineSnapshot(`"Solc 123.45.67 is not installed. Call installSolcVersion first."`);
   });
 
   test("accepts nested settings without mutating defaults", () => {
@@ -278,7 +270,7 @@ describe("Compiler constructor", () => {
     const compiler = new Compiler();
     expect(() =>
       compiler.compileSource(INLINE_SOURCE, { solcVersion: "999.0.0" })
-    ).toThrow(/not installed/i);
+    ).toThrowErrorMatchingInlineSnapshot(`"Solc 999.0.0 is not installed. Call installSolcVersion first."`);
     const result = compiler.compileSource(INLINE_SOURCE);
     expect(result.hasCompilerErrors).toBe(false);
   });
@@ -484,7 +476,7 @@ describe("Compiler.compileSources", () => {
         "InlineExample.sol": INLINE_SOURCE,
         "InlineExample.ast": ast,
       }),
-    ).toThrow(/does not support mixing inline source strings/i);
+    ).toThrowErrorMatchingInlineSnapshot(`"compileSources does not support mixing inline source strings with AST entries in the same call."`);
   });
 });
 
@@ -515,7 +507,7 @@ describe("Compiler.compileFiles", () => {
     const compiler = createCompiler();
     expect(() =>
       compiler.compileFiles(["/non-existent/path.sol"])
-    ).toThrow(/Failed to read source file/i);
+    ).toThrowErrorMatchingInlineSnapshot(`"Failed to read source file: No such file or directory (os error 2)"`);
   });
 
   test("compiles json ast files", () => {
@@ -552,7 +544,7 @@ describe("Compiler.compileFiles", () => {
 
     expect(() =>
       compiler.compileFiles([INLINE_PATH, astPath])
-    ).toThrow(/does not support mixing AST entries/i);
+    ).toThrowErrorMatchingInlineSnapshot(`"compileSources does not support mixing inline source strings with AST entries in the same call."`);
   });
 
   test("errors when extension is unknown and no language override is provided", () => {
@@ -570,7 +562,7 @@ describe("Compiler.compileFiles", () => {
     const compiler = createCompiler();
     expect(() =>
       compiler.compileFiles([INLINE_PATH, YUL_PATH])
-    ).toThrow(/share the same solc language/i);
+    ).toThrowErrorMatchingInlineSnapshot(`"compileFiles requires all non-AST sources to share the same solc language. Provide solcLanguage explicitly to disambiguate."`);
   });
 
   test("ignores constructor language preference", () => {
@@ -590,9 +582,7 @@ describe("Compiler.compileFiles", () => {
     writeFileSync(jsonPath, "[]");
     const compiler = createCompiler();
 
-    expect(() => compiler.compileFiles([jsonPath])).toThrow(
-      /JSON sources must contain a Solidity AST object/i
-    );
+    expect(() => compiler.compileFiles([jsonPath])).toThrowErrorMatchingInlineSnapshot(`"JSON sources must contain a Solidity AST object."`);
   });
 });
 

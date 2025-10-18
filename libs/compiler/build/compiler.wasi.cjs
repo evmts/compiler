@@ -82,15 +82,15 @@ const { instance: __napiInstance, module: __wasiModule, napiModule: __napiModule
 })
 
 function __napi_rs_initialize_modules(__napiInstance) {
-  __napiInstance.exports['__napi_register__Ast_struct_0']?.()
-  __napiInstance.exports['__napi_register__Ast_impl_7']?.()
-  __napiInstance.exports['__napi_register__Compiler_struct_8']?.()
-  __napiInstance.exports['__napi_register__Compiler_impl_19']?.()
-  __napiInstance.exports['__napi_register__CompilerError_struct_20']?.()
-  __napiInstance.exports['__napi_register__SourceLocation_struct_21']?.()
-  __napiInstance.exports['__napi_register__ContractBytecode_struct_22']?.()
-  __napiInstance.exports['__napi_register__ContractArtifact_struct_23']?.()
-  __napiInstance.exports['__napi_register__CompileOutput_struct_24']?.()
+  __napiInstance.exports['__napi_register__JsAst_struct_0']?.()
+  __napiInstance.exports['__napi_register__JsAst_impl_7']?.()
+  __napiInstance.exports['__napi_register__CompilerError_struct_8']?.()
+  __napiInstance.exports['__napi_register__SourceLocation_struct_9']?.()
+  __napiInstance.exports['__napi_register__ContractBytecode_struct_10']?.()
+  __napiInstance.exports['__napi_register__ContractArtifact_struct_11']?.()
+  __napiInstance.exports['__napi_register__CompileOutput_struct_12']?.()
+  __napiInstance.exports['__napi_register__JsCompiler_struct_13']?.()
+  __napiInstance.exports['__napi_register__JsCompiler_impl_24']?.()
   __napiInstance.exports['__napi_register__CompilerConfig_struct_25']?.()
   __napiInstance.exports['__napi_register__AstOptions_struct_26']?.()
   __napiInstance.exports['__napi_register__SolcLanguage_27']?.()
@@ -120,7 +120,9 @@ function __napi_rs_initialize_modules(__napiInstance) {
   __napiInstance.exports['__napi_register__ModelCheckerInvariantKind_51']?.()
 }
 module.exports.Ast = __napiModule.exports.Ast
+module.exports.JsAst = __napiModule.exports.JsAst
 module.exports.Compiler = __napiModule.exports.Compiler
+module.exports.JsCompiler = __napiModule.exports.JsCompiler
 module.exports.BytecodeHash = __napiModule.exports.BytecodeHash
 module.exports.createCurrentDapptoolsPaths = __napiModule.exports.createCurrentDapptoolsPaths
 module.exports.createCurrentHardhatPaths = __napiModule.exports.createCurrentHardhatPaths

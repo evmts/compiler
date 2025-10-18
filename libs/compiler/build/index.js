@@ -362,7 +362,9 @@ if (!nativeBinding) {
 }
 
 module.exports.Ast = nativeBinding.Ast
+module.exports.JsAst = nativeBinding.JsAst
 module.exports.Compiler = nativeBinding.Compiler
+module.exports.JsCompiler = nativeBinding.JsCompiler
 module.exports.BytecodeHash = nativeBinding.BytecodeHash
 module.exports.createCurrentDapptoolsPaths = nativeBinding.createCurrentDapptoolsPaths
 module.exports.createCurrentHardhatPaths = nativeBinding.createCurrentHardhatPaths

@@ -15,10 +15,9 @@ use foundry_compilers::{
   Project, ProjectBuilder, ProjectPathsConfig,
 };
 use foundry_config::{Config as FoundryConfig, SolcReq};
-use napi::bindgen_prelude::Result;
 
 use crate::internal::config::{ConfigOverrides, ResolvedCompilerConfig, SolcConfig};
-use crate::internal::errors::{map_napi_error, napi_error};
+use crate::internal::errors::{map_err_with_context, Error, Result};
 use crate::internal::path::{canonicalize_path, canonicalize_with_base};
 use crate::internal::settings::CompilerSettings;
 
@@ -59,7 +58,7 @@ impl ProjectContext {
       };
 
       if !canonical.exists() {
-        return Err(napi_error(format!(
+        return Err(Error::new(format!(
           "Source file {} does not exist",
           canonical.display()
         )));
@@ -74,10 +73,10 @@ impl ProjectContext {
     let dir = self
       .virtual_sources_dir
       .as_ref()
-      .ok_or_else(|| napi_error("Cannot cache inline sources without a baseDir"))?;
+      .ok_or_else(|| Error::new("Cannot cache inline sources without a baseDir"))?;
 
     if let Err(err) = std::fs::create_dir_all(dir) {
-      return Err(napi_error(format!(
+      return Err(Error::new(format!(
         "Failed to prepare virtual sources directory {}: {err}",
         dir.display()
       )));
@@ -130,7 +129,7 @@ pub fn build_project(
 
   builder = builder.settings(solc_settings);
 
-  map_napi_error(
+  map_err_with_context(
     builder.build(SolcCompiler::default()),
     "Failed to configure Solidity project",
   )
@@ -202,7 +201,7 @@ fn extend_paths_with_config(
 
 fn create_dir_if_missing(path: &Path) -> Result<()> {
   if let Err(err) = fs::create_dir_all(path) {
-    return Err(napi_error(format!(
+    return Err(Error::new(format!(
       "Failed to create directory {}: {err}",
       path.display()
     )));
@@ -215,7 +214,7 @@ pub struct FoundryAdapter;
 impl FoundryAdapter {
   pub fn load(root: &Path) -> Result<(ConfigOverrides, ProjectContext)> {
     let figment = FoundryConfig::figment_with_root(root);
-    let config = map_napi_error(
+    let config = map_err_with_context(
       FoundryConfig::try_from(figment),
       "Failed to load foundry configuration",
     )?
@@ -235,15 +234,15 @@ impl FoundryAdapter {
       overrides.solc_version = Some(version.clone());
     }
 
-    let ethers_settings = map_napi_error(
+    let ethers_settings = map_err_with_context(
       config.solc_settings(),
       "Failed to derive foundry compiler settings",
     )?;
-    let settings_json = map_napi_error(
+    let settings_json = map_err_with_context(
       serde_json::to_value(&ethers_settings),
       "Failed to serialise foundry compiler settings",
     )?;
-    let settings: Settings = map_napi_error(
+    let settings: Settings = map_err_with_context(
       serde_json::from_value(settings_json),
       "Failed to convert foundry compiler settings",
     )?;
@@ -325,7 +324,7 @@ pub struct HardhatAdapter;
 
 impl HardhatAdapter {
   pub fn load(root: &Path) -> Result<(ConfigOverrides, ProjectContext)> {
-    let mut paths = map_napi_error(
+    let mut paths = map_err_with_context(
       ProjectPathsConfig::hardhat(root),
       "Failed to create hardhat project paths",
     )?;
@@ -339,11 +338,11 @@ impl HardhatAdapter {
 
     if let Some((solc_config, cli_settings)) = infer_hardhat_build_info(&paths) {
       overrides.solc_version = Some(solc_config.version);
-      let settings_json = map_napi_error(
+      let settings_json = map_err_with_context(
         serde_json::to_value(&solc_config.settings),
         "Failed to serialise hardhat compiler settings",
       )?;
-      let solc_settings: CompilerSettings = map_napi_error(
+      let solc_settings: CompilerSettings = map_err_with_context(
         serde_json::from_value(settings_json),
         "Failed to convert hardhat compiler settings",
       )?;

@@ -279,12 +279,12 @@ pub struct SolcConfig {
 }
 
 impl SolcConfig {
-  pub fn new<O: SolcUserOptions>(
+  pub(crate) fn new<O: SolcUserOptions>(
     default_language: &FoundrySolcLanguage,
     default_settings: &Settings,
     overrides: Option<&O>,
   ) -> Result<Self> {
-    let default_version = crate::internal::solc::default_version()?;
+    let default_version = crate::internal::solc::default_version().map_err(napi::Error::from)?;
     Self::with_defaults(
       default_language,
       &default_version,
@@ -293,7 +293,7 @@ impl SolcConfig {
     )
   }
 
-  pub fn with_defaults<O: SolcUserOptions>(
+  pub(crate) fn with_defaults<O: SolcUserOptions>(
     default_language: &FoundrySolcLanguage,
     default_version: &Version,
     default_settings: &Settings,
@@ -301,7 +301,7 @@ impl SolcConfig {
   ) -> Result<Self> {
     let version = overrides
       .and_then(|opts| opts.solc_version())
-      .map(crate::internal::solc::parse_version)
+      .map(|value| crate::internal::solc::parse_version(value).map_err(napi::Error::from))
       .transpose()?
       .unwrap_or_else(|| default_version.clone());
 
@@ -322,10 +322,10 @@ impl SolcConfig {
     })
   }
 
-  pub fn merge<O: SolcUserOptions>(&self, overrides: Option<&O>) -> Result<Self> {
+  pub(crate) fn merge<O: SolcUserOptions>(&self, overrides: Option<&O>) -> Result<Self> {
     let version = overrides
       .and_then(|opts| opts.solc_version())
-      .map(crate::internal::solc::parse_version)
+      .map(|value| crate::internal::solc::parse_version(value).map_err(napi::Error::from))
       .transpose()?
       .unwrap_or_else(|| self.version.clone());
 

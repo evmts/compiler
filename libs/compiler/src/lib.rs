@@ -4,3 +4,21 @@ extern crate napi_derive;
 mod ast;
 mod compiler;
 mod internal;
+
+pub use ast::{
+  Ast, FragmentTarget as AstFragmentTarget, SourceTarget as AstSourceTarget, State as AstState,
+};
+pub use compiler::{
+  core::{
+    SourceTarget as CompilerSourceTarget, SourceValue as CompilerSourceValue,
+    State as CompilerState,
+  },
+  output::{
+    from_standard_json, into_core_compile_output, CompileOutput, CompilerError, ContractArtifact,
+    ContractBytecode, CoreCompileOutput, CoreCompilerError, CoreContractArtifact,
+    CoreSourceLocation, SourceLocation,
+  },
+  CompilationInput, Compiler,
+};
+pub use internal::config::{CompilerConfig, ResolvedCompilerConfig};
+pub use internal::errors::{Error, Result};

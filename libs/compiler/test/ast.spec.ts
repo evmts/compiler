@@ -88,19 +88,15 @@ describe("Ast constructor", () => {
   });
 
   test("rejects malformed settings objects", () => {
-    expect(() => new Ast({ settings: 42 as unknown as any })).toThrow(
-      /settings override must be provided/i
-    );
+    expect(() => new Ast({ solcSettings: 42 as unknown as any })).toThrowErrorMatchingInlineSnapshot(`"solcSettings override must be provided as an object."`)
   });
 
   test("rejects unsupported solc language overrides", () => {
-    expect(() => new Ast({ solcLanguage: "Yul" as any })).toThrow(
-      /Ast helpers only support/i
-    );
+    expect(() => new Ast({ solcLanguage: "Yul" as any })).toThrowErrorMatchingInlineSnapshot(`"Ast helpers only support solcLanguage "Solidity"."`)
   });
 
   test("rejects when requested solc version is not installed", () => {
-    expect(() => new Ast({ solcVersion: "999.0.0" })).toThrow(/not installed/i);
+    expect(() => new Ast({ solcVersion: "999.0.0" })).toThrowErrorMatchingInlineSnapshot(`"Solc 999.0.0 is not installed. Call installSolcVersion first."`)
   });
 });
 
@@ -133,7 +129,7 @@ describe("fromSource", () => {
 
   test("throws when ast is requested before initialization", () => {
     const ast = createAst();
-    expect(() => ast.ast()).toThrow(/Call fromSource first/i);
+    expect(() => ast.ast()).toThrowErrorMatchingInlineSnapshot(`"Ast has no target unit. Call from_source first."`)
   });
 
   test("handles missing contracts when instrumented contract is configured", () => {
@@ -193,14 +189,12 @@ describe("injectShadow", () => {
 
   test("rejects fragments without __AstFragment contract", () => {
     const ast = createAst().fromSource(INLINE_SOURCE);
-    expect(() => ast.injectShadow(clone(FRAGMENT_WITHOUT_TARGET))).toThrow();
+    expect(() => ast.injectShadow(clone(FRAGMENT_WITHOUT_TARGET))).toThrowErrorMatchingInlineSnapshot(`"missing field \`contractDependencies\`"`)
   });
 
   test("rejects injection before loading a source", () => {
     const ast = createAst();
-    expect(() => ast.injectShadow(FUNCTION_FRAGMENT)).toThrow(
-      /Call fromSource first/i
-    );
+    expect(() => ast.injectShadow(FUNCTION_FRAGMENT)).toThrowErrorMatchingInlineSnapshot(`"Ast has no target AST. Call from_source first."`)
   });
 });
 
@@ -257,19 +251,15 @@ describe("visibility transformations", () => {
 
   test("rejects visibility changes before loading a source", () => {
     const ast = createAst({ instrumentedContract: "Target" });
-    expect(() => ast.exposeInternalVariables()).toThrow(
-      /Call fromSource first/i
-    );
-    expect(() => ast.exposeInternalFunctions()).toThrow(
-      /Call fromSource first/i
-    );
+    expect(() => ast.exposeInternalVariables()).toThrowErrorMatchingInlineSnapshot(`"Ast has no target AST. Call from_source first."`)
+    expect(() => ast.exposeInternalFunctions()).toThrowErrorMatchingInlineSnapshot(`"Ast has no target AST. Call from_source first."`)
   });
 
   test("throws when targeted contract is missing during visibility updates", () => {
     const instrumented = createAst().fromSource(MULTI_CONTRACT_SOURCE);
     expect(() =>
       instrumented.exposeInternalVariables({ instrumentedContract: "Missing" })
-    ).toThrow(/Contract 'Missing' not found/i);
+    ).toThrowErrorMatchingInlineSnapshot(`"Invalid contract structure: Contract 'Missing' not found"`)
   });
 });
 

@@ -3,47 +3,48 @@
 /** High-level helper for manipulating Solidity ASTs prior to recompilation. */
 export declare class Ast {
   /**
-   * Create a new AST helper. Providing `instrumentedContract`
-   * establishes the instrumented contract targeted by subsequent operations.
+   * Create a new AST helper. Providing `instrumentedContract` establishes the instrumented
+   * contract targeted by subsequent operations.
    */
   constructor(options?: AstOptions | undefined)
   /**
-   * Parse Solidity source into an AST using the configured solc version.
-   * When no `instrumentedContract` is provided, later operations apply to all
-   * contracts in the file.
+   * Parse Solidity source into an AST using the configured solc version. When no
+   * `instrumentedContract` is provided, later operations apply to all contracts in the file.
    */
   fromSource(target: string | object, options?: AstOptions | undefined): this
   /**
-   * Parse an AST fragment from source text or inject a pre-parsed AST fragment
-   * into the targeted contract.
+   * Parse an AST fragment from source text or inject a pre-parsed AST fragment into the targeted
+   * contract.
    */
   injectShadow(fragment: string | object, options?: AstOptions | undefined): this
   /**
-   * Promote private/internal state variables to public visibility. Omitting
-   * `instrumentedContract` applies the change to all contracts.
+   * Promote private/internal state variables to public visibility. Omitting `instrumentedContract`
+   * applies the change to all contracts.
    */
   exposeInternalVariables(options?: AstOptions | undefined): this
   /**
-   * Promote private/internal functions to public visibility. Omitting
-   * `instrumentedContract` applies the change to all contracts.
+   * Promote private/internal functions to public visibility. Omitting `instrumentedContract`
+   * applies the change to all contracts.
    */
   exposeInternalFunctions(options?: AstOptions | undefined): this
-  /** Get the current intrumented AST. */
+  /** Get the current instrumented AST. */
   ast(): import('./ast-types').SourceUnit
 }
+export type JsAst = Ast
 
 export declare class Compiler {
   static installSolcVersion(version: string): Promise<unknown>
   static isSolcVersionInstalled(version: string): boolean
   constructor(options?: CompilerConfig | undefined)
-  static fromFoundryRoot(root: string, options?: CompilerConfig | undefined): Compiler
-  static fromHardhatRoot(root: string, options?: CompilerConfig | undefined): Compiler
+  static fromFoundryRoot(root: string, options?: CompilerConfig | undefined): JsCompiler
+  static fromHardhatRoot(root: string, options?: CompilerConfig | undefined): JsCompiler
   compileSource(target: string | object, options?: CompilerConfig | undefined): CompileOutput
   compileSources(sources: Record<string, string | object>, options?: CompilerConfig | undefined): CompileOutput
   compileFiles(paths: string[], options?: CompilerConfig | undefined): CompileOutput
   compileProject(options?: CompilerConfig | undefined): CompileOutput
   compileContract(contractName: string, options?: CompilerConfig | undefined): CompileOutput
 }
+export type JsCompiler = Compiler
 
 export interface AstOptions {
   solcVersion?: string | undefined

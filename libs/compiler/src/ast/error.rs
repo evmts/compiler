@@ -1,5 +1,6 @@
 use foundry_compilers::error::SolcError;
-use napi::bindgen_prelude::*;
+
+use crate::internal::errors::Error as CoreError;
 
 #[derive(Debug)]
 pub enum AstError {
@@ -40,8 +41,8 @@ impl From<serde_json::Error> for AstError {
   }
 }
 
-impl From<AstError> for Error {
+impl From<AstError> for CoreError {
   fn from(err: AstError) -> Self {
-    Error::new(Status::GenericFailure, err.to_string())
+    CoreError::new(err.to_string())
   }
 }
