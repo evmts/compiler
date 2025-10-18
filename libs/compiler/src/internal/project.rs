@@ -16,10 +16,10 @@ use foundry_compilers::{
 };
 use foundry_config::{Config as FoundryConfig, SolcReq};
 
-use crate::internal::config::{ConfigOverrides, ResolvedCompilerConfig, SolcConfig};
+use crate::internal::config::{CompilerConfig, CompilerConfigOptions, SolcConfig};
 use crate::internal::errors::{map_err_with_context, Error, Result};
 use crate::internal::path::{canonicalize_path, canonicalize_with_base};
-use crate::internal::settings::CompilerSettings;
+use crate::internal::settings::CompilerSettingsOptions;
 
 #[derive(Clone)]
 pub enum ProjectLayout {
@@ -39,7 +39,7 @@ pub struct ProjectContext {
 impl ProjectContext {
   pub fn normalise_paths(
     &self,
-    config: &ResolvedCompilerConfig,
+    config: &CompilerConfig,
     inputs: &[PathBuf],
   ) -> Result<Vec<PathBuf>> {
     let mut resolved = Vec::with_capacity(inputs.len());
@@ -87,7 +87,7 @@ impl ProjectContext {
 }
 
 pub fn build_project(
-  config: &ResolvedCompilerConfig,
+  config: &CompilerConfig,
   context: &ProjectContext,
 ) -> Result<Project<SolcCompiler>> {
   let mut paths = context.paths.clone();
@@ -180,7 +180,7 @@ pub fn create_synthetic_context(base_dir: &Path) -> Result<ProjectContext> {
 
 fn extend_paths_with_config(
   paths: &mut ProjectPathsConfig<FoundrySolcLanguage>,
-  config: &ResolvedCompilerConfig,
+  config: &CompilerConfig,
 ) {
   if !config.library_paths.is_empty() {
     let mut libraries: BTreeSet<PathBuf> = paths.libraries.iter().cloned().collect::<BTreeSet<_>>();
@@ -212,7 +212,7 @@ fn create_dir_if_missing(path: &Path) -> Result<()> {
 pub struct FoundryAdapter;
 
 impl FoundryAdapter {
-  pub fn load(root: &Path) -> Result<(ConfigOverrides, ProjectContext)> {
+  pub fn load(root: &Path) -> Result<(CompilerConfigOptions, ProjectContext)> {
     let figment = FoundryConfig::figment_with_root(root);
     let config = map_err_with_context(
       FoundryConfig::try_from(figment),
@@ -221,7 +221,7 @@ impl FoundryAdapter {
     .sanitized()
     .canonic();
 
-    let mut overrides = ConfigOverrides::default();
+    let mut overrides = CompilerConfigOptions::default();
     let base_dir = config.__root.0.clone();
     overrides.base_dir = Some(base_dir.clone());
     overrides.cache_enabled = Some(config.cache);
@@ -231,7 +231,7 @@ impl FoundryAdapter {
     overrides.sparse_output = Some(config.sparse_mode);
 
     if let Some(SolcReq::Version(version)) = &config.solc {
-      overrides.solc_version = Some(version.clone());
+      overrides.solc.version = Some(version.clone());
     }
 
     let ethers_settings = map_err_with_context(
@@ -246,7 +246,7 @@ impl FoundryAdapter {
       serde_json::from_value(settings_json),
       "Failed to convert foundry compiler settings",
     )?;
-    overrides.resolved_settings = Some(settings);
+    overrides.solc.resolved_settings = Some(settings);
 
     overrides.allow_paths = Some(
       config
@@ -323,30 +323,30 @@ impl FoundryAdapter {
 pub struct HardhatAdapter;
 
 impl HardhatAdapter {
-  pub fn load(root: &Path) -> Result<(ConfigOverrides, ProjectContext)> {
+  pub fn load(root: &Path) -> Result<(CompilerConfigOptions, ProjectContext)> {
     let mut paths = map_err_with_context(
       ProjectPathsConfig::hardhat(root),
       "Failed to create hardhat project paths",
     )?;
     paths.slash_paths();
 
-    let mut overrides = ConfigOverrides::default();
+    let mut overrides = CompilerConfigOptions::default();
     overrides.base_dir = Some(paths.root.clone());
     overrides.cache_enabled = Some(true);
     overrides.build_info_enabled = Some(true);
     overrides.no_artifacts = Some(false);
 
     if let Some((solc_config, cli_settings)) = infer_hardhat_build_info(&paths) {
-      overrides.solc_version = Some(solc_config.version);
+      overrides.solc.version = Some(solc_config.version);
       let settings_json = map_err_with_context(
         serde_json::to_value(&solc_config.settings),
         "Failed to serialise hardhat compiler settings",
       )?;
-      let solc_settings: CompilerSettings = map_err_with_context(
+      let solc_settings: CompilerSettingsOptions = map_err_with_context(
         serde_json::from_value(settings_json),
         "Failed to convert hardhat compiler settings",
       )?;
-      overrides.solc_settings = Some(solc_settings);
+      overrides.solc.settings = Some(solc_settings);
       overrides.allow_paths = Some(
         cli_settings
           .allow_paths
@@ -470,7 +470,7 @@ mod tests {
     let target = context.root.join("Example.sol");
     std::fs::write(&target, "// test").expect("write file");
 
-    let config = ResolvedCompilerConfig::default();
+    let config = CompilerConfig::default();
     let resolved = context
       .normalise_paths(&config, &[PathBuf::from("Example.sol")])
       .expect("normalised paths");

@@ -4,7 +4,7 @@ The `Ast` module wraps Foundry's Solidity AST structures with mutation helpers t
 
 ## Workflow Overview
 
-1. **Initialisation** – `Ast::new` resolves `AstOptions`, sanitises compiler settings, ensures the requested `solc` version is installed, and prepares defaults.
+1. **Initialisation** – `Ast::new` resolves JS `AstConfigOptions` inputs (parsed as `JsAstConfigOptions`) into a resolved `AstConfig`, sanitises compiler settings, ensures the requested `solc` version is installed, and prepares defaults.
 2. **Target loading** – `from_source` accepts either Solidity source text or a pre-parsed `SourceUnit`. When a target contract name is provided, the orchestrator verifies it exists inside the unit up front.
 3. **Fragment injection** – `inject_shadow` parses Solidity snippets or accepts a pre-built AST fragment, extracts the fragment contract, and stitches it into the target contract at the correct node boundaries.
 4. **Post-processing** – `expose_internal_variables` and `expose_internal_functions` promote private/internal members to public visibility to support later JS-level instrumentation.

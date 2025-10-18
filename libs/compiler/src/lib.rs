@@ -20,5 +20,9 @@ pub use compiler::{
   },
   CompilationInput, Compiler,
 };
-pub use internal::config::{CompilerConfig, ResolvedCompilerConfig};
+pub use internal::config::{
+  AstConfig, AstConfigOptions, CompilerConfig, CompilerConfigOptions, JsAstConfigOptions,
+  JsCompilerConfigOptions, SolcConfig, SolcConfigOptions,
+};
 pub use internal::errors::{Error, Result};
+pub use internal::settings::{CompilerSettingsOptions, JsCompilerSettingsOptions};

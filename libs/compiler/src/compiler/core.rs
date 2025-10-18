@@ -13,16 +13,14 @@ use super::input::CompilationInput;
 use super::output::{from_standard_json, CoreCompileOutput};
 use super::project_runner::ProjectRunner;
 use crate::ast::utils;
-use crate::internal::config::{
-  CompilerConfig, CompilerConfigBuilder, ConfigOverrides, ResolvedCompilerConfig, SolcConfig,
-};
+use crate::internal::config::{CompilerConfig, CompilerConfigOptions, SolcConfig};
 use crate::internal::errors::{map_err_with_context, Error, Result};
 use crate::internal::project::{FoundryAdapter, HardhatAdapter, ProjectContext, ProjectLayout};
 use crate::internal::solc;
 
 #[derive(Clone)]
 pub struct State {
-  pub config: ResolvedCompilerConfig,
+  pub config: CompilerConfig,
   pub project: Option<ProjectContext>,
 }
 
@@ -38,7 +36,7 @@ pub enum SourceValue {
   Ast(SourceUnit),
 }
 
-pub fn init(config: ResolvedCompilerConfig, project: Option<ProjectContext>) -> Result<State> {
+pub fn init(config: CompilerConfig, project: Option<ProjectContext>) -> Result<State> {
   let mut config = config;
   let mut project = project;
   if project.is_none() {
@@ -48,39 +46,33 @@ pub fn init(config: ResolvedCompilerConfig, project: Option<ProjectContext>) -> 
   Ok(State { config, project })
 }
 
-pub fn init_with_context<F>(config: ResolvedCompilerConfig, context_loader: F) -> Result<State>
+pub fn init_with_context<F>(config: CompilerConfig, context_loader: F) -> Result<State>
 where
-  F: FnOnce() -> Result<(ConfigOverrides, ProjectContext)>,
+  F: FnOnce() -> Result<(CompilerConfigOptions, ProjectContext)>,
 {
   let (project_overrides, context) = context_loader()?;
-  let builder = CompilerConfigBuilder::with_base(config)
-    .apply_overrides(project_overrides)
-    .map_err(Error::from)?;
-  let resolved = builder.build().map_err(Error::from)?;
+  let resolved = config.merged(&project_overrides).map_err(Error::from)?;
   init(resolved, Some(context))
 }
 
-pub fn init_from_foundry_root(config: ResolvedCompilerConfig, root: &Path) -> Result<State> {
+pub fn init_from_foundry_root(config: CompilerConfig, root: &Path) -> Result<State> {
   init_with_context(config, || FoundryAdapter::load(root))
 }
 
-pub fn init_from_hardhat_root(config: ResolvedCompilerConfig, root: &Path) -> Result<State> {
+pub fn init_from_hardhat_root(config: CompilerConfig, root: &Path) -> Result<State> {
   init_with_context(config, || HardhatAdapter::load(root))
 }
 
 pub fn resolve_config(
   state: &State,
-  overrides: Option<&CompilerConfig>,
-) -> Result<ResolvedCompilerConfig> {
-  let builder = CompilerConfigBuilder::with_base(state.config.clone())
-    .apply_options(overrides)
-    .map_err(Error::from)?;
-  builder.build().map_err(Error::from)
+  overrides: Option<&CompilerConfigOptions>,
+) -> Result<CompilerConfig> {
+  state.config.merge_options(overrides).map_err(Error::from)
 }
 
 pub fn compile_source(
   state: &State,
-  config: &ResolvedCompilerConfig,
+  config: &CompilerConfig,
   target: SourceTarget,
 ) -> Result<CoreCompileOutput> {
   let input = match target {
@@ -96,7 +88,7 @@ pub fn compile_source(
 
 pub fn compile_sources(
   state: &State,
-  config: &ResolvedCompilerConfig,
+  config: &CompilerConfig,
   sources: BTreeMap<String, SourceValue>,
 ) -> Result<CoreCompileOutput> {
   let input = compilation_input_from_values(sources)?;
@@ -104,7 +96,7 @@ pub fn compile_sources(
 }
 
 pub fn compile_files(
-  config: &ResolvedCompilerConfig,
+  config: &CompilerConfig,
   paths: Vec<PathBuf>,
   language_override: Option<FoundrySolcLanguage>,
 ) -> Result<CoreCompileOutput> {
@@ -113,7 +105,7 @@ pub fn compile_files(
 
 pub fn compile_as(
   state: &State,
-  config: &ResolvedCompilerConfig,
+  config: &CompilerConfig,
   input: CompilationInput,
 ) -> Result<CoreCompileOutput> {
   if let Some(context) = &state.project {
@@ -133,27 +125,21 @@ pub fn compile_as(
   compile_pure(config, input)
 }
 
-pub fn compile_project(
-  state: &State,
-  config: &ResolvedCompilerConfig,
-) -> Result<CoreCompileOutput> {
+pub fn compile_project(state: &State, config: &CompilerConfig) -> Result<CoreCompileOutput> {
   let runner = project_runner(state)?;
   runner.compile_project(config)
 }
 
 pub fn compile_contract(
   state: &State,
-  config: &ResolvedCompilerConfig,
+  config: &CompilerConfig,
   contract_name: &str,
 ) -> Result<CoreCompileOutput> {
   let runner = project_runner(state)?;
   runner.compile_contract(config, contract_name)
 }
 
-fn compile_pure(
-  config: &ResolvedCompilerConfig,
-  input: CompilationInput,
-) -> Result<CoreCompileOutput> {
+fn compile_pure(config: &CompilerConfig, input: CompilationInput) -> Result<CoreCompileOutput> {
   match input {
     CompilationInput::InlineSource { source } => compile_inline_source(config, source),
     CompilationInput::SourceMap { sources } => {
@@ -168,17 +154,14 @@ fn compile_pure(
   }
 }
 
-fn compile_inline_source(
-  config: &ResolvedCompilerConfig,
-  source: String,
-) -> Result<CoreCompileOutput> {
+fn compile_inline_source(config: &CompilerConfig, source: String) -> Result<CoreCompileOutput> {
   let mut sources = Sources::new();
   sources.insert(PathBuf::from("__VIRTUAL__.sol"), Source::new(source));
   compile_standard_sources(config, sources, config.solc_language)
 }
 
 fn compile_standard_sources(
-  config: &ResolvedCompilerConfig,
+  config: &CompilerConfig,
   sources: Sources,
   language: FoundrySolcLanguage,
 ) -> Result<CoreCompileOutput> {
@@ -196,7 +179,7 @@ fn compile_standard_sources(
 }
 
 fn compile_ast_sources(
-  config: &ResolvedCompilerConfig,
+  config: &CompilerConfig,
   ast_sources: BTreeMap<String, SourceUnit>,
 ) -> Result<CoreCompileOutput> {
   let solc_config = SolcConfig {
@@ -230,7 +213,7 @@ fn compile_ast_sources(
 }
 
 fn compile_file_paths(
-  config: &ResolvedCompilerConfig,
+  config: &CompilerConfig,
   paths: Vec<PathBuf>,
   language_override: Option<FoundrySolcLanguage>,
 ) -> Result<CoreCompileOutput> {

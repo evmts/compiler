@@ -20,7 +20,7 @@ Rust + N-API bridge used by the Shadow toolchain to expose Foundry's Solidity co
 
 ### Compilation Pipeline
 
-1. **Configuration** – `CompilerConfig` is parsed from JS options and merged with project overrides (`ResolvedCompilerConfig`).
+1. **Configuration** – N-API `CompilerConfig` inputs (parsed as `JsCompilerConfigOptions`) and any Rust-side `CompilerConfigOptions` are merged into the resolved `CompilerConfig`.
 2. **Context detection** – `CompilerCore::new` optionally loads project metadata via `FoundryAdapter`/`HardhatAdapter` or synthesises an ephemeral workspace for inline sources.
 3. **Input selection** – `CompilationInput` handles inline strings, source maps, AST units, or file paths. Mixed inputs are rejected at the binding layer for clarity.
 4. **Execution** – `CompilerCore::compile_as` runs against an attached project via `ProjectRunner` when available, otherwise falls back to a "pure" `foundry-compilers` invocation with temporary sources.

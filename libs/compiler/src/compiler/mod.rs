@@ -9,7 +9,7 @@ use napi::{Env, JsObject, JsUnknown};
 use serde_json::Value;
 
 use crate::ast::utils::from_js_value;
-use crate::internal::config::{parse_compiler_config, CompilerConfig, ResolvedCompilerConfig};
+use crate::internal::config::{parse_js_compiler_config, CompilerConfig, CompilerConfigOptions};
 use crate::internal::errors::{map_napi_error, napi_error, to_napi_result, Error, Result};
 use crate::internal::project::ProjectContext;
 use crate::internal::solc;
@@ -35,26 +35,26 @@ pub struct Compiler {
 }
 
 impl Compiler {
-  pub fn new(options: Option<CompilerConfig>) -> Result<Self> {
-    let config = ResolvedCompilerConfig::from_options(options.as_ref()).map_err(Error::from)?;
+  pub fn new(options: Option<CompilerConfigOptions>) -> Result<Self> {
+    let config = CompilerConfig::from_options(options).map_err(Error::from)?;
     let state = init(config, None)?;
     Ok(Self { state })
   }
 
   pub fn from_foundry_root<P: AsRef<Path>>(
     root: P,
-    options: Option<CompilerConfig>,
+    options: Option<CompilerConfigOptions>,
   ) -> Result<Self> {
-    let config = ResolvedCompilerConfig::from_options(options.as_ref()).map_err(Error::from)?;
+    let config = CompilerConfig::from_options(options).map_err(Error::from)?;
     let state = init_from_foundry_root(config, root.as_ref())?;
     Ok(Self { state })
   }
 
   pub fn from_hardhat_root<P: AsRef<Path>>(
     root: P,
-    options: Option<CompilerConfig>,
+    options: Option<CompilerConfigOptions>,
   ) -> Result<Self> {
-    let config = ResolvedCompilerConfig::from_options(options.as_ref()).map_err(Error::from)?;
+    let config = CompilerConfig::from_options(options).map_err(Error::from)?;
     let state = init_from_hardhat_root(config, root.as_ref())?;
     Ok(Self { state })
   }
@@ -72,7 +72,7 @@ impl Compiler {
   pub fn compile_source(
     &self,
     target: SourceTarget,
-    options: Option<CompilerConfig>,
+    options: Option<CompilerConfigOptions>,
   ) -> Result<CoreCompileOutput> {
     let config = self.resolve_call_config(options.as_ref())?;
     compile_source(&self.state, &config, target)
@@ -81,7 +81,7 @@ impl Compiler {
   pub fn compile_sources(
     &self,
     sources: BTreeMap<String, SourceValue>,
-    options: Option<CompilerConfig>,
+    options: Option<CompilerConfigOptions>,
   ) -> Result<CoreCompileOutput> {
     let config = self.resolve_call_config(options.as_ref())?;
     compile_sources(&self.state, &config, sources)
@@ -90,7 +90,7 @@ impl Compiler {
   pub fn compile_files(
     &self,
     paths: Vec<PathBuf>,
-    options: Option<CompilerConfig>,
+    options: Option<CompilerConfigOptions>,
   ) -> Result<CoreCompileOutput> {
     if paths.is_empty() {
       return Err(Error::new("compileFiles requires at least one path."));
@@ -100,7 +100,10 @@ impl Compiler {
     compile_files(&config, paths, language_override)
   }
 
-  pub fn compile_project(&self, options: Option<CompilerConfig>) -> Result<CoreCompileOutput> {
+  pub fn compile_project(
+    &self,
+    options: Option<CompilerConfigOptions>,
+  ) -> Result<CoreCompileOutput> {
     let config = self.resolve_call_config(options.as_ref())?;
     compile_project(&self.state, &config)
   }
@@ -108,17 +111,17 @@ impl Compiler {
   pub fn compile_contract(
     &self,
     contract_name: &str,
-    options: Option<CompilerConfig>,
+    options: Option<CompilerConfigOptions>,
   ) -> Result<CoreCompileOutput> {
     let config = self.resolve_call_config(options.as_ref())?;
     compile_contract(&self.state, &config, contract_name)
   }
 
-  pub fn config(&self) -> &ResolvedCompilerConfig {
+  pub fn config(&self) -> &CompilerConfig {
     &self.state.config
   }
 
-  pub fn config_mut(&mut self) -> &mut ResolvedCompilerConfig {
+  pub fn config_mut(&mut self) -> &mut CompilerConfig {
     &mut self.state.config
   }
 
@@ -136,8 +139,8 @@ impl Compiler {
 
   fn resolve_call_config(
     &self,
-    overrides: Option<&CompilerConfig>,
-  ) -> Result<ResolvedCompilerConfig> {
+    overrides: Option<&CompilerConfigOptions>,
+  ) -> Result<CompilerConfig> {
     resolve_config(&self.state, overrides)
   }
 }
@@ -168,63 +171,82 @@ impl JsCompiler {
     to_napi_result(solc::is_version_installed(&parsed))
   }
 
-  #[napi(constructor, ts_args_type = "options?: CompilerConfig | undefined")]
+  #[napi(
+    constructor,
+    ts_args_type = "options?: CompilerConfigOptions | undefined"
+  )]
   pub fn new(env: Env, options: Option<JsUnknown>) -> napi::Result<Self> {
-    let parsed = parse_compiler_config(&env, options)?;
-    let compiler = to_napi_result(Compiler::new(parsed.clone()))?;
+    let parsed = parse_js_compiler_config(&env, options)?;
+    let config_options = parsed
+      .as_ref()
+      .map(|opts| CompilerConfigOptions::try_from(opts))
+      .transpose()?;
+    let compiler = to_napi_result(Compiler::new(config_options))?;
     Ok(Self::from_compiler(compiler))
   }
 
   #[napi(
     factory,
-    ts_args_type = "root: string, options?: CompilerConfig | undefined"
+    ts_args_type = "root: string, options?: CompilerConfigOptions | undefined"
   )]
   pub fn from_foundry_root(
     env: Env,
     root: String,
     options: Option<JsUnknown>,
   ) -> napi::Result<Self> {
-    let parsed = parse_compiler_config(&env, options)?;
+    let parsed = parse_js_compiler_config(&env, options)?;
+    let config_options = parsed
+      .as_ref()
+      .map(|opts| CompilerConfigOptions::try_from(opts))
+      .transpose()?;
     let compiler = to_napi_result(Compiler::from_foundry_root(
       Path::new(&root),
-      parsed.clone(),
+      config_options,
     ))?;
     Ok(Self::from_compiler(compiler))
   }
 
   #[napi(
     factory,
-    ts_args_type = "root: string, options?: CompilerConfig | undefined"
+    ts_args_type = "root: string, options?: CompilerConfigOptions | undefined"
   )]
   pub fn from_hardhat_root(
     env: Env,
     root: String,
     options: Option<JsUnknown>,
   ) -> napi::Result<Self> {
-    let parsed = parse_compiler_config(&env, options)?;
+    let parsed = parse_js_compiler_config(&env, options)?;
+    let config_options = parsed
+      .as_ref()
+      .map(|opts| CompilerConfigOptions::try_from(opts))
+      .transpose()?;
     let compiler = to_napi_result(Compiler::from_hardhat_root(
       Path::new(&root),
-      parsed.clone(),
+      config_options,
     ))?;
     Ok(Self::from_compiler(compiler))
   }
 
-  #[napi(ts_args_type = "target: string | object, options?: CompilerConfig | undefined")]
+  #[napi(ts_args_type = "target: string | object, options?: CompilerConfigOptions | undefined")]
   pub fn compile_source(
     &self,
     env: Env,
     target: Either<String, JsObject>,
     options: Option<JsUnknown>,
   ) -> napi::Result<CompileOutput> {
-    let parsed = parse_compiler_config(&env, options)?;
-    let config = self.resolve_call_config(parsed.as_ref())?;
+    let parsed = parse_js_compiler_config(&env, options)?;
+    let overrides = parsed
+      .as_ref()
+      .map(|opts| CompilerConfigOptions::try_from(opts))
+      .transpose()?;
+    let config = self.resolve_call_config(overrides.as_ref())?;
     let target = parse_source_target(&env, target)?;
     let output = to_napi_result(compile_source(&self.inner.state, &config, target))?;
     Ok(map_compile_output(output))
   }
 
   #[napi(
-    ts_args_type = "sources: Record<string, string | object>, options?: CompilerConfig | undefined"
+    ts_args_type = "sources: Record<string, string | object>, options?: CompilerConfigOptions | undefined"
   )]
   pub fn compile_sources(
     &self,
@@ -232,14 +254,18 @@ impl JsCompiler {
     sources: JsObject,
     options: Option<JsUnknown>,
   ) -> napi::Result<CompileOutput> {
-    let parsed = parse_compiler_config(&env, options)?;
-    let config = self.resolve_call_config(parsed.as_ref())?;
+    let parsed = parse_js_compiler_config(&env, options)?;
+    let overrides = parsed
+      .as_ref()
+      .map(|opts| CompilerConfigOptions::try_from(opts))
+      .transpose()?;
+    let config = self.resolve_call_config(overrides.as_ref())?;
     let map = Self::parse_sources_object(&env, sources)?;
     let output = to_napi_result(compile_sources(&self.inner.state, &config, map))?;
     Ok(map_compile_output(output))
   }
 
-  #[napi(ts_args_type = "paths: string[], options?: CompilerConfig | undefined")]
+  #[napi(ts_args_type = "paths: string[], options?: CompilerConfigOptions | undefined")]
   pub fn compile_files(
     &self,
     env: Env,
@@ -249,35 +275,47 @@ impl JsCompiler {
     if paths.is_empty() {
       return Err(napi_error("compileFiles requires at least one path."));
     }
-    let parsed = parse_compiler_config(&env, options)?;
-    let config = self.resolve_call_config(parsed.as_ref())?;
-    let language_override = language_override(parsed.as_ref());
+    let parsed = parse_js_compiler_config(&env, options)?;
+    let overrides = parsed
+      .as_ref()
+      .map(|opts| CompilerConfigOptions::try_from(opts))
+      .transpose()?;
+    let config = self.resolve_call_config(overrides.as_ref())?;
+    let language_override = language_override(overrides.as_ref());
     let path_bufs = paths.into_iter().map(PathBuf::from).collect();
     let output = to_napi_result(compile_files(&config, path_bufs, language_override))?;
     Ok(map_compile_output(output))
   }
 
-  #[napi(ts_args_type = "options?: CompilerConfig | undefined")]
+  #[napi(ts_args_type = "options?: CompilerConfigOptions | undefined")]
   pub fn compile_project(
     &self,
     env: Env,
     options: Option<JsUnknown>,
   ) -> napi::Result<CompileOutput> {
-    let parsed = parse_compiler_config(&env, options)?;
-    let config = self.resolve_call_config(parsed.as_ref())?;
+    let parsed = parse_js_compiler_config(&env, options)?;
+    let overrides = parsed
+      .as_ref()
+      .map(|opts| CompilerConfigOptions::try_from(opts))
+      .transpose()?;
+    let config = self.resolve_call_config(overrides.as_ref())?;
     let output = to_napi_result(compile_project(&self.inner.state, &config))?;
     Ok(map_compile_output(output))
   }
 
-  #[napi(ts_args_type = "contractName: string, options?: CompilerConfig | undefined")]
+  #[napi(ts_args_type = "contractName: string, options?: CompilerConfigOptions | undefined")]
   pub fn compile_contract(
     &self,
     env: Env,
     contract_name: String,
     options: Option<JsUnknown>,
   ) -> napi::Result<CompileOutput> {
-    let parsed = parse_compiler_config(&env, options)?;
-    let config = self.resolve_call_config(parsed.as_ref())?;
+    let parsed = parse_js_compiler_config(&env, options)?;
+    let overrides = parsed
+      .as_ref()
+      .map(|opts| CompilerConfigOptions::try_from(opts))
+      .transpose()?;
+    let config = self.resolve_call_config(overrides.as_ref())?;
     let output = to_napi_result(compile_contract(&self.inner.state, &config, &contract_name))?;
     Ok(map_compile_output(output))
   }
@@ -286,8 +324,8 @@ impl JsCompiler {
 impl JsCompiler {
   fn resolve_call_config(
     &self,
-    overrides: Option<&CompilerConfig>,
-  ) -> napi::Result<ResolvedCompilerConfig> {
+    overrides: Option<&CompilerConfigOptions>,
+  ) -> napi::Result<CompilerConfig> {
     to_napi_result(resolve_config(&self.inner.state, overrides))
   }
 
@@ -351,10 +389,8 @@ fn map_compile_output(output: CoreCompileOutput) -> CompileOutput {
   }
 }
 
-fn language_override(overrides: Option<&CompilerConfig>) -> Option<FoundrySolcLanguage> {
-  overrides
-    .and_then(|opts| opts.solc_language)
-    .map(FoundrySolcLanguage::from)
+fn language_override(overrides: Option<&CompilerConfigOptions>) -> Option<FoundrySolcLanguage> {
+  overrides.and_then(|opts| opts.solc.language)
 }
 
 fn map_contract_artifact(artifact: CoreContractArtifact) -> ContractArtifact {

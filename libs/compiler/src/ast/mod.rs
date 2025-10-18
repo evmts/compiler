@@ -16,7 +16,7 @@ use core::{
 pub use core::{FragmentTarget, SourceTarget, State};
 use utils::{from_js_value, sanitize_ast_value, to_js_value};
 
-use crate::internal::config::{parse_ast_options, AstOptions, SolcConfig};
+use crate::internal::config::{parse_js_ast_options, AstConfig, AstConfigOptions};
 use crate::internal::errors::{map_napi_error, napi_error, to_napi_result, Result};
 
 /// Pure Rust façade around the AST core functions.
@@ -26,14 +26,14 @@ pub struct Ast {
 }
 
 impl Ast {
-  pub fn new(options: Option<AstOptions>) -> Result<Self> {
+  pub fn new(options: Option<AstConfigOptions>) -> Result<Self> {
     init(options).map(|state| Self { state })
   }
 
   pub fn from_source(
     &mut self,
     target: SourceTarget,
-    options: Option<AstOptions>,
+    options: Option<AstConfigOptions>,
   ) -> Result<&mut Self> {
     from_source(&mut self.state, target, options.as_ref())?;
     Ok(self)
@@ -42,25 +42,31 @@ impl Ast {
   pub fn inject_shadow(
     &mut self,
     fragment: FragmentTarget,
-    options: Option<AstOptions>,
+    options: Option<AstConfigOptions>,
   ) -> Result<&mut Self> {
     inject_shadow(&mut self.state, fragment, options.as_ref())?;
     Ok(self)
   }
 
-  pub fn expose_internal_variables(&mut self, options: Option<AstOptions>) -> Result<&mut Self> {
+  pub fn expose_internal_variables(
+    &mut self,
+    options: Option<AstConfigOptions>,
+  ) -> Result<&mut Self> {
     expose_internal_variables(&mut self.state, options.as_ref())?;
     Ok(self)
   }
 
-  pub fn expose_internal_functions(&mut self, options: Option<AstOptions>) -> Result<&mut Self> {
+  pub fn expose_internal_functions(
+    &mut self,
+    options: Option<AstConfigOptions>,
+  ) -> Result<&mut Self> {
     expose_internal_functions(&mut self.state, options.as_ref())?;
     Ok(self)
   }
 
   /// Compile the current AST to ensure it represents a valid contract and refresh its references.
   /// This is optional—`ast()` already returns the parsed tree you can work with directly.
-  pub fn validate(&mut self, options: Option<AstOptions>) -> Result<&mut Self> {
+  pub fn validate(&mut self, options: Option<AstConfigOptions>) -> Result<&mut Self> {
     validate(&mut self.state, options.as_ref())?;
     Ok(self)
   }
@@ -77,19 +83,11 @@ impl Ast {
     })
   }
 
-  pub fn options(&self) -> &AstOptions {
-    &self.state.options
-  }
-
-  pub fn config(&self) -> &SolcConfig {
+  pub fn config(&self) -> &AstConfig {
     &self.state.config
   }
 
-  pub fn options_mut(&mut self) -> &mut AstOptions {
-    &mut self.state.options
-  }
-
-  pub fn config_mut(&mut self) -> &mut SolcConfig {
+  pub fn config_mut(&mut self) -> &mut AstConfig {
     &mut self.state.config
   }
 
@@ -115,17 +113,21 @@ impl JsAst {
 impl JsAst {
   /// Create a new AST helper. Providing `instrumentedContract` establishes the instrumented
   /// contract targeted by subsequent operations.
-  #[napi(constructor, ts_args_type = "options?: AstOptions | undefined")]
+  #[napi(constructor, ts_args_type = "options?: AstConfigOptions | undefined")]
   pub fn new(env: Env, options: Option<JsUnknown>) -> napi::Result<Self> {
-    let parsed = parse_ast_options(&env, options)?;
-    let ast = to_napi_result(Ast::new(parsed.clone()))?;
+    let parsed = parse_js_ast_options(&env, options)?;
+    let config_options = parsed
+      .as_ref()
+      .map(|opts| AstConfigOptions::try_from(opts))
+      .transpose()?;
+    let ast = to_napi_result(Ast::new(config_options))?;
     Ok(Self::from_ast(ast))
   }
 
   /// Parse Solidity source into an AST using the configured solc version. When no
   /// `instrumentedContract` is provided, later operations apply to all contracts in the file.
   #[napi(
-    ts_args_type = "target: string | object, options?: AstOptions | undefined",
+    ts_args_type = "target: string | object, options?: AstConfigOptions | undefined",
     ts_return_type = "this"
   )]
   pub fn from_source(
@@ -134,16 +136,20 @@ impl JsAst {
     target: Either<String, JsObject>,
     options: Option<JsUnknown>,
   ) -> napi::Result<JsAst> {
-    let parsed = parse_ast_options(&env, options)?;
+    let parsed = parse_js_ast_options(&env, options)?;
+    let overrides = parsed
+      .as_ref()
+      .map(|opts| AstConfigOptions::try_from(opts))
+      .transpose()?;
     let target = parse_source_target(&env, target)?;
-    to_napi_result(self.inner.from_source(target, parsed.clone()))?;
+    to_napi_result(self.inner.from_source(target, overrides))?;
     Ok(self.clone())
   }
 
   /// Parse an AST fragment from source text or inject a pre-parsed AST fragment into the targeted
   /// contract.
   #[napi(
-    ts_args_type = "fragment: string | object, options?: AstOptions | undefined",
+    ts_args_type = "fragment: string | object, options?: AstConfigOptions | undefined",
     ts_return_type = "this"
   )]
   pub fn inject_shadow(
@@ -152,16 +158,20 @@ impl JsAst {
     fragment: Either<String, JsObject>,
     options: Option<JsUnknown>,
   ) -> napi::Result<JsAst> {
-    let parsed = parse_ast_options(&env, options)?;
+    let parsed = parse_js_ast_options(&env, options)?;
+    let overrides = parsed
+      .as_ref()
+      .map(|opts| AstConfigOptions::try_from(opts))
+      .transpose()?;
     let fragment = parse_fragment_input(&env, fragment)?;
-    to_napi_result(self.inner.inject_shadow(fragment, parsed.clone()))?;
+    to_napi_result(self.inner.inject_shadow(fragment, overrides))?;
     Ok(self.clone())
   }
 
   /// Promote private/internal state variables to public visibility. Omitting `instrumentedContract`
   /// applies the change to all contracts.
   #[napi(
-    ts_args_type = "options?: AstOptions | undefined",
+    ts_args_type = "options?: AstConfigOptions | undefined",
     ts_return_type = "this"
   )]
   pub fn expose_internal_variables(
@@ -169,15 +179,19 @@ impl JsAst {
     env: Env,
     options: Option<JsUnknown>,
   ) -> napi::Result<JsAst> {
-    let parsed = parse_ast_options(&env, options)?;
-    to_napi_result(self.inner.expose_internal_variables(parsed.clone()))?;
+    let parsed = parse_js_ast_options(&env, options)?;
+    let overrides = parsed
+      .as_ref()
+      .map(|opts| AstConfigOptions::try_from(opts))
+      .transpose()?;
+    to_napi_result(self.inner.expose_internal_variables(overrides))?;
     Ok(self.clone())
   }
 
   /// Promote private/internal functions to public visibility. Omitting `instrumentedContract`
   /// applies the change to all contracts.
   #[napi(
-    ts_args_type = "options?: AstOptions | undefined",
+    ts_args_type = "options?: AstConfigOptions | undefined",
     ts_return_type = "this"
   )]
   pub fn expose_internal_functions(
@@ -185,20 +199,28 @@ impl JsAst {
     env: Env,
     options: Option<JsUnknown>,
   ) -> napi::Result<JsAst> {
-    let parsed = parse_ast_options(&env, options)?;
-    to_napi_result(self.inner.expose_internal_functions(parsed.clone()))?;
+    let parsed = parse_js_ast_options(&env, options)?;
+    let overrides = parsed
+      .as_ref()
+      .map(|opts| AstConfigOptions::try_from(opts))
+      .transpose()?;
+    to_napi_result(self.inner.expose_internal_functions(overrides))?;
     Ok(self.clone())
   }
 
   /// Compile the current AST to ensure it represents a valid contract and refresh its references.
   /// This is optional—`ast()` already returns the parsed tree you can work with directly.
   #[napi(
-    ts_args_type = "options?: AstOptions | undefined",
+    ts_args_type = "options?: AstConfigOptions | undefined",
     ts_return_type = "this"
   )]
   pub fn validate(&mut self, env: Env, options: Option<JsUnknown>) -> napi::Result<JsAst> {
-    let parsed = parse_ast_options(&env, options)?;
-    to_napi_result(self.inner.validate(parsed.clone()))?;
+    let parsed = parse_js_ast_options(&env, options)?;
+    let overrides = parsed
+      .as_ref()
+      .map(|opts| AstConfigOptions::try_from(opts))
+      .transpose()?;
+    to_napi_result(self.inner.validate(overrides))?;
     Ok(self.clone())
   }
 

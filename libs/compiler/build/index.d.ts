@@ -6,32 +6,32 @@ export declare class Ast {
    * Create a new AST helper. Providing `instrumentedContract` establishes the instrumented
    * contract targeted by subsequent operations.
    */
-  constructor(options?: AstOptions | undefined)
+  constructor(options?: AstConfigOptions | undefined)
   /**
    * Parse Solidity source into an AST using the configured solc version. When no
    * `instrumentedContract` is provided, later operations apply to all contracts in the file.
    */
-  fromSource(target: string | object, options?: AstOptions | undefined): this
+  fromSource(target: string | object, options?: AstConfigOptions | undefined): this
   /**
    * Parse an AST fragment from source text or inject a pre-parsed AST fragment into the targeted
    * contract.
    */
-  injectShadow(fragment: string | object, options?: AstOptions | undefined): this
+  injectShadow(fragment: string | object, options?: AstConfigOptions | undefined): this
   /**
    * Promote private/internal state variables to public visibility. Omitting `instrumentedContract`
    * applies the change to all contracts.
    */
-  exposeInternalVariables(options?: AstOptions | undefined): this
+  exposeInternalVariables(options?: AstConfigOptions | undefined): this
   /**
    * Promote private/internal functions to public visibility. Omitting `instrumentedContract`
    * applies the change to all contracts.
    */
-  exposeInternalFunctions(options?: AstOptions | undefined): this
+  exposeInternalFunctions(options?: AstConfigOptions | undefined): this
   /**
    * Compile the current AST to ensure it represents a valid contract and refresh its references.
    * This is optional—`ast()` already returns the parsed tree you can work with directly.
    */
-  validate(options?: AstOptions | undefined): this
+  validate(options?: AstConfigOptions | undefined): this
   /** Get the current instrumented AST. */
   ast(): import('./ast-types').SourceUnit
 }
@@ -40,20 +40,20 @@ export type JsAst = Ast
 export declare class Compiler {
   static installSolcVersion(version: string): Promise<unknown>
   static isSolcVersionInstalled(version: string): boolean
-  constructor(options?: CompilerConfig | undefined)
-  static fromFoundryRoot(root: string, options?: CompilerConfig | undefined): JsCompiler
-  static fromHardhatRoot(root: string, options?: CompilerConfig | undefined): JsCompiler
-  compileSource(target: string | object, options?: CompilerConfig | undefined): CompileOutput
-  compileSources(sources: Record<string, string | object>, options?: CompilerConfig | undefined): CompileOutput
-  compileFiles(paths: string[], options?: CompilerConfig | undefined): CompileOutput
-  compileProject(options?: CompilerConfig | undefined): CompileOutput
-  compileContract(contractName: string, options?: CompilerConfig | undefined): CompileOutput
+  constructor(options?: CompilerConfigOptions | undefined)
+  static fromFoundryRoot(root: string, options?: CompilerConfigOptions | undefined): JsCompiler
+  static fromHardhatRoot(root: string, options?: CompilerConfigOptions | undefined): JsCompiler
+  compileSource(target: string | object, options?: CompilerConfigOptions | undefined): CompileOutput
+  compileSources(sources: Record<string, string | object>, options?: CompilerConfigOptions | undefined): CompileOutput
+  compileFiles(paths: string[], options?: CompilerConfigOptions | undefined): CompileOutput
+  compileProject(options?: CompilerConfigOptions | undefined): CompileOutput
+  compileContract(contractName: string, options?: CompilerConfigOptions | undefined): CompileOutput
 }
 export type JsCompiler = Compiler
 
-export interface AstOptions {
+export interface AstConfigOptions {
   solcVersion?: string | undefined
-  solcLanguage?: import('./index').SolcLanguage | undefined
+  solcLanguage?: SolcLanguage
   solcSettings?: import('./index').CompilerSettings | undefined
   instrumentedContract?: string | undefined
 }
@@ -70,9 +70,10 @@ export interface CompileOutput {
   hasCompilerErrors: boolean
 }
 
-export interface CompilerConfig {
+/** JavaScript-facing configuration captured through N-API bindings. */
+export interface CompilerConfigOptions {
   solcVersion?: string | undefined
-  solcLanguage?: import('./index').SolcLanguage | undefined
+  solcLanguage?: SolcLanguage
   solcSettings?: import('./index').CompilerSettings | undefined
   cacheEnabled?: boolean | undefined
   baseDir?: string | undefined
@@ -97,17 +98,17 @@ export interface CompilerError {
   sourceLocation?: SourceLocation
 }
 
-/** Full compiler settings accepted by Foundry's solc wrapper. */
+/** JavaScript-facing wrappers mirroring the option structs. */
 export interface CompilerSettings {
   stopAfter?: 'parsing' | undefined
   remappings?: `${string}=${string}`[] | undefined
-  optimizer?: OptimizerSettings
-  modelChecker?: ModelCheckerSettings
-  metadata?: SettingsMetadata
+  optimizer?: import('./index').OptimizerSettings | undefined
+  modelChecker?: import('./index').ModelCheckerSettings | undefined
+  metadata?: import('./index').SettingsMetadata | undefined
   outputSelection?: import('./solc-types').OutputSelection | undefined
   evmVersion?: EvmVersion
   viaIr?: boolean
-  debug?: DebuggingSettings
+  debug?: import('./index').DebuggingSettings | undefined
   libraries?: Record<string, Record<string, string>> | undefined
 }
 
@@ -123,14 +124,6 @@ export interface ContractBytecode {
   hex?: string
   bytes?: Uint8Array | undefined
 }
-
-export declare export declare function createCurrentDapptoolsPaths(): ProjectPaths
-
-export declare export declare function createCurrentHardhatPaths(): ProjectPaths
-
-export declare export declare function createDapptoolsPaths(rootPath: string): ProjectPaths
-
-export declare export declare function createHardhatPaths(rootPath: string): ProjectPaths
 
 export interface DebuggingSettings {
   revertStrings?: RevertStrings
@@ -149,12 +142,6 @@ export declare const enum EvmVersion {
   Cancun = 'Cancun',
   Prague = 'Prague'
 }
-
-export declare export declare function findArtifactsDir(rootPath: string): string
-
-export declare export declare function findLibs(rootPath: string): Array<string>
-
-export declare export declare function findSourceDir(rootPath: string): string
 
 export declare const enum ModelCheckerEngine {
   Bmc = 'Bmc',
@@ -185,22 +172,16 @@ export interface ModelCheckerSettings {
 }
 
 export declare const enum ModelCheckerSolver {
-  Z3 = 'Z3',
+  Chc = 'Chc',
   Eld = 'Eld',
-  Cvc4 = 'Cvc4',
-  EldStrict = 'EldStrict'
+  Bmc = 'Bmc',
+  AllZ3 = 'AllZ3',
+  Cvc4 = 'Cvc4'
 }
 
 export declare const enum ModelCheckerTarget {
   Assert = 'Assert',
-  Contract = 'Contract',
-  External = 'External',
-  Public = 'Public'
-}
-
-export declare const enum ModelCheckerTargetType {
-  RecursiveDepth = 'RecursiveDepth',
-  BoundedLoop = 'BoundedLoop'
+  Require = 'Require'
 }
 
 export interface OptimizerDetails {
@@ -212,24 +193,14 @@ export interface OptimizerDetails {
   cse?: boolean
   constantOptimizer?: boolean
   yul?: boolean
-  yulDetails?: YulDetails
+  yulDetails?: import('./index').YulDetails | undefined
   simpleCounterForLoopUncheckedIncrement?: boolean
 }
 
 export interface OptimizerSettings {
   enabled?: boolean
   runs?: number
-  details?: OptimizerDetails
-}
-
-export interface ProjectPaths {
-  root: string
-  cache: string
-  artifacts: string
-  sources: string
-  tests: string
-  scripts: string
-  libraries: Array<string>
+  details?: import('./index').OptimizerDetails | undefined
 }
 
 export declare const enum RevertStrings {

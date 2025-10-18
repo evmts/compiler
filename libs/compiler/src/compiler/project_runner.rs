@@ -9,7 +9,7 @@ use std::sync::OnceLock;
 use super::input::CompilationInput;
 use super::output::{into_core_compile_output, CoreCompileOutput};
 use crate::internal::{
-  config::ResolvedCompilerConfig,
+  config::CompilerConfig,
   errors::{map_err_with_context, Error, Result},
   project::{build_project, ProjectContext, ProjectLayout},
   solc,
@@ -26,7 +26,7 @@ impl<'a> ProjectRunner<'a> {
 
   pub fn compile(
     &self,
-    config: &ResolvedCompilerConfig,
+    config: &CompilerConfig,
     input: &CompilationInput,
   ) -> Result<Option<CoreCompileOutput>> {
     match input {
@@ -55,7 +55,7 @@ impl<'a> ProjectRunner<'a> {
     }
   }
 
-  pub fn compile_project(&self, config: &ResolvedCompilerConfig) -> Result<CoreCompileOutput> {
+  pub fn compile_project(&self, config: &CompilerConfig) -> Result<CoreCompileOutput> {
     let output = self.compile_with_project(config, "Project compilation failed", |project| {
       project.compile()
     });
@@ -64,7 +64,7 @@ impl<'a> ProjectRunner<'a> {
 
   pub fn compile_contract(
     &self,
-    config: &ResolvedCompilerConfig,
+    config: &CompilerConfig,
     contract_name: &str,
   ) -> Result<CoreCompileOutput> {
     let name = contract_name.to_owned();
@@ -77,7 +77,7 @@ impl<'a> ProjectRunner<'a> {
 
   fn compile_with_project<F>(
     &self,
-    config: &ResolvedCompilerConfig,
+    config: &CompilerConfig,
     label: &str,
     compile_fn: F,
   ) -> Result<ProjectCompileOutput<SolcCompiler>>
@@ -97,11 +97,7 @@ impl<'a> ProjectRunner<'a> {
     map_err_with_context(compile_fn(&project), label)
   }
 
-  fn write_virtual_source(
-    &self,
-    config: &ResolvedCompilerConfig,
-    contents: &str,
-  ) -> Result<PathBuf> {
+  fn write_virtual_source(&self, config: &CompilerConfig, contents: &str) -> Result<PathBuf> {
     let extension = match config.solc_language {
       FoundrySolcLanguage::Solidity => "sol",
       FoundrySolcLanguage::Yul => "yul",
@@ -121,9 +117,7 @@ impl<'a> ProjectRunner<'a> {
     Ok(path)
   }
 
-  pub fn prepare_synthetic_context(
-    config: &mut ResolvedCompilerConfig,
-  ) -> Result<Option<ProjectContext>> {
+  pub fn prepare_synthetic_context(config: &mut CompilerConfig) -> Result<Option<ProjectContext>> {
     if !config.cache_enabled {
       return Ok(None);
     }

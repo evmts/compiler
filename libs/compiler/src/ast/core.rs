@@ -4,7 +4,7 @@ use foundry_compilers::artifacts::ast::{
 use foundry_compilers::solc::SolcLanguage;
 
 use super::{orchestrator::AstOrchestrator, stitcher, utils};
-use crate::internal::config::{AstOptions, SolcConfig};
+use crate::internal::config::{AstConfig, AstConfigOptions};
 use crate::internal::errors::{map_err_with_context, Error, Result};
 use crate::internal::solc;
 use serde_json::{json, Value};
@@ -13,9 +13,8 @@ const VIRTUAL_SOURCE_PATH: &str = "__VIRTUAL__.sol";
 
 #[derive(Clone)]
 pub struct State {
-  pub config: SolcConfig,
+  pub config: AstConfig,
   pub ast: Option<SourceUnit>,
-  pub options: AstOptions,
 }
 
 #[derive(Clone)]
@@ -30,31 +29,27 @@ pub enum FragmentTarget {
   Ast(SourceUnit),
 }
 
-pub fn init(options: Option<AstOptions>) -> Result<State> {
+pub fn init(options: Option<AstConfigOptions>) -> Result<State> {
   let default_settings = AstOrchestrator::sanitize_settings(None).map_err(Error::from)?;
   let default_language = solc::default_language();
-  let mut config =
-    SolcConfig::new(&default_language, &default_settings, options.as_ref()).map_err(Error::from)?;
-  config.settings =
-    AstOrchestrator::sanitize_settings(Some(config.settings.clone())).map_err(Error::from)?;
-  if config.language != SolcLanguage::Solidity {
+  let mut config = AstConfig::from_options(&default_language, &default_settings, options.as_ref())
+    .map_err(Error::from)?;
+  config.solc.settings =
+    AstOrchestrator::sanitize_settings(Some(config.solc.settings.clone())).map_err(Error::from)?;
+  if config.solc.language != SolcLanguage::Solidity {
     return Err(Error::new(
       "Ast helpers only support solcLanguage \"Solidity\".",
     ));
   }
-  solc::ensure_installed(&config.version)?;
+  solc::ensure_installed(&config.solc.version)?;
 
-  Ok(State {
-    config,
-    ast: None,
-    options: options.unwrap_or_default(),
-  })
+  Ok(State { config, ast: None })
 }
 
 pub fn from_source(
   state: &mut State,
   target: SourceTarget,
-  overrides: Option<&AstOptions>,
+  overrides: Option<&AstConfigOptions>,
 ) -> Result<()> {
   match target {
     SourceTarget::Text(source) => load_source_text(state, &source, overrides)?,
@@ -66,7 +61,7 @@ pub fn from_source(
 pub fn inject_shadow(
   state: &mut State,
   fragment: FragmentTarget,
-  overrides: Option<&AstOptions>,
+  overrides: Option<&AstConfigOptions>,
 ) -> Result<()> {
   match fragment {
     FragmentTarget::Text(source) => inject_fragment_string(state, &source, overrides)?,
@@ -75,11 +70,17 @@ pub fn inject_shadow(
   Ok(())
 }
 
-pub fn expose_internal_variables(state: &mut State, overrides: Option<&AstOptions>) -> Result<()> {
+pub fn expose_internal_variables(
+  state: &mut State,
+  overrides: Option<&AstConfigOptions>,
+) -> Result<()> {
   expose_variables_internal(state, overrides)
 }
 
-pub fn expose_internal_functions(state: &mut State, overrides: Option<&AstOptions>) -> Result<()> {
+pub fn expose_internal_functions(
+  state: &mut State,
+  overrides: Option<&AstConfigOptions>,
+) -> Result<()> {
   expose_functions_internal(state, overrides)
 }
 
@@ -91,21 +92,24 @@ pub fn source_unit_mut(state: &mut State) -> Option<&mut SourceUnit> {
   state.ast.as_mut()
 }
 
-fn contract_override<'a>(state: &'a State, overrides: Option<&'a AstOptions>) -> Option<&'a str> {
+fn contract_override<'a>(
+  state: &'a State,
+  overrides: Option<&'a AstConfigOptions>,
+) -> Option<&'a str> {
   overrides
     .and_then(|opts| opts.instrumented_contract())
-    .or_else(|| state.options.instrumented_contract())
+    .or_else(|| state.config.instrumented_contract())
 }
 
-fn resolve_config(state: &State, overrides: Option<&AstOptions>) -> Result<SolcConfig> {
-  let mut config = state.config.merge(overrides).map_err(Error::from)?;
-  if config.language != SolcLanguage::Solidity {
+fn resolve_config(state: &State, overrides: Option<&AstConfigOptions>) -> Result<AstConfig> {
+  let mut config = state.config.merge_options(overrides).map_err(Error::from)?;
+  if config.solc.language != SolcLanguage::Solidity {
     return Err(Error::new(
       "Ast helpers only support solcLanguage \"Solidity\".",
     ));
   }
-  config.settings = map_err_with_context(
-    AstOrchestrator::sanitize_settings(Some(config.settings.clone())),
+  config.solc.settings = map_err_with_context(
+    AstOrchestrator::sanitize_settings(Some(config.solc.settings.clone())),
     "Failed to sanitize compiler settings",
   )?;
   Ok(config)
@@ -142,7 +146,7 @@ fn find_contract_index(
 fn inject_fragment_contract(
   state: &mut State,
   fragment_contract: ContractDefinition,
-  overrides: Option<&AstOptions>,
+  overrides: Option<&AstConfigOptions>,
 ) -> Result<()> {
   let contract_name = contract_override(state, overrides).map(|name| name.to_owned());
   let contract_idx = {
@@ -160,7 +164,7 @@ fn inject_fragment_contract(
 fn contract_indices(
   state: &State,
   ast: &SourceUnit,
-  overrides: Option<&AstOptions>,
+  overrides: Option<&AstConfigOptions>,
 ) -> Result<Vec<usize>> {
   if let Some(name) = contract_override(state, overrides) {
     let idx = stitcher::find_instrumented_contract_index(ast, Some(name))?;
@@ -187,7 +191,7 @@ fn contract_indices(
 
 fn mutate_contracts<F>(
   state: &mut State,
-  overrides: Option<&AstOptions>,
+  overrides: Option<&AstConfigOptions>,
   mut mutator: F,
 ) -> Result<()>
 where
@@ -211,7 +215,10 @@ where
   Ok(())
 }
 
-fn expose_variables_internal(state: &mut State, overrides: Option<&AstOptions>) -> Result<()> {
+fn expose_variables_internal(
+  state: &mut State,
+  overrides: Option<&AstConfigOptions>,
+) -> Result<()> {
   mutate_contracts(state, overrides, |contract| {
     for member in &mut contract.nodes {
       if let ContractDefinitionPart::VariableDeclaration(variable) = member {
@@ -226,7 +233,10 @@ fn expose_variables_internal(state: &mut State, overrides: Option<&AstOptions>) 
   })
 }
 
-fn expose_functions_internal(state: &mut State, overrides: Option<&AstOptions>) -> Result<()> {
+fn expose_functions_internal(
+  state: &mut State,
+  overrides: Option<&AstConfigOptions>,
+) -> Result<()> {
   mutate_contracts(state, overrides, |contract| {
     for member in &mut contract.nodes {
       if let ContractDefinitionPart::FunctionDefinition(function) = member {
@@ -241,9 +251,9 @@ fn expose_functions_internal(state: &mut State, overrides: Option<&AstOptions>) 
   })
 }
 
-pub fn validate(state: &mut State, overrides: Option<&AstOptions>) -> Result<()> {
+pub fn validate(state: &mut State, overrides: Option<&AstConfigOptions>) -> Result<()> {
   let config = resolve_config(state, overrides)?;
-  let mut compile_config = config.clone();
+  let mut compile_config = config.solc.clone();
   compile_config.settings.stop_after = None;
 
   let target = target_ast(state)?;
@@ -309,12 +319,16 @@ pub fn validate(state: &mut State, overrides: Option<&AstOptions>) -> Result<()>
   Ok(())
 }
 
-fn load_source_text(state: &mut State, source: &str, overrides: Option<&AstOptions>) -> Result<()> {
+fn load_source_text(
+  state: &mut State,
+  source: &str,
+  overrides: Option<&AstConfigOptions>,
+) -> Result<()> {
   let config = resolve_config(state, overrides)?;
-  let solc = solc::ensure_installed(&config.version)?;
+  let solc = solc::ensure_installed(&config.solc.version)?;
 
   let ast = map_err_with_context(
-    AstOrchestrator::parse_source_unit(source, VIRTUAL_SOURCE_PATH, &solc, &config.settings),
+    AstOrchestrator::parse_source_unit(source, VIRTUAL_SOURCE_PATH, &solc, &config.solc.settings),
     "Failed to parse target source",
   )?;
 
@@ -325,10 +339,10 @@ fn load_source_text(state: &mut State, source: &str, overrides: Option<&AstOptio
 fn load_source_ast(
   state: &mut State,
   target_ast: SourceUnit,
-  overrides: Option<&AstOptions>,
+  overrides: Option<&AstConfigOptions>,
 ) -> Result<()> {
   let config = resolve_config(state, overrides)?;
-  solc::ensure_installed(&config.version)?;
+  solc::ensure_installed(&config.solc.version)?;
 
   map_err_with_context(
     stitcher::find_instrumented_contract_index(&target_ast, contract_override(state, overrides)),
@@ -342,13 +356,13 @@ fn load_source_ast(
 fn inject_fragment_string(
   state: &mut State,
   fragment_source: &str,
-  overrides: Option<&AstOptions>,
+  overrides: Option<&AstConfigOptions>,
 ) -> Result<()> {
   let config = resolve_config(state, overrides)?;
-  let solc = solc::ensure_installed(&config.version)?;
+  let solc = solc::ensure_installed(&config.solc.version)?;
 
   let fragment_contract = map_err_with_context(
-    AstOrchestrator::parse_fragment_contract(fragment_source, &solc, &config.settings),
+    AstOrchestrator::parse_fragment_contract(fragment_source, &solc, &config.solc.settings),
     "Failed to parse AST fragment",
   )?;
 
@@ -358,10 +372,10 @@ fn inject_fragment_string(
 fn inject_fragment_ast(
   state: &mut State,
   fragment_ast: SourceUnit,
-  overrides: Option<&AstOptions>,
+  overrides: Option<&AstConfigOptions>,
 ) -> Result<()> {
   let config = resolve_config(state, overrides)?;
-  solc::ensure_installed(&config.version)?;
+  solc::ensure_installed(&config.solc.version)?;
 
   let fragment_contract = map_err_with_context(
     AstOrchestrator::extract_fragment_contract(&fragment_ast),
@@ -375,8 +389,8 @@ fn inject_fragment_ast(
 mod tests {
   use super::*;
   use crate::ast::utils;
-  use crate::internal::config::{AstOptions, SolcConfig};
-  use crate::internal::settings::{CompilerSettings, OptimizerSettings};
+  use crate::internal::config::{AstConfigOptions, SolcConfig};
+  use crate::internal::settings::{CompilerSettingsOptions, OptimizerSettingsOptions};
   use crate::internal::solc;
   use foundry_compilers::artifacts::CompilerOutput;
   use foundry_compilers::solc::Solc;
@@ -411,7 +425,7 @@ contract Target {
     let mut config = SolcConfig::new(
       &default_language,
       &default_settings,
-      Option::<&AstOptions>::None,
+      Option::<&AstConfigOptions>::None,
     )
     .expect("config");
     config.settings = AstOrchestrator::sanitize_settings(Some(config.settings.clone()))
@@ -427,10 +441,8 @@ contract Target {
     )
     .expect("load source");
 
-    let overrides = AstOptions {
-      solc_version: None,
-      solc_language: None,
-      solc_settings: None,
+    let overrides = AstConfigOptions {
+      solc: crate::SolcConfigOptions::default(),
       instrumented_contract: Some("Target".into()),
     };
 
@@ -493,7 +505,7 @@ contract Target {
     let mut config = SolcConfig::new(
       &default_language,
       &default_settings,
-      Option::<&AstOptions>::None,
+      Option::<&AstConfigOptions>::None,
     )
     .expect("config");
     config.settings = AstOrchestrator::sanitize_settings(Some(config.settings.clone()))
@@ -508,10 +520,8 @@ contract Target {
       None,
     )
     .expect("load source");
-    let overrides = AstOptions {
-      solc_version: None,
-      solc_language: None,
-      solc_settings: None,
+    let overrides = AstConfigOptions {
+      solc: crate::SolcConfigOptions::default(),
       instrumented_contract: Some("Target".into()),
     };
     expose_internal_variables(&mut state, Some(&overrides)).expect("expose vars");
@@ -550,13 +560,13 @@ contract Target {
     }
 
     let mut state = init(None).expect("init ast");
-    let initial_options = state.options.clone();
+    let initial_config = state.config.clone();
 
-    let mut overrides = AstOptions::default();
+    let mut overrides = AstConfigOptions::default();
     overrides.instrumented_contract = Some("Target".to_string());
-    overrides.solc_settings = Some({
-      let mut settings = CompilerSettings::default();
-      settings.optimizer = Some(OptimizerSettings {
+    overrides.solc.settings = Some({
+      let mut settings = CompilerSettingsOptions::default();
+      settings.optimizer = Some(OptimizerSettingsOptions {
         enabled: Some(true),
         runs: Some(200),
         ..Default::default()
@@ -564,8 +574,8 @@ contract Target {
       settings
     });
 
-    let initial_settings_json = serde_json::to_value(&state.config.settings)
-      .expect("serialize initial settings");
+    let initial_settings_json =
+      serde_json::to_value(&state.config.solc.settings).expect("serialize initial settings");
 
     from_source(
       &mut state,
@@ -575,12 +585,12 @@ contract Target {
     .expect("load source with override");
 
     assert_eq!(
-      state.options.instrumented_contract(),
-      initial_options.instrumented_contract()
+      state.config.instrumented_contract(),
+      initial_config.instrumented_contract()
     );
 
     assert_eq!(
-      serde_json::to_value(&state.config.settings).expect("serialize settings"),
+      serde_json::to_value(&state.config.solc.settings).expect("serialize settings"),
       initial_settings_json,
       "expected base compiler settings to remain unchanged after from_source override"
     );
@@ -589,12 +599,12 @@ contract Target {
       .expect("apply override without persisting");
 
     assert_eq!(
-      state.options.instrumented_contract(),
-      initial_options.instrumented_contract()
+      state.config.instrumented_contract(),
+      initial_config.instrumented_contract()
     );
 
     assert_eq!(
-      serde_json::to_value(&state.config.settings).expect("serialize settings"),
+      serde_json::to_value(&state.config.solc.settings).expect("serialize settings"),
       initial_settings_json,
       "expected base compiler settings to remain unchanged after expose override"
     );
@@ -602,7 +612,7 @@ contract Target {
     validate(&mut state, Some(&overrides)).expect("validate with override");
 
     assert_eq!(
-      serde_json::to_value(&state.config.settings).expect("serialize settings"),
+      serde_json::to_value(&state.config.solc.settings).expect("serialize settings"),
       initial_settings_json,
       "expected base compiler settings to remain unchanged after validate override"
     );
@@ -620,7 +630,7 @@ contract Target {
     let mut config = SolcConfig::new(
       &default_language,
       &default_settings,
-      Option::<&AstOptions>::None,
+      Option::<&AstConfigOptions>::None,
     )
     .expect("config");
     config.settings = AstOrchestrator::sanitize_settings(Some(config.settings.clone()))
@@ -641,7 +651,8 @@ contract Target {
     let mut ast_value = serde_json::to_value(ast).expect("serialize ast");
     utils::sanitize_ast_value(&mut ast_value);
 
-    let settings_value = serde_json::to_value(&state.config.settings).expect("serialize settings");
+    let settings_value =
+      serde_json::to_value(&state.config.solc.settings).expect("serialize settings");
 
     let input = json!({
       "language": "SolidityAST",
