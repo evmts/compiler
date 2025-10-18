@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { Ast, Compiler } from "../build/index.js";
-import type { ContractDefinition, SourceUnit } from "../build/ast-types.js";
+import type { ContractDefinition, SourceUnit } from "../build/solc-ast.js";
 
 const DEFAULT_SOLC_VERSION = "0.8.30";
 const FIXTURES_DIR = join(__dirname, "fixtures");
@@ -70,6 +70,32 @@ const collectIds = (value: unknown, ids: number[]) => {
 };
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+
+const normaliseArtifacts = (output: any) => {
+  const artifacts = output.artifacts;
+  if (!artifacts) {
+    return {} as Record<string, any>;
+  }
+  if ((artifacts as any).contracts) {
+    return {
+      [output.primarySource ?? "__virtual__"]: artifacts,
+    } as Record<string, any>;
+  }
+  return artifacts as Record<string, any>;
+};
+
+const collectContracts = (output: any) => {
+  return Object.entries(normaliseArtifacts(output)).flatMap(
+    ([sourceName, sourceArtifacts]) =>
+      Object.entries((sourceArtifacts as any).contracts ?? {}).map(
+        ([contractName, contract]) => ({
+          sourceName,
+          contractName,
+          artifact: contract as any,
+        })
+      )
+  );
+};
 
 const findTapStored = (unit: SourceUnit) => {
   const contract = findContract(unit, "InlineExample");
@@ -342,12 +368,12 @@ describe("integration with Compiler", () => {
     const output = sharedCompiler.compileSource(ast);
 
     expect(output.hasCompilerErrors).toBe(false);
-    expect(output.artifacts[0].contractName).toBe("InlineExample");
+    expect(collectContracts(output)[0]?.contractName).toBe("InlineExample");
   });
 
   test("handles ast inputs without contracts gracefully", () => {
     const output = sharedCompiler.compileSource(clone(EMPTY_SOURCE_UNIT));
-    expect(output.artifacts).toHaveLength(0);
+    expect(collectContracts(output)).toHaveLength(0);
     expect(Array.isArray(output.errors)).toBe(true);
   });
 

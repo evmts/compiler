@@ -33,7 +33,7 @@ export declare class Ast {
    */
   validate(options?: AstConfigOptions | undefined): this
   /** Get the current instrumented AST. */
-  ast(): import('./ast-types').SourceUnit
+  ast(): import('./solc-ast').SourceUnit
 }
 export type JsAst = Ast
 
@@ -106,7 +106,7 @@ export interface CompilerSettings {
   optimizer?: import('./index').OptimizerSettings | undefined
   modelChecker?: import('./index').ModelCheckerSettings | undefined
   metadata?: import('./index').SettingsMetadata | undefined
-  outputSelection?: import('./solc-types').OutputSelection | undefined
+  outputSelection?: import('./solc-settings').OutputSelection | undefined
   evmVersion?: EvmVersion
   viaIr?: boolean
   debug?: import('./index').DebuggingSettings | undefined

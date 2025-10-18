@@ -228,7 +228,7 @@ impl JsAst {
   }
 
   /// Get the current instrumented AST.
-  #[napi(ts_return_type = "import('./ast-types').SourceUnit")]
+  #[napi(ts_return_type = "import('./solc-ast').SourceUnit")]
   pub fn ast(&self, env: Env) -> napi::Result<JsUnknown> {
     let ast = self
       .inner

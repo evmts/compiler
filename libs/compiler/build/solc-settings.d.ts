@@ -14,12 +14,14 @@
  */
 
 // @ts-ignore
-const fileLevelOption = '' as const
+const fileLevelOption = "" as const;
 export type OutputSelection = {
   [fileSelector: string]: {
-      [fileLevelOption]?: ReadonlyArray<'ast'>;
+    [fileLevelOption]?: ReadonlyArray<"ast">;
   } & {
-    [contractName: Exclude<string, typeof fileLevelOption>]: ReadonlyArray<BaseContractOutput | EvmOutput | EwasmOutput>;
+    [contractName: Exclude<string, typeof fileLevelOption>]: ReadonlyArray<
+      BaseContractOutput | EvmOutput | EwasmOutput
+    >;
   };
 };
 
@@ -73,7 +75,4 @@ type DeployedBytecodeOutput =
   | "evm.deployedBytecode.linkReferences"
   | "evm.deployedBytecode.generatedSources"
   | "evm.deployedBytecode.immutableReferences";
-type EwasmOutput =
-  | "ewasm"
-  | "ewasm.wast"
-  | "ewasm.wasm";
+type EwasmOutput = "ewasm" | "ewasm.wast" | "ewasm.wasm";

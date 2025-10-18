@@ -19,7 +19,7 @@ import {
   RevertStrings,
   SolcLanguage,
 } from "../build/index.js";
-import type { OutputSelection } from "../src/types/solc-types.js";
+import type { OutputSelection } from "../build/solc-settings.js";
 
 const DEFAULT_SOLC_VERSION = "0.8.30";
 const ALT_SOLC_VERSION = "0.8.29";

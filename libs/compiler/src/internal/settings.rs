@@ -187,7 +187,7 @@ pub struct JsCompilerSettingsOptions {
   #[napi(ts_type = "import('./index').SettingsMetadata | undefined")]
   pub metadata: Option<JsSettingsMetadataOptions>,
   #[serde(rename = "outputSelection", skip_serializing_if = "Option::is_none")]
-  #[napi(ts_type = "import('./solc-types').OutputSelection | undefined")]
+  #[napi(ts_type = "import('./solc-settings').OutputSelection | undefined")]
   pub output_selection: Option<BTreeMap<String, BTreeMap<String, Vec<String>>>>,
   #[serde(rename = "evmVersion", skip_serializing_if = "Option::is_none")]
   pub evm_version: Option<EvmVersion>,
