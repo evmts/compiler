@@ -27,6 +27,11 @@ export declare class Ast {
    * applies the change to all contracts.
    */
   exposeInternalFunctions(options?: AstOptions | undefined): this
+  /**
+   * Compile the current AST to ensure it represents a valid contract and refresh its references.
+   * This is optional—`ast()` already returns the parsed tree you can work with directly.
+   */
+  validate(options?: AstOptions | undefined): this
   /** Get the current instrumented AST. */
   ast(): import('./ast-types').SourceUnit
 }

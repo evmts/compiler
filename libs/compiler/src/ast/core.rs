@@ -3,10 +3,11 @@ use foundry_compilers::artifacts::ast::{
 };
 use foundry_compilers::solc::SolcLanguage;
 
-use super::{orchestrator::AstOrchestrator, stitcher};
+use super::{orchestrator::AstOrchestrator, stitcher, utils};
 use crate::internal::config::{AstOptions, SolcConfig};
 use crate::internal::errors::{map_err_with_context, Error, Result};
 use crate::internal::solc;
+use serde_json::{json, Value};
 
 const VIRTUAL_SOURCE_PATH: &str = "__VIRTUAL__.sol";
 
@@ -94,12 +95,6 @@ fn contract_override<'a>(state: &'a State, overrides: Option<&'a AstOptions>) ->
   overrides
     .and_then(|opts| opts.instrumented_contract())
     .or_else(|| state.options.instrumented_contract())
-}
-
-fn update_options(state: &mut State, overrides: Option<&AstOptions>) {
-  if let Some(opts) = overrides {
-    state.options = opts.clone();
-  }
 }
 
 fn resolve_config(state: &State, overrides: Option<&AstOptions>) -> Result<SolcConfig> {
@@ -198,7 +193,6 @@ fn mutate_contracts<F>(
 where
   F: FnMut(&mut ContractDefinition),
 {
-  update_options(state, overrides);
   let indices = {
     let unit = target_ast(state)?;
     contract_indices(state, unit, overrides)?
@@ -247,8 +241,75 @@ fn expose_functions_internal(state: &mut State, overrides: Option<&AstOptions>) 
   })
 }
 
+pub fn validate(state: &mut State, overrides: Option<&AstOptions>) -> Result<()> {
+  let config = resolve_config(state, overrides)?;
+  let mut compile_config = config.clone();
+  compile_config.settings.stop_after = None;
+
+  let target = target_ast(state)?;
+  let mut ast_value = map_err_with_context(
+    serde_json::to_value(target),
+    "Failed to serialise AST for validation",
+  )?;
+  utils::sanitize_ast_value(&mut ast_value);
+
+  let settings_value = map_err_with_context(
+    serde_json::to_value(&compile_config.settings),
+    "Failed to serialise compiler settings",
+  )?;
+
+  let input = json!({
+    "language": "SolidityAST",
+    "sources": {
+      VIRTUAL_SOURCE_PATH: { "ast": ast_value }
+    },
+    "settings": settings_value
+  });
+
+  let solc = solc::ensure_installed(&compile_config.version)?;
+  let output: Value = map_err_with_context(solc.compile_as(&input), "Solc validation failed")?;
+
+  if let Some(errors) = output.get("errors").and_then(|value| value.as_array()) {
+    let mut messages = Vec::new();
+    for error in errors {
+      let severity = error
+        .get("severity")
+        .and_then(|value| value.as_str())
+        .unwrap_or_default();
+      if severity.eq_ignore_ascii_case("error") {
+        let message = error
+          .get("formattedMessage")
+          .and_then(|value| value.as_str())
+          .or_else(|| error.get("message").and_then(|value| value.as_str()))
+          .unwrap_or("Compilation error");
+        messages.push(message.to_string());
+      }
+    }
+    if !messages.is_empty() {
+      return Err(Error::new(format!(
+        "AST validation failed:\n{}",
+        messages.join("\n")
+      )));
+    }
+  }
+
+  let next_ast_value = output
+    .get("sources")
+    .and_then(|sources| sources.get(VIRTUAL_SOURCE_PATH))
+    .and_then(|entry| entry.get("ast"))
+    .cloned()
+    .ok_or_else(|| Error::new("Validation succeeded but AST output was missing"))?;
+
+  let next_ast = map_err_with_context(
+    serde_json::from_value::<SourceUnit>(next_ast_value),
+    "Failed to deserialise validated AST",
+  )?;
+
+  state.ast = Some(next_ast);
+  Ok(())
+}
+
 fn load_source_text(state: &mut State, source: &str, overrides: Option<&AstOptions>) -> Result<()> {
-  update_options(state, overrides);
   let config = resolve_config(state, overrides)?;
   let solc = solc::ensure_installed(&config.version)?;
 
@@ -257,7 +318,6 @@ fn load_source_text(state: &mut State, source: &str, overrides: Option<&AstOptio
     "Failed to parse target source",
   )?;
 
-  state.config = config;
   state.ast = Some(ast);
   Ok(())
 }
@@ -267,7 +327,6 @@ fn load_source_ast(
   target_ast: SourceUnit,
   overrides: Option<&AstOptions>,
 ) -> Result<()> {
-  update_options(state, overrides);
   let config = resolve_config(state, overrides)?;
   solc::ensure_installed(&config.version)?;
 
@@ -276,7 +335,6 @@ fn load_source_ast(
     "Failed to locate target contract",
   )?;
 
-  state.config = config;
   state.ast = Some(target_ast);
   Ok(())
 }
@@ -294,7 +352,6 @@ fn inject_fragment_string(
     "Failed to parse AST fragment",
   )?;
 
-  state.config = config;
   inject_fragment_contract(state, fragment_contract, overrides)
 }
 
@@ -305,7 +362,6 @@ fn inject_fragment_ast(
 ) -> Result<()> {
   let config = resolve_config(state, overrides)?;
   solc::ensure_installed(&config.version)?;
-  state.config = config;
 
   let fragment_contract = map_err_with_context(
     AstOrchestrator::extract_fragment_contract(&fragment_ast),
@@ -320,6 +376,7 @@ mod tests {
   use super::*;
   use crate::ast::utils;
   use crate::internal::config::{AstOptions, SolcConfig};
+  use crate::internal::settings::{CompilerSettings, OptimizerSettings};
   use crate::internal::solc;
   use foundry_compilers::artifacts::CompilerOutput;
   use foundry_compilers::solc::Solc;
@@ -484,6 +541,71 @@ contract Target {
     });
 
     assert_eq!(function_visibility, Some(Visibility::Public));
+  }
+
+  #[test]
+  fn overrides_do_not_persist_across_calls() {
+    if find_default_solc().is_none() {
+      return;
+    }
+
+    let mut state = init(None).expect("init ast");
+    let initial_options = state.options.clone();
+
+    let mut overrides = AstOptions::default();
+    overrides.instrumented_contract = Some("Target".to_string());
+    overrides.solc_settings = Some({
+      let mut settings = CompilerSettings::default();
+      settings.optimizer = Some(OptimizerSettings {
+        enabled: Some(true),
+        runs: Some(200),
+        ..Default::default()
+      });
+      settings
+    });
+
+    let initial_settings_json = serde_json::to_value(&state.config.settings)
+      .expect("serialize initial settings");
+
+    from_source(
+      &mut state,
+      SourceTarget::Text(INSTRUMENTED_CONTRACT.into()),
+      Some(&overrides),
+    )
+    .expect("load source with override");
+
+    assert_eq!(
+      state.options.instrumented_contract(),
+      initial_options.instrumented_contract()
+    );
+
+    assert_eq!(
+      serde_json::to_value(&state.config.settings).expect("serialize settings"),
+      initial_settings_json,
+      "expected base compiler settings to remain unchanged after from_source override"
+    );
+
+    expose_internal_variables(&mut state, Some(&overrides))
+      .expect("apply override without persisting");
+
+    assert_eq!(
+      state.options.instrumented_contract(),
+      initial_options.instrumented_contract()
+    );
+
+    assert_eq!(
+      serde_json::to_value(&state.config.settings).expect("serialize settings"),
+      initial_settings_json,
+      "expected base compiler settings to remain unchanged after expose override"
+    );
+
+    validate(&mut state, Some(&overrides)).expect("validate with override");
+
+    assert_eq!(
+      serde_json::to_value(&state.config.settings).expect("serialize settings"),
+      initial_settings_json,
+      "expected base compiler settings to remain unchanged after validate override"
+    );
   }
 
   #[test]

@@ -11,7 +11,7 @@ pub(crate) mod utils;
 
 use core::{
   expose_internal_functions, expose_internal_variables, from_source, init, inject_shadow,
-  source_unit,
+  source_unit, source_unit_mut, validate,
 };
 pub use core::{FragmentTarget, SourceTarget, State};
 use utils::{from_js_value, sanitize_ast_value, to_js_value};
@@ -58,8 +58,21 @@ impl Ast {
     Ok(self)
   }
 
+  /// Compile the current AST to ensure it represents a valid contract and refresh its references.
+  /// This is optional—`ast()` already returns the parsed tree you can work with directly.
+  pub fn validate(&mut self, options: Option<AstOptions>) -> Result<&mut Self> {
+    validate(&mut self.state, options.as_ref())?;
+    Ok(self)
+  }
+
   pub fn ast(&self) -> Result<&SourceUnit> {
     source_unit(&self.state).ok_or_else(|| {
+      crate::internal::errors::Error::new("Ast has no target unit. Call from_source first.")
+    })
+  }
+
+  pub fn ast_mut(&mut self) -> Result<&mut SourceUnit> {
+    source_unit_mut(&mut self.state).ok_or_else(|| {
       crate::internal::errors::Error::new("Ast has no target unit. Call from_source first.")
     })
   }
@@ -174,6 +187,18 @@ impl JsAst {
   ) -> napi::Result<JsAst> {
     let parsed = parse_ast_options(&env, options)?;
     to_napi_result(self.inner.expose_internal_functions(parsed.clone()))?;
+    Ok(self.clone())
+  }
+
+  /// Compile the current AST to ensure it represents a valid contract and refresh its references.
+  /// This is optional—`ast()` already returns the parsed tree you can work with directly.
+  #[napi(
+    ts_args_type = "options?: AstOptions | undefined",
+    ts_return_type = "this"
+  )]
+  pub fn validate(&mut self, env: Env, options: Option<JsUnknown>) -> napi::Result<JsAst> {
+    let parsed = parse_ast_options(&env, options)?;
+    to_napi_result(self.inner.validate(parsed.clone()))?;
     Ok(self.clone())
   }
 
