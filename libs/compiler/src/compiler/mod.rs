@@ -11,7 +11,8 @@ use serde_json::Value;
 use crate::ast::utils::from_js_value;
 use crate::internal::config::{parse_js_compiler_config, CompilerConfig, CompilerConfigOptions};
 use crate::internal::errors::{map_napi_error, napi_error, to_napi_result, Error, Result};
-use crate::internal::project::ProjectContext;
+use crate::internal::path::ProjectPaths;
+use crate::internal::project::{default_cache_dir, synthetic_project_paths, ProjectContext};
 use crate::internal::solc;
 
 pub mod core;
@@ -19,9 +20,13 @@ mod input;
 pub mod output;
 mod project_runner;
 
+#[cfg(test)]
+mod compiler_tests;
+
 pub use core::{
   compile_contract, compile_files, compile_project, compile_source, compile_sources, init,
-  init_from_foundry_root, init_from_hardhat_root, resolve_config, SourceTarget, SourceValue, State,
+  init_from_foundry_root, init_from_hardhat_root, init_from_root, resolve_config, SourceTarget,
+  SourceValue, State,
 };
 pub use input::CompilationInput;
 use output::{
@@ -56,6 +61,15 @@ impl Compiler {
   ) -> Result<Self> {
     let config = CompilerConfig::from_options(options).map_err(Error::from)?;
     let state = init_from_hardhat_root(config, root.as_ref())?;
+    Ok(Self { state })
+  }
+
+  pub fn from_root<P: AsRef<Path>>(
+    root: P,
+    options: Option<CompilerConfigOptions>,
+  ) -> Result<Self> {
+    let config = CompilerConfig::from_options(options).map_err(Error::from)?;
+    let state = init_from_root(config, root.as_ref())?;
     Ok(Self { state })
   }
 
@@ -133,6 +147,10 @@ impl Compiler {
     self.state.project.as_mut()
   }
 
+  pub fn get_paths(&self) -> Result<ProjectPaths> {
+    resolve_project_paths(&self.state)
+  }
+
   pub fn into_state(self) -> State {
     self.state
   }
@@ -143,6 +161,15 @@ impl Compiler {
   ) -> Result<CompilerConfig> {
     resolve_config(&self.state, overrides)
   }
+}
+
+fn resolve_project_paths(state: &State) -> Result<ProjectPaths> {
+  if let Some(context) = &state.project {
+    return Ok(context.project_paths());
+  }
+
+  let base_dir = default_cache_dir();
+  synthetic_project_paths(base_dir.as_path())
 }
 
 #[napi(js_name = "Compiler")]
@@ -224,6 +251,20 @@ impl JsCompiler {
       Path::new(&root),
       config_options,
     ))?;
+    Ok(Self::from_compiler(compiler))
+  }
+
+  #[napi(
+    factory,
+    ts_args_type = "root: string, options?: CompilerConfigOptions | undefined"
+  )]
+  pub fn from_root(env: Env, root: String, options: Option<JsUnknown>) -> napi::Result<Self> {
+    let parsed = parse_js_compiler_config(&env, options)?;
+    let config_options = parsed
+      .as_ref()
+      .map(|opts| CompilerConfigOptions::try_from(opts))
+      .transpose()?;
+    let compiler = to_napi_result(Compiler::from_root(Path::new(&root), config_options))?;
     Ok(Self::from_compiler(compiler))
   }
 
@@ -318,6 +359,11 @@ impl JsCompiler {
     let config = self.resolve_call_config(overrides.as_ref())?;
     let output = to_napi_result(compile_contract(&self.inner.state, &config, &contract_name))?;
     Ok(map_compile_output(output))
+  }
+
+  #[napi]
+  pub fn get_paths(&self) -> napi::Result<ProjectPaths> {
+    to_napi_result(self.inner.get_paths())
   }
 }
 

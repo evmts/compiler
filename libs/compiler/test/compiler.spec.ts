@@ -1,18 +1,23 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import {
+  cpSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import {
   Ast,
   BytecodeHash,
   Compiler,
+  CompilerSettings,
   EvmVersion,
+  ModelCheckerEngine,
   RevertStrings,
   SolcLanguage,
-  createHardhatPaths,
-  findArtifactsDir,
-  findLibs,
-  findSourceDir,
 } from "../build/index.js";
 import type { OutputSelection } from "../src/types/solc-types.js";
 
@@ -205,7 +210,7 @@ describe("Compiler constructor", () => {
     expect(
       () => new Compiler({ solcVersion: "bad-version" })
     ).toThrowErrorMatchingInlineSnapshot(
-      `"GenericFailure, Failed to parse solc version: unexpected character 'b' while parsing major version number"`
+      `"Failed to parse solc version: unexpected character 'b' while parsing major version number"`
     );
   });
 
@@ -332,15 +337,67 @@ describe("Compiler.compileSource with Solidity strings", () => {
 
   test("supports stopAfter parsing while keeping diagnostics", () => {
     const compiler = new Compiler();
-    const parsingOnly = compiler.compileSource(INLINE_SOURCE, {
+    const parsingOnly = compiler.compileSource(BROKEN_SOURCE, {
       solcSettings: { stopAfter: "parsing" },
     });
     expect(parsingOnly.artifacts).toHaveLength(0);
     expect(parsingOnly.hasCompilerErrors).toBe(true);
-    expect(parsingOnly.errors[0]?.message).toMatch(/stopAfter/i);
+    expect(parsingOnly.errors[0]?.message).toMatchInlineSnapshot(
+      `"Requested output selection conflicts with "settings.stopAfter"."`
+    );
 
-    const fullCompile = compiler.compileSource(INLINE_SOURCE);
-    expect(fullCompile.artifacts).toHaveLength(1);
+    const parsingOnlyCorrect = compiler.compileSource(INLINE_SOURCE, {
+      solcSettings: {
+        stopAfter: "parsing",
+        outputSelection: {
+          "*": {
+            "": ["ast"],
+          },
+        },
+      },
+    });
+    console.log(parsingOnlyCorrect);
+    expect(parsingOnlyCorrect.artifacts).toHaveLength(1);
+    expect(parsingOnlyCorrect.hasCompilerErrors).toBe(false);
+    expect(parsingOnlyCorrect.artifacts[0].contractName).toBe("InlineExample");
+  });
+
+  test("accepts complete solcSettings payload", () => {
+    const settings = {
+      stopAfter: "parsing",
+      remappings: ["lib/=lib"],
+      optimizer: { enabled: true, runs: 123, details: { yul: true } },
+      modelChecker: {
+        engine: ModelCheckerEngine.Bmc,
+        timeout: 1,
+        contracts: { "*": ["*"] },
+      },
+      metadata: {
+        useLiteralContent: true,
+        bytecodeHash: BytecodeHash.None,
+        cborMetadata: false,
+      },
+      outputSelection: {
+        "*": { "*": ["abi", "evm.bytecode.object"] },
+      },
+      evmVersion: EvmVersion.Prague,
+      viaIr: true,
+      debug: { revertStrings: RevertStrings.Debug, debugInfo: ["location"] },
+      libraries: {
+        "LibraryConsumer.sol": {
+          MathLib: "0x0000000000000000000000000000000000000001",
+        },
+      },
+    } as const satisfies CompilerSettings;
+
+    const compiler = new Compiler({ solcSettings: settings });
+    const output = compiler.compileSource(BROKEN_SOURCE, {
+      solcSettings: settings,
+    });
+
+    expect(output.artifacts).toHaveLength(0);
+    expect(output.hasCompilerErrors).toBe(true);
+    expect(output.errors.length).toBeGreaterThan(0);
   });
 
   test("respects per-call optimizer overrides", () => {
@@ -613,22 +670,29 @@ describe("Compiler.compileFiles", () => {
   });
 });
 
-describe("Path helpers", () => {
-  test("createHardhatPaths mirrors the expected project layout", () => {
-    const paths = createHardhatPaths(HARDHAT_PROJECT);
+describe("Compiler project paths", () => {
+  test("reports synthetic layout when no project is attached", () => {
+    const root = createTempDir("tevm-synth-");
+    const compiler = Compiler.fromRoot(root);
+    const paths = compiler.getPaths();
+    const canonical = realpathSync(root);
 
-    expect(paths.root).toContain("hardhat-project");
-    expect(paths.sources).toContain("contracts");
-    expect(paths.artifacts).toContain("artifacts");
-    expect(Array.isArray(paths.libraries)).toBe(true);
-  });
-
-  test("findArtifactsDir, findSourceDir and findLibs return sensible values", () => {
-    expect(findArtifactsDir(HARDHAT_PROJECT)).toContain("artifacts");
-    expect(findSourceDir(HARDHAT_PROJECT)).toContain("contracts");
-
-    const libs = findLibs(HARDHAT_PROJECT);
-    expect(Array.isArray(libs)).toBe(true);
-    expect(libs.length).toBeGreaterThan(0);
+    expect(paths.root).toBe(canonical);
+    expect(paths.cache).toBe(
+      join(canonical, ".tevm", "cache", "solidity-files-cache.json")
+    );
+    expect(paths.artifacts).toBe(join(canonical, ".tevm", "out"));
+    expect(paths.buildInfos).toBe(
+      join(canonical, ".tevm", "out", "build-info")
+    );
+    expect(paths.sources).toBe(canonical);
+    expect(paths.tests).toBe(join(canonical, "test"));
+    expect(paths.scripts).toBe(join(canonical, "scripts"));
+    expect(paths.virtualSources).toBe(
+      join(canonical, ".tevm", "virtual-sources")
+    );
+    expect(paths.libraries).toHaveLength(0);
+    expect(paths.includePaths).toHaveLength(0);
+    expect(new Set(paths.allowedPaths)).toContain(canonical);
   });
 });

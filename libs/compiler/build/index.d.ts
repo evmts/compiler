@@ -43,11 +43,13 @@ export declare class Compiler {
   constructor(options?: CompilerConfigOptions | undefined)
   static fromFoundryRoot(root: string, options?: CompilerConfigOptions | undefined): JsCompiler
   static fromHardhatRoot(root: string, options?: CompilerConfigOptions | undefined): JsCompiler
+  static fromRoot(root: string, options?: CompilerConfigOptions | undefined): JsCompiler
   compileSource(target: string | object, options?: CompilerConfigOptions | undefined): CompileOutput
   compileSources(sources: Record<string, string | object>, options?: CompilerConfigOptions | undefined): CompileOutput
   compileFiles(paths: string[], options?: CompilerConfigOptions | undefined): CompileOutput
   compileProject(options?: CompilerConfigOptions | undefined): CompileOutput
   compileContract(contractName: string, options?: CompilerConfigOptions | undefined): CompileOutput
+  getPaths(): ProjectPaths
 }
 export type JsCompiler = Compiler
 
@@ -76,7 +78,6 @@ export interface CompilerConfigOptions {
   solcLanguage?: SolcLanguage
   solcSettings?: import('./index').CompilerSettings | undefined
   cacheEnabled?: boolean | undefined
-  baseDir?: string | undefined
   offlineMode?: boolean | undefined
   noArtifacts?: boolean | undefined
   buildInfoEnabled?: boolean | undefined
@@ -201,6 +202,20 @@ export interface OptimizerSettings {
   enabled?: boolean
   runs?: number
   details?: import('./index').OptimizerDetails | undefined
+}
+
+export interface ProjectPaths {
+  root: string
+  cache: string
+  artifacts: string
+  buildInfos: string
+  sources: string
+  tests: string
+  scripts: string
+  libraries: Array<string>
+  includePaths: Array<string>
+  allowedPaths: Array<string>
+  virtualSources?: string
 }
 
 export declare const enum RevertStrings {

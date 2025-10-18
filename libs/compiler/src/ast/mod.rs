@@ -9,6 +9,9 @@ pub(crate) mod parser;
 mod stitcher;
 pub(crate) mod utils;
 
+#[cfg(test)]
+mod ast_tests;
+
 use core::{
   expose_internal_functions, expose_internal_variables, from_source, init, inject_shadow,
   source_unit, source_unit_mut, validate,

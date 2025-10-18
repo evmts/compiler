@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { cpSync, mkdtempSync, rmSync } from "fs";
-import { join } from "path";
+import { cpSync, mkdtempSync, mkdirSync, realpathSync, rmSync } from "fs";
+import { basename, join } from "path";
 import { tmpdir } from "os";
 import { Compiler } from "../build/index.js";
 
@@ -81,5 +81,37 @@ describe("Compiler.fromHardhatRoot", () => {
     const output = compiler.compileProject();
 
     expect(output.artifacts.length).toBeGreaterThan(0);
+  });
+
+  test("exposes hardhat project paths", () => {
+    const clone = cloneHardhatProject();
+    for (const dir of [
+      "artifacts/build-info",
+      "cache",
+      "contracts",
+      "node_modules",
+      "scripts",
+      "test",
+    ]) {
+      mkdirSync(join(clone, dir), { recursive: true });
+    }
+
+    const compiler = Compiler.fromHardhatRoot(clone);
+    const paths = compiler.getPaths();
+    const canonical = realpathSync(clone);
+
+    expect(paths.root).toBe(canonical);
+    expect(paths.cache).toBe(
+      join(canonical, "cache", "solidity-files-cache.json")
+    );
+    expect(paths.artifacts).toBe(join(canonical, "artifacts"));
+    expect(paths.buildInfos).toBe(join(canonical, "artifacts", "build-info"));
+    expect(paths.sources).toBe(join(canonical, "contracts"));
+    expect(paths.tests).toBe(join(canonical, "test"));
+    expect(basename(paths.scripts)).toBe("script");
+    expect(paths.virtualSources).toBeUndefined();
+    expect(new Set(paths.libraries)).toContain(join(canonical, "node_modules"));
+    expect(paths.includePaths).toHaveLength(0);
+    expect(new Set(paths.allowedPaths)).toContain(canonical);
   });
 });

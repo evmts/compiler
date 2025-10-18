@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use foundry_compilers::artifacts::{error::Severity, remappings::Remapping, Settings};
@@ -9,7 +9,7 @@ use napi::{Env, JsObject, JsUnknown, NapiRaw, ValueType};
 use semver::Version;
 
 use crate::internal::errors::{map_napi_error, napi_error};
-use crate::internal::path::{canonicalize_path, to_path_set, to_path_vec};
+use crate::internal::path::{to_path_set, to_path_vec};
 use crate::internal::settings::{
   merge_settings, sanitize_settings, CompilerSettingsOptions, JsCompilerSettingsOptions,
 };
@@ -22,7 +22,6 @@ pub struct CompilerConfig {
   pub solc_language: FoundrySolcLanguage,
   pub solc_settings: Settings,
   pub cache_enabled: bool,
-  pub base_dir: Option<PathBuf>,
   pub offline_mode: bool,
   pub no_artifacts: bool,
   pub build_info_enabled: bool,
@@ -46,7 +45,6 @@ impl Default for CompilerConfig {
       solc_language: crate::internal::solc::default_language(),
       solc_settings: Settings::default(),
       cache_enabled: true,
-      base_dir: None,
       offline_mode: false,
       no_artifacts: false,
       build_info_enabled: false,
@@ -102,7 +100,6 @@ pub struct SolcConfigOptions {
 pub struct CompilerConfigOptions {
   pub solc: SolcConfigOptions,
   pub cache_enabled: Option<bool>,
-  pub base_dir: Option<PathBuf>,
   pub offline_mode: Option<bool>,
   pub no_artifacts: Option<bool>,
   pub build_info_enabled: Option<bool>,
@@ -198,10 +195,6 @@ impl TryFrom<&JsCompilerConfigOptions> for CompilerConfigOptions {
     }
 
     overrides.cache_enabled = options.cache_enabled;
-    overrides.base_dir = options
-      .base_dir
-      .as_ref()
-      .map(|dir| canonicalize_path(Path::new(dir)));
     overrides.offline_mode = options.offline_mode;
     overrides.no_artifacts = options.no_artifacts;
     overrides.build_info_enabled = options.build_info_enabled;
@@ -295,8 +288,6 @@ pub struct JsCompilerConfigOptions {
   pub solc_settings: Option<JsCompilerSettingsOptions>,
   #[napi(ts_type = "boolean | undefined")]
   pub cache_enabled: Option<bool>,
-  #[napi(ts_type = "string | undefined")]
-  pub base_dir: Option<String>,
   #[napi(ts_type = "boolean | undefined")]
   pub offline_mode: Option<bool>,
   #[napi(ts_type = "boolean | undefined")]
@@ -601,7 +592,6 @@ impl CompilerConfigBuilder {
     let CompilerConfigOptions {
       mut solc,
       cache_enabled,
-      base_dir,
       offline_mode,
       no_artifacts,
       build_info_enabled,
@@ -630,9 +620,6 @@ impl CompilerConfigBuilder {
     }
     if let Some(cache) = cache_enabled {
       self.config.cache_enabled = cache;
-    }
-    if let Some(base_dir) = base_dir {
-      self.config.base_dir = Some(base_dir);
     }
     if let Some(offline) = offline_mode {
       self.config.offline_mode = offline;
@@ -685,9 +672,50 @@ impl CompilerConfigBuilder {
 
 #[cfg(test)]
 mod tests {
+  use super::*;
+  use crate::internal::settings::EvmVersion as SettingsEvmVersion;
+  use serde_json::json;
   use std::collections::BTreeMap;
 
-  use super::*;
+  #[test]
+  fn compiler_settings_options_accepts_camel_case_fields() {
+    let value = json!({
+      "stopAfter": "parsing",
+      "viaIr": true,
+      "outputSelection": {"*": {"*": ["abi"]}},
+      "evmVersion": "prague",
+      "modelChecker": {"contracts": {"*": ["*"]}}
+    });
+
+    let settings: CompilerSettingsOptions = serde_json::from_value(value).expect("settings");
+    assert_eq!(settings.stop_after.as_deref(), Some("parsing"));
+    assert_eq!(settings.via_ir, Some(true));
+    assert!(settings
+      .output_selection
+      .as_ref()
+      .and_then(|map| map.get("*").and_then(|entry| entry
+        .get("*")
+        .map(|values| values.contains(&"abi".to_string()))))
+      .unwrap_or(false));
+    match settings.evm_version {
+      Some(SettingsEvmVersion::Prague) => {}
+      other => panic!("unexpected evm version: {:?}", other),
+    }
+    assert!(settings.model_checker.is_some());
+  }
+
+  #[test]
+  fn compiler_config_from_options_merges_library_paths() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let base_path = temp.path().join("lib");
+    std::fs::create_dir_all(&base_path).expect("lib dir");
+
+    let mut options = CompilerConfigOptions::default();
+    options.library_paths = Some(vec![base_path.clone(), base_path.clone()]);
+
+    let config = CompilerConfig::from_options(Some(options)).expect("config");
+    assert_eq!(config.library_paths, vec![base_path.clone(), base_path]);
+  }
 
   #[test]
   fn empty_output_selection_is_sanitized() {

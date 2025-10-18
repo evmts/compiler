@@ -86,3 +86,49 @@ where
 {
   result.map_err(|err| napi_error(format!("{context}: {err}")))
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn error_new_stores_message() {
+    let err = Error::new("oops");
+    assert_eq!(err.message(), "oops");
+    assert_eq!(err.to_string(), "oops");
+  }
+
+  #[test]
+  fn error_with_context_appends_cause() {
+    let err = Error::with_context("failed", "reason");
+    assert_eq!(err.message(), "failed: reason");
+  }
+
+  #[test]
+  fn map_err_with_context_preserves_ok() {
+    let value = map_err_with_context::<_, &str>(Ok::<i32, &str>(42), "context");
+    assert_eq!(value.expect("result"), 42);
+  }
+
+  #[test]
+  fn map_err_with_context_converts_error() {
+    let err =
+      map_err_with_context::<(), &str>(Err::<(), &str>("boom"), "while testing").unwrap_err();
+    assert_eq!(err.to_string(), "while testing: boom");
+  }
+
+  #[test]
+  fn to_napi_result_maps_error() {
+    let err = Error::new("unavailable");
+    let napi_err = to_napi_result::<()>(Err(err)).unwrap_err();
+    assert_eq!(napi_err.status, Status::GenericFailure);
+    assert_eq!(napi_err.reason, "unavailable");
+  }
+
+  #[test]
+  fn map_napi_error_adds_context() {
+    let err = map_napi_error::<(), _>(Err("boom"), "during call").unwrap_err();
+    assert_eq!(err.status, Status::GenericFailure);
+    assert_eq!(err.reason, "during call: boom");
+  }
+}

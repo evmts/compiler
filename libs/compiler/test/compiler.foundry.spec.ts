@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { cpSync, mkdtempSync, rmSync } from "fs";
-import { join } from "path";
+import { cpSync, mkdtempSync, mkdirSync, realpathSync, rmSync } from "fs";
+import { basename, join } from "path";
 import { tmpdir } from "os";
 import { Compiler } from "../build/index.js";
 
@@ -91,5 +91,29 @@ describe("Compiler.fromFoundryRoot", () => {
     expect(() => compiler.compileContract("MissingContract")).toThrow(
       /no contract found/i
     );
+  });
+
+  test("exposes foundry project paths", () => {
+    const root = cloneFoundryProject();
+    for (const dir of ["src", "test", "script", "lib", "cache"]) {
+      mkdirSync(join(root, dir), { recursive: true });
+    }
+
+    const compiler = Compiler.fromFoundryRoot(root);
+    const paths = compiler.getPaths();
+    const canonical = realpathSync(root);
+
+    expect(paths.root).toBe(canonical);
+    expect(paths.cache).toBe(
+      join(canonical, "cache", "solidity-files-cache.json")
+    );
+    expect(paths.artifacts).toBe(join(canonical, "out"));
+    expect(paths.buildInfos).toBe(join(canonical, "out", "build-info"));
+    expect(paths.sources).toBe(join(canonical, "src"));
+    expect(paths.tests).toBe(join(canonical, "test"));
+    expect(basename(paths.scripts)).toBe("script");
+    expect(paths.virtualSources).toBeUndefined();
+    expect(new Set(paths.libraries)).toContain(join(canonical, "lib"));
+    expect(new Set(paths.allowedPaths)).toContain(canonical);
   });
 });

@@ -89,3 +89,50 @@ impl Task for InstallSolcTask {
     Ok(())
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn parse_version_strips_whitespace_and_prefix() {
+    let parsed = parse_version(" v0.8.11 ").expect("parse version");
+    assert_eq!(parsed, Version::new(0, 8, 11));
+  }
+
+  #[test]
+  fn parse_version_rejects_invalid_input() {
+    let err = parse_version("abc").unwrap_err();
+    assert!(err.to_string().contains("Failed to parse solc version"));
+  }
+
+  #[test]
+  fn default_version_matches_constant() {
+    let parsed = default_version().expect("default version");
+    assert_eq!(parsed, Version::new(0, 8, 30));
+  }
+
+  #[test]
+  fn ensure_installed_errors_for_missing_version() {
+    let version = Version::new(0, 0, 0);
+    let err = ensure_installed(&version).unwrap_err();
+    assert!(
+      err.to_string().contains("is not installed"),
+      "unexpected message: {}",
+      err
+    );
+  }
+
+  #[test]
+  fn find_installed_version_returns_none_for_missing_version() {
+    let version = Version::new(0, 0, 0);
+    let result = find_installed_version(&version).expect("find version");
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn is_version_installed_false_for_missing_version() {
+    let version = Version::new(0, 0, 0);
+    assert!(!is_version_installed(&version).expect("is installed"));
+  }
+}

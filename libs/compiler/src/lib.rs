@@ -25,4 +25,5 @@ pub use internal::config::{
   JsCompilerConfigOptions, SolcConfig, SolcConfigOptions,
 };
 pub use internal::errors::{Error, Result};
+pub use internal::path::ProjectPaths;
 pub use internal::settings::{CompilerSettingsOptions, JsCompilerSettingsOptions};

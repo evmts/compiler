@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::OnceLock;
 use std::time::SystemTime;
 
 use foundry_compilers::artifacts::{
@@ -18,7 +19,7 @@ use foundry_config::{Config as FoundryConfig, SolcReq};
 
 use crate::internal::config::{CompilerConfig, CompilerConfigOptions, SolcConfig};
 use crate::internal::errors::{map_err_with_context, Error, Result};
-use crate::internal::path::{canonicalize_path, canonicalize_with_base};
+use crate::internal::path::{canonicalize_path, canonicalize_with_base, ProjectPaths};
 use crate::internal::settings::CompilerSettingsOptions;
 
 #[derive(Clone)]
@@ -37,17 +38,11 @@ pub struct ProjectContext {
 }
 
 impl ProjectContext {
-  pub fn normalise_paths(
-    &self,
-    config: &CompilerConfig,
-    inputs: &[PathBuf],
-  ) -> Result<Vec<PathBuf>> {
+  pub fn normalise_paths(&self, inputs: &[PathBuf]) -> Result<Vec<PathBuf>> {
     let mut resolved = Vec::with_capacity(inputs.len());
     for entry in inputs {
       let candidate = if entry.is_absolute() {
         entry.clone()
-      } else if let Some(base) = config.base_dir.as_ref() {
-        base.join(entry)
       } else {
         self.root.join(entry)
       };
@@ -73,7 +68,7 @@ impl ProjectContext {
     let dir = self
       .virtual_sources_dir
       .as_ref()
-      .ok_or_else(|| Error::new("Cannot cache inline sources without a baseDir"))?;
+      .ok_or_else(|| Error::new("Cannot cache inline sources without a project root"))?;
 
     if let Err(err) = std::fs::create_dir_all(dir) {
       return Err(Error::new(format!(
@@ -83,6 +78,10 @@ impl ProjectContext {
     }
 
     Ok(dir.join(format!("virtual-{hash}.{extension}")))
+  }
+
+  pub fn project_paths(&self) -> ProjectPaths {
+    ProjectPaths::from_config(&self.paths).with_virtual_sources(self.virtual_sources_dir.as_deref())
   }
 }
 
@@ -137,38 +136,11 @@ pub fn build_project(
 
 pub fn create_synthetic_context(base_dir: &Path) -> Result<ProjectContext> {
   let root = canonicalize_path(base_dir);
-  let tevm_root = root.join(".tevm");
-  let cache_dir = tevm_root.join("cache");
-  let artifacts_dir = tevm_root.join("out");
-  let build_info_dir = artifacts_dir.join("build-info");
-  let virtual_sources_dir = tevm_root.join("virtual-sources");
+  let (paths, directories, virtual_sources_dir) = build_synthetic_paths(&root)?;
 
-  for dir in [
-    &tevm_root,
-    &cache_dir,
-    &artifacts_dir,
-    &build_info_dir,
-    &virtual_sources_dir,
-  ] {
-    create_dir_if_missing(dir)?;
+  for dir in directories {
+    create_dir_if_missing(&dir)?;
   }
-
-  let cache_file = cache_dir.join(SOLIDITY_FILES_CACHE_FILENAME);
-
-  let sources_dir = root.clone();
-  let tests_dir = root.join("test");
-  let scripts_dir = root.join("scripts");
-
-  let paths = ProjectPathsConfig::builder()
-    .root(&root)
-    .cache(&cache_file)
-    .artifacts(&artifacts_dir)
-    .build_infos(&build_info_dir)
-    .sources(&sources_dir)
-    .tests(&tests_dir)
-    .scripts(&scripts_dir)
-    .no_libs()
-    .build_with_root::<FoundrySolcLanguage>(&root);
 
   Ok(ProjectContext {
     layout: ProjectLayout::Synthetic,
@@ -176,6 +148,64 @@ pub fn create_synthetic_context(base_dir: &Path) -> Result<ProjectContext> {
     paths,
     virtual_sources_dir: Some(virtual_sources_dir),
   })
+}
+
+pub fn synthetic_project_paths(base_dir: &Path) -> Result<ProjectPaths> {
+  let root = canonicalize_path(base_dir);
+  let (paths, _, virtual_sources_dir) = build_synthetic_paths(&root)?;
+  Ok(ProjectPaths::from_config(&paths).with_virtual_sources(Some(virtual_sources_dir.as_path())))
+}
+
+fn build_synthetic_paths(
+  root: &Path,
+) -> Result<(
+  ProjectPathsConfig<FoundrySolcLanguage>,
+  Vec<PathBuf>,
+  PathBuf,
+)> {
+  let tevm_root = root.join(".tevm");
+  let cache_dir = tevm_root.join("cache");
+  let artifacts_dir = tevm_root.join("out");
+  let build_info_dir = artifacts_dir.join("build-info");
+  let virtual_sources_dir = tevm_root.join("virtual-sources");
+
+  let directories = vec![
+    tevm_root,
+    cache_dir.clone(),
+    artifacts_dir.clone(),
+    build_info_dir.clone(),
+    virtual_sources_dir.clone(),
+  ];
+
+  let cache_file = cache_dir.join(SOLIDITY_FILES_CACHE_FILENAME);
+
+  let sources_dir = root.to_path_buf();
+  let tests_dir = root.join("test");
+  let scripts_dir = root.join("scripts");
+
+  let paths = ProjectPathsConfig::builder()
+    .root(root)
+    .cache(&cache_file)
+    .artifacts(&artifacts_dir)
+    .build_infos(&build_info_dir)
+    .sources(&sources_dir)
+    .tests(&tests_dir)
+    .scripts(&scripts_dir)
+    .no_libs()
+    .build_with_root::<FoundrySolcLanguage>(root);
+
+  Ok((paths, directories, virtual_sources_dir))
+}
+
+pub fn default_cache_dir() -> PathBuf {
+  static CACHE_PATH: OnceLock<PathBuf> = OnceLock::new();
+  CACHE_PATH
+    .get_or_init(|| {
+      let root = std::env::temp_dir().join(".tevm/cache");
+      let _ = fs::create_dir_all(&root);
+      root
+    })
+    .clone()
 }
 
 fn extend_paths_with_config(
@@ -223,7 +253,6 @@ impl FoundryAdapter {
 
     let mut overrides = CompilerConfigOptions::default();
     let base_dir = config.__root.0.clone();
-    overrides.base_dir = Some(base_dir.clone());
     overrides.cache_enabled = Some(config.cache);
     overrides.offline_mode = Some(config.offline);
     overrides.no_artifacts = Some(false);
@@ -331,7 +360,6 @@ impl HardhatAdapter {
     paths.slash_paths();
 
     let mut overrides = CompilerConfigOptions::default();
-    overrides.base_dir = Some(paths.root.clone());
     overrides.cache_enabled = Some(true);
     overrides.build_info_enabled = Some(true);
     overrides.no_artifacts = Some(false);
@@ -460,8 +488,31 @@ struct CliSettingsData {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use std::path::PathBuf;
+  use std::path::{Path, PathBuf};
   use tempfile::tempdir;
+
+  fn assert_path_eq(value: &str, expected: &Path) {
+    assert_eq!(
+      PathBuf::from(value),
+      canonicalize_path(expected),
+      "expected path {} to match {}",
+      value,
+      expected.display()
+    );
+  }
+
+  fn assert_contains_path(values: &[String], expected: &Path) {
+    let expected = canonicalize_path(expected);
+    assert!(
+      values
+        .iter()
+        .map(PathBuf::from)
+        .any(|candidate| candidate == expected),
+      "expected collection to contain {} but was {:?}",
+      expected.display(),
+      values
+    );
+  }
 
   #[test]
   fn normalise_paths_resolves_relative_entries() {
@@ -470,9 +521,8 @@ mod tests {
     let target = context.root.join("Example.sol");
     std::fs::write(&target, "// test").expect("write file");
 
-    let config = CompilerConfig::default();
     let resolved = context
-      .normalise_paths(&config, &[PathBuf::from("Example.sol")])
+      .normalise_paths(&[PathBuf::from("Example.sol")])
       .expect("normalised paths");
     assert_eq!(resolved, vec![target.canonicalize().unwrap()]);
   }
@@ -486,5 +536,122 @@ mod tests {
       .expect("virtual path");
     assert!(path.ends_with("virtual-hash.sol"));
     assert!(path.parent().unwrap().exists());
+  }
+
+  #[test]
+  fn synthetic_project_context_reports_expected_paths() {
+    let temp = tempdir().expect("tempdir");
+    let context = create_synthetic_context(temp.path()).expect("context");
+    let project_paths = context.project_paths();
+
+    let root = context.root.clone();
+    let expected_cache = root.join(".tevm/cache").join(SOLIDITY_FILES_CACHE_FILENAME);
+    let expected_artifacts = root.join(".tevm/out");
+    let expected_build_infos = root.join(".tevm/out/build-info");
+    let expected_sources = root.clone();
+    let expected_tests = root.join("test");
+    let expected_scripts = root.join("scripts");
+
+    assert_path_eq(&project_paths.root, expected_sources.as_path());
+    assert_path_eq(&project_paths.cache, expected_cache.as_path());
+    assert_path_eq(&project_paths.artifacts, expected_artifacts.as_path());
+    assert_path_eq(&project_paths.build_infos, expected_build_infos.as_path());
+    assert_path_eq(&project_paths.sources, expected_sources.as_path());
+    assert_path_eq(&project_paths.tests, expected_tests.as_path());
+    assert_path_eq(&project_paths.scripts, expected_scripts.as_path());
+
+    let virtual_sources = project_paths
+      .virtual_sources
+      .as_ref()
+      .expect("virtual sources path");
+    let expected_virtual_sources = root.join(".tevm/virtual-sources");
+    assert_path_eq(virtual_sources, expected_virtual_sources.as_path());
+
+    assert!(project_paths.libraries.is_empty());
+    assert!(project_paths.include_paths.is_empty());
+    assert_contains_path(&project_paths.allowed_paths, root.as_path());
+  }
+
+  #[test]
+  fn hardhat_project_context_reports_expected_paths() {
+    let temp = tempdir().expect("tempdir");
+    let root = temp.path();
+    for dir in [
+      "artifacts/build-info",
+      "cache",
+      "contracts",
+      "node_modules",
+      "script",
+      "scripts",
+      "test",
+    ] {
+      std::fs::create_dir_all(root.join(dir)).expect("create dir");
+    }
+
+    let (_, context) = HardhatAdapter::load(root).expect("hardhat context");
+    let project_paths = context.project_paths();
+    let canonical_root = canonicalize_path(root);
+    let expected_cache = canonical_root
+      .join("cache")
+      .join(SOLIDITY_FILES_CACHE_FILENAME);
+    let expected_artifacts = canonical_root.join("artifacts");
+    let expected_build_infos = canonical_root.join("artifacts/build-info");
+    let expected_sources = canonical_root.join("contracts");
+    let expected_tests = canonical_root.join("test");
+    let expected_scripts = canonical_root.join("script");
+    let expected_library = canonical_root.join("node_modules");
+
+    assert_path_eq(&project_paths.root, canonical_root.as_path());
+    assert_path_eq(&project_paths.cache, expected_cache.as_path());
+    assert_path_eq(&project_paths.artifacts, expected_artifacts.as_path());
+    assert_path_eq(&project_paths.build_infos, expected_build_infos.as_path());
+    assert_path_eq(&project_paths.sources, expected_sources.as_path());
+    assert_path_eq(&project_paths.tests, expected_tests.as_path());
+    assert_path_eq(&project_paths.scripts, expected_scripts.as_path());
+
+    assert_contains_path(&project_paths.libraries, expected_library.as_path());
+    assert!(project_paths.include_paths.is_empty());
+    assert_contains_path(&project_paths.allowed_paths, canonical_root.as_path());
+    assert!(
+      project_paths.virtual_sources.is_none(),
+      "hardhat projects should not expose virtual sources"
+    );
+  }
+
+  #[test]
+  fn foundry_project_context_reports_expected_paths() {
+    let temp = tempdir().expect("tempdir");
+    let root = temp.path();
+    for dir in ["src", "test", "script", "lib"] {
+      std::fs::create_dir_all(root.join(dir)).expect("create dir");
+    }
+    std::fs::write(root.join("foundry.toml"), "[profile.default]\n").expect("foundry.toml");
+
+    let (_, context) = FoundryAdapter::load(root).expect("foundry context");
+    let project_paths = context.project_paths();
+    let canonical_root = canonicalize_path(root);
+    let expected_cache = canonical_root
+      .join("cache")
+      .join(SOLIDITY_FILES_CACHE_FILENAME);
+    let expected_artifacts = canonical_root.join("out");
+    let expected_build_infos = canonical_root.join("out/build-info");
+    let expected_sources = canonical_root.join("src");
+    let expected_tests = canonical_root.join("test");
+    let expected_scripts = canonical_root.join("script");
+    let expected_library = canonical_root.join("lib");
+
+    assert_path_eq(&project_paths.root, canonical_root.as_path());
+    assert_path_eq(&project_paths.cache, expected_cache.as_path());
+    assert_path_eq(&project_paths.artifacts, expected_artifacts.as_path());
+    assert_path_eq(&project_paths.build_infos, expected_build_infos.as_path());
+    assert_path_eq(&project_paths.sources, expected_sources.as_path());
+    assert_path_eq(&project_paths.tests, expected_tests.as_path());
+    assert_path_eq(&project_paths.scripts, expected_scripts.as_path());
+
+    assert_contains_path(&project_paths.libraries, expected_library.as_path());
+    assert!(
+      project_paths.virtual_sources.is_none(),
+      "foundry projects should not expose virtual sources"
+    );
   }
 }

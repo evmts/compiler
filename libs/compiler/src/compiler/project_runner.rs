@@ -1,19 +1,19 @@
 use std::path::PathBuf;
 
-use foundry_compilers::artifacts::sources::Source as FoundrySource;
-use foundry_compilers::artifacts::SolcLanguage as FoundrySolcLanguage;
-use foundry_compilers::solc::SolcCompiler;
-use foundry_compilers::{Project, ProjectCompileOutput};
-use std::sync::OnceLock;
-
 use super::input::CompilationInput;
 use super::output::{into_core_compile_output, CoreCompileOutput};
 use crate::internal::{
   config::CompilerConfig,
   errors::{map_err_with_context, Error, Result},
-  project::{build_project, ProjectContext, ProjectLayout},
+  project::{
+    build_project, create_synthetic_context, default_cache_dir, ProjectContext, ProjectLayout,
+  },
   solc,
 };
+use foundry_compilers::artifacts::sources::Source as FoundrySource;
+use foundry_compilers::artifacts::SolcLanguage as FoundrySolcLanguage;
+use foundry_compilers::solc::SolcCompiler;
+use foundry_compilers::{Project, ProjectCompileOutput};
 
 pub struct ProjectRunner<'a> {
   context: &'a ProjectContext,
@@ -45,7 +45,7 @@ impl<'a> ProjectRunner<'a> {
         if matches!(self.context.layout, ProjectLayout::Synthetic) {
           return Ok(None);
         }
-        let normalized = self.context.normalise_paths(config, paths.as_slice())?;
+        let normalized = self.context.normalise_paths(paths.as_slice())?;
         let output = self.compile_with_project(config, "Compilation failed", |project| {
           project.compile_files(normalized)
         });
@@ -117,31 +117,70 @@ impl<'a> ProjectRunner<'a> {
     Ok(path)
   }
 
-  pub fn prepare_synthetic_context(config: &mut CompilerConfig) -> Result<Option<ProjectContext>> {
+  pub fn prepare_synthetic_context(config: &CompilerConfig) -> Result<Option<ProjectContext>> {
     if !config.cache_enabled {
       return Ok(None);
     }
 
-    let base_dir = match config.base_dir.clone() {
-      Some(dir) => dir,
-      None => {
-        let default_dir = default_cache_dir();
-        config.base_dir = Some(default_dir.clone());
-        default_dir
-      }
-    };
+    let base_dir = default_cache_dir();
 
-    crate::internal::project::create_synthetic_context(base_dir.as_path()).map(Some)
+    create_synthetic_context(base_dir.as_path()).map(Some)
   }
 }
 
-fn default_cache_dir() -> PathBuf {
-  static CACHE_PATH: OnceLock<PathBuf> = OnceLock::new();
-  CACHE_PATH
-    .get_or_init(|| {
-      let root = std::env::temp_dir().join(".tevm/cache");
-      let _ = std::fs::create_dir_all(&root);
-      root
-    })
-    .clone()
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::internal::project::create_synthetic_context;
+  use foundry_compilers::artifacts::SolcLanguage as FoundrySolcLanguage;
+  use tempfile::tempdir;
+
+  #[test]
+  fn write_virtual_source_uses_language_extension() {
+    let temp_dir = tempdir().expect("temp dir");
+    let context = create_synthetic_context(temp_dir.path()).expect("context");
+    let runner = ProjectRunner::new(&context);
+
+    let mut config = CompilerConfig::default();
+    config.solc_language = FoundrySolcLanguage::Solidity;
+    let sol_path = runner
+      .write_virtual_source(&config, "contract A { function f() external {} }")
+      .expect("sol path");
+    assert!(sol_path
+      .extension()
+      .unwrap()
+      .to_str()
+      .unwrap()
+      .ends_with("sol"));
+    assert_eq!(
+      std::fs::read_to_string(&sol_path).expect("read file"),
+      "contract A { function f() external {} }"
+    );
+
+    config.solc_language = FoundrySolcLanguage::Yul;
+    let yul_path = runner
+      .write_virtual_source(&config, "object \"Y\" { code { mstore(0, 0) } }")
+      .expect("yul path");
+    assert!(yul_path
+      .extension()
+      .unwrap()
+      .to_str()
+      .unwrap()
+      .ends_with("yul"));
+  }
+
+  #[test]
+  fn prepare_synthetic_context_respects_cache_flag() {
+    let mut config = CompilerConfig::default();
+    config.cache_enabled = false;
+    assert!(ProjectRunner::prepare_synthetic_context(&config)
+      .expect("prepare synthetic")
+      .is_none());
+
+    config.cache_enabled = true;
+    let context = ProjectRunner::prepare_synthetic_context(&config)
+      .expect("context")
+      .expect("some context");
+    assert!(matches!(context.layout, ProjectLayout::Synthetic));
+  }
 }

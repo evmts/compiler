@@ -1,113 +1,65 @@
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use foundry_compilers::{error::SolcError, solc::SolcLanguage, ProjectPathsConfig};
-use napi::bindgen_prelude::*;
-
-use crate::internal::errors::map_napi_error;
+use foundry_compilers::ProjectPathsConfig;
 
 #[napi(object)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectPaths {
   pub root: String,
   pub cache: String,
   pub artifacts: String,
+  pub build_infos: String,
   pub sources: String,
   pub tests: String,
   pub scripts: String,
   pub libraries: Vec<String>,
+  pub include_paths: Vec<String>,
+  pub allowed_paths: Vec<String>,
+  pub virtual_sources: Option<String>,
 }
 
-fn to_project_paths(config: ProjectPathsConfig<SolcLanguage>) -> ProjectPaths {
-  ProjectPaths {
-    root: config.root.to_string_lossy().to_string(),
-    cache: config.cache.to_string_lossy().to_string(),
-    artifacts: config.artifacts.to_string_lossy().to_string(),
-    sources: config.sources.to_string_lossy().to_string(),
-    tests: config.tests.to_string_lossy().to_string(),
-    scripts: config.scripts.to_string_lossy().to_string(),
-    libraries: config
-      .libraries
-      .iter()
-      .map(|path| path.to_string_lossy().to_string())
-      .collect(),
+impl ProjectPaths {
+  pub fn from_config<L>(config: &ProjectPathsConfig<L>) -> Self {
+    ProjectPaths {
+      root: config.root.to_string_lossy().to_string(),
+      cache: config.cache.to_string_lossy().to_string(),
+      artifacts: config.artifacts.to_string_lossy().to_string(),
+      build_infos: config.build_infos.to_string_lossy().to_string(),
+      sources: config.sources.to_string_lossy().to_string(),
+      tests: config.tests.to_string_lossy().to_string(),
+      scripts: config.scripts.to_string_lossy().to_string(),
+      libraries: config
+        .libraries
+        .iter()
+        .map(|path| path.to_string_lossy().to_string())
+        .collect(),
+      include_paths: config
+        .include_paths
+        .iter()
+        .map(|path| path.to_string_lossy().to_string())
+        .collect(),
+      allowed_paths: config
+        .allowed_paths
+        .iter()
+        .map(|path| path.to_string_lossy().to_string())
+        .collect(),
+      virtual_sources: None,
+    }
+  }
+
+  pub fn with_virtual_sources(mut self, dir: Option<&Path>) -> Self {
+    self.virtual_sources = dir.map(|path| path.to_string_lossy().to_string());
+    self
   }
 }
 
-fn create_paths_with_root<F>(root_path: String, context: &str, factory: F) -> Result<ProjectPaths>
-where
-  F: FnOnce(&Path) -> std::result::Result<ProjectPathsConfig<SolcLanguage>, SolcError>,
-{
-  let root = PathBuf::from(root_path);
-  let config = map_napi_error(factory(&root), context)?;
-  Ok(to_project_paths(config))
-}
-
-fn create_paths<F>(context: &str, factory: F) -> Result<ProjectPaths>
-where
-  F: FnOnce() -> std::result::Result<ProjectPathsConfig<SolcLanguage>, SolcError>,
-{
-  let config = map_napi_error(factory(), context)?;
-  Ok(to_project_paths(config))
-}
-
-fn path_to_string(path: PathBuf) -> String {
-  path.to_string_lossy().to_string()
-}
-
-#[napi]
-pub fn create_hardhat_paths(root_path: String) -> Result<ProjectPaths> {
-  create_paths_with_root(
-    root_path,
-    "Failed to create hardhat paths",
-    ProjectPathsConfig::<SolcLanguage>::hardhat,
-  )
-}
-
-#[napi]
-pub fn create_dapptools_paths(root_path: String) -> Result<ProjectPaths> {
-  create_paths_with_root(
-    root_path,
-    "Failed to create dapptools paths",
-    ProjectPathsConfig::<SolcLanguage>::dapptools,
-  )
-}
-
-#[napi]
-pub fn create_current_hardhat_paths() -> Result<ProjectPaths> {
-  create_paths(
-    "Failed to create current hardhat paths",
-    ProjectPathsConfig::<SolcLanguage>::current_hardhat,
-  )
-}
-
-#[napi]
-pub fn create_current_dapptools_paths() -> Result<ProjectPaths> {
-  create_paths(
-    "Failed to create current dapptools paths",
-    ProjectPathsConfig::<SolcLanguage>::current_dapptools,
-  )
-}
-
-#[napi]
-pub fn find_artifacts_dir(root_path: String) -> String {
-  let root = PathBuf::from(root_path);
-  let artifacts_dir = ProjectPathsConfig::find_artifacts_dir(&root);
-  path_to_string(artifacts_dir)
-}
-
-#[napi]
-pub fn find_source_dir(root_path: String) -> String {
-  let root = PathBuf::from(root_path);
-  let source_dir = ProjectPathsConfig::find_source_dir(&root);
-  path_to_string(source_dir)
-}
-
-#[napi]
-pub fn find_libs(root_path: String) -> Vec<String> {
-  let root = PathBuf::from(root_path);
-  let libs = ProjectPathsConfig::find_libs(&root);
-  libs.into_iter().map(path_to_string).collect()
+impl<L> From<&ProjectPathsConfig<L>> for ProjectPaths {
+  fn from(config: &ProjectPathsConfig<L>) -> Self {
+    ProjectPaths::from_config(config)
+  }
 }
 
 /// Canonicalises a path while falling back to an absolute join if canonicalisation fails.
@@ -183,5 +135,73 @@ mod tests {
     let set = to_path_set(&entries);
     assert_eq!(set.len(), 1);
     assert_eq!(set.iter().next().unwrap(), &canonicalize_path(&file));
+  }
+
+  #[test]
+  fn project_paths_from_config_captures_all_directories() {
+    use foundry_compilers::solc::SolcLanguage;
+    use foundry_compilers::ProjectPathsConfig;
+
+    let temp = tempfile::tempdir().expect("tempdir");
+    let root = temp.path();
+    let cache_file = root.join("cache").join("cache.json");
+    let artifacts = root.join("artifacts");
+    let build_infos = artifacts.join("build-info");
+    let sources = root.join("src");
+    let tests = root.join("test");
+    let scripts = root.join("scripts");
+    let library = root.join("lib");
+    std::fs::create_dir_all(cache_file.parent().unwrap()).expect("cache dir");
+    std::fs::create_dir_all(&artifacts).expect("artifacts");
+    std::fs::create_dir_all(&build_infos).expect("build infos");
+    std::fs::create_dir_all(&sources).expect("sources");
+    std::fs::create_dir_all(&tests).expect("tests");
+    std::fs::create_dir_all(&scripts).expect("scripts");
+    std::fs::create_dir_all(&library).expect("lib");
+
+    let config = ProjectPathsConfig::builder()
+      .root(root)
+      .cache(&cache_file)
+      .artifacts(&artifacts)
+      .build_infos(&build_infos)
+      .sources(&sources)
+      .tests(&tests)
+      .scripts(&scripts)
+      .libs(vec![library.clone()])
+      .include_paths(vec![root.join("includes")])
+      .allowed_paths(vec![root.join("allowed")])
+      .build_with_root::<SolcLanguage>(root);
+
+    let paths = ProjectPaths::from_config(&config).with_virtual_sources(Some(root));
+    assert!(paths.cache.ends_with("cache.json"));
+
+    let canonical = |value: &str| Path::new(value).canonicalize().unwrap();
+    assert_eq!(
+      canonical(&paths.artifacts),
+      artifacts.canonicalize().unwrap()
+    );
+    assert_eq!(
+      canonical(&paths.build_infos),
+      build_infos.canonicalize().unwrap()
+    );
+    assert_eq!(canonical(&paths.sources), sources.canonicalize().unwrap());
+    assert_eq!(canonical(&paths.tests), tests.canonicalize().unwrap());
+    assert_eq!(canonical(&paths.scripts), scripts.canonicalize().unwrap());
+    let library_canonical = library.canonicalize().unwrap();
+    assert!(paths
+      .libraries
+      .iter()
+      .map(|entry| canonical(entry))
+      .any(|path| path == library_canonical));
+    let virtual_sources = canonical(paths.virtual_sources.as_ref().expect("virtual"));
+    assert_eq!(virtual_sources, root.canonicalize().unwrap());
+    assert!(paths
+      .include_paths
+      .iter()
+      .any(|path| path.ends_with("includes")));
+    assert!(paths
+      .allowed_paths
+      .iter()
+      .any(|path| path.ends_with("allowed")));
   }
 }

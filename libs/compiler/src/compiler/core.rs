@@ -15,7 +15,9 @@ use super::project_runner::ProjectRunner;
 use crate::ast::utils;
 use crate::internal::config::{CompilerConfig, CompilerConfigOptions, SolcConfig};
 use crate::internal::errors::{map_err_with_context, Error, Result};
-use crate::internal::project::{FoundryAdapter, HardhatAdapter, ProjectContext, ProjectLayout};
+use crate::internal::project::{
+  create_synthetic_context, FoundryAdapter, HardhatAdapter, ProjectContext, ProjectLayout,
+};
 use crate::internal::solc;
 
 #[derive(Clone)]
@@ -37,11 +39,10 @@ pub enum SourceValue {
 }
 
 pub fn init(config: CompilerConfig, project: Option<ProjectContext>) -> Result<State> {
-  let mut config = config;
-  let mut project = project;
-  if project.is_none() {
-    project = ProjectRunner::prepare_synthetic_context(&mut config)?;
-  }
+  let project = match project {
+    Some(context) => Some(context),
+    None => ProjectRunner::prepare_synthetic_context(&config)?,
+  };
   solc::ensure_installed(&config.solc_version)?;
   Ok(State { config, project })
 }
@@ -61,6 +62,11 @@ pub fn init_from_foundry_root(config: CompilerConfig, root: &Path) -> Result<Sta
 
 pub fn init_from_hardhat_root(config: CompilerConfig, root: &Path) -> Result<State> {
   init_with_context(config, || HardhatAdapter::load(root))
+}
+
+pub fn init_from_root(config: CompilerConfig, root: &Path) -> Result<State> {
+  let context = create_synthetic_context(root)?;
+  init(config, Some(context))
 }
 
 pub fn resolve_config(

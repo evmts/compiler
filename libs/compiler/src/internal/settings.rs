@@ -10,21 +10,41 @@ use crate::internal::errors::map_napi_error;
 /// Rust-facing optional overrides that can be merged into Foundry `Settings`.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct CompilerSettingsOptions {
-  #[serde(skip_serializing_if = "Option::is_none")]
+  #[serde(
+    rename = "stopAfter",
+    alias = "stop_after",
+    skip_serializing_if = "Option::is_none"
+  )]
   pub stop_after: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub remappings: Option<Vec<String>>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub optimizer: Option<OptimizerSettingsOptions>,
-  #[serde(skip_serializing_if = "Option::is_none")]
+  #[serde(
+    rename = "modelChecker",
+    alias = "model_checker",
+    skip_serializing_if = "Option::is_none"
+  )]
   pub model_checker: Option<ModelCheckerSettingsOptions>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub metadata: Option<SettingsMetadataOptions>,
-  #[serde(skip_serializing_if = "Option::is_none")]
+  #[serde(
+    rename = "outputSelection",
+    alias = "output_selection",
+    skip_serializing_if = "Option::is_none"
+  )]
   pub output_selection: Option<BTreeMap<String, BTreeMap<String, Vec<String>>>>,
-  #[serde(skip_serializing_if = "Option::is_none")]
+  #[serde(
+    rename = "evmVersion",
+    alias = "evm_version",
+    skip_serializing_if = "Option::is_none"
+  )]
   pub evm_version: Option<EvmVersion>,
-  #[serde(skip_serializing_if = "Option::is_none")]
+  #[serde(
+    rename = "viaIR",
+    alias = "viaIr",
+    skip_serializing_if = "Option::is_none"
+  )]
   pub via_ir: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub debug: Option<DebuggingSettingsOptions>,
@@ -316,7 +336,10 @@ pub fn merge_settings(
 ) -> Result<Settings> {
   match overrides {
     Some(settings) => {
-      let merged = settings.clone().overlay(base)?;
+      let mut merged = settings.clone().overlay(base)?;
+      if let Some(selection) = &settings.output_selection {
+        merged.output_selection = selection.clone().into();
+      }
       sanitize_settings(&merged)
     }
     None => Ok(base.clone()),
@@ -448,6 +471,8 @@ impl TryFrom<JsCompilerSettingsOptions> for CompilerSettingsOptions {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use serde_json::json;
+  use std::collections::BTreeMap;
 
   #[test]
   fn sanitize_restores_default_output_selection() {
@@ -465,6 +490,29 @@ mod tests {
   }
 
   #[test]
+  fn sanitize_preserves_stop_after_and_ast_selection() {
+    let mut settings = Settings::default();
+    settings.stop_after = Some("parsing".to_string());
+    settings.output_selection = OutputSelection::ast_output_selection();
+
+    assert!(
+      !output_selection_is_effectively_empty(&settings.output_selection),
+      "ast output selection should be considered non-empty"
+    );
+
+    let sanitised = sanitize_settings(&settings).expect("sanitize");
+    assert_eq!(
+      sanitised.stop_after.as_deref(),
+      Some("parsing"),
+      "stopAfter should remain unchanged"
+    );
+    assert_eq!(
+      sanitised.output_selection, settings.output_selection,
+      "non-empty output selection should be preserved"
+    );
+  }
+
+  #[test]
   fn merge_preserves_base_when_no_overrides() {
     let base = Settings::default();
     let merged = merge_settings(&base, None).expect("merge");
@@ -475,18 +523,82 @@ mod tests {
   }
 
   #[test]
+  fn merge_replaces_output_selection_when_overridden() {
+    let base = Settings::default();
+    let mut overrides = CompilerSettingsOptions::default();
+    let selection = OutputSelection::ast_output_selection();
+    overrides.output_selection = Some(selection.as_ref().clone());
+
+    let merged = merge_settings(&base, Some(&overrides)).expect("merge");
+    assert_eq!(
+      merged.output_selection, selection,
+      "merge should replace base output selection with override"
+    );
+  }
+
+  #[test]
   fn merge_applies_overrides() {
     let base = Settings::default();
     let mut overrides = CompilerSettingsOptions::default();
+    overrides.stop_after = Some("parsing".to_string());
+    overrides.remappings = Some(vec!["lib/=lib/".to_string()]);
     overrides.via_ir = Some(true);
     overrides.optimizer = Some(OptimizerSettingsOptions {
       enabled: Some(true),
       runs: Some(200),
+      details: Some(OptimizerDetailsOptions {
+        yul: Some(true),
+        ..Default::default()
+      }),
+    });
+    overrides.model_checker = Some(ModelCheckerSettingsOptions {
+      engine: Some(ModelCheckerEngine::Bmc),
+      timeout: Some(1),
       ..Default::default()
     });
+    overrides.metadata = Some(SettingsMetadataOptions {
+      use_literal_content: Some(true),
+      bytecode_hash: Some(BytecodeHash::None),
+      cbor_metadata: Some(false),
+    });
+    overrides.output_selection = Some(BTreeMap::from([(
+      "Example.sol".to_string(),
+      BTreeMap::from([("*".to_string(), vec!["abi".to_string()])]),
+    )]));
+    overrides.evm_version = Some(EvmVersion::Prague);
+    overrides.debug = Some(DebuggingSettingsOptions {
+      revert_strings: Some(RevertStrings::Debug),
+      debug_info: vec!["location".to_string()],
+    });
+    overrides.libraries = Some(BTreeMap::from([(
+      "Example.sol".to_string(),
+      BTreeMap::from([(
+        "LibExample".to_string(),
+        "0x0000000000000000000000000000000000000001".to_string(),
+      )]),
+    )]));
+
     let merged = merge_settings(&base, Some(&overrides)).expect("merge");
-    assert_eq!(merged.via_ir, Some(true));
-    assert_eq!(merged.optimizer.enabled, Some(true));
-    assert_eq!(merged.optimizer.runs, Some(200));
+
+    let as_json = serde_json::to_value(&merged).expect("serialize settings");
+
+    assert!(merged
+      .remappings
+      .iter()
+      .any(|remapping| remapping.to_string() == "lib/=lib/"));
+    assert_eq!(as_json["stopAfter"], json!("parsing"));
+    assert_eq!(as_json["viaIR"], json!(true));
+    assert_eq!(as_json["optimizer"]["enabled"], json!(true));
+    assert_eq!(as_json["optimizer"]["runs"], json!(200));
+    assert_eq!(as_json["optimizer"]["details"]["yul"], json!(true));
+    assert_eq!(as_json["metadata"]["useLiteralContent"], json!(true));
+    assert_eq!(as_json["metadata"]["bytecodeHash"], json!("none"));
+    assert_eq!(as_json["evmVersion"], json!("prague"));
+    assert_eq!(as_json["debug"]["revertStrings"], json!("debug"));
+    assert_eq!(as_json["debug"]["debugInfo"], json!(["location"]));
+    assert_eq!(
+      as_json["libraries"]["Example.sol"]["LibExample"],
+      json!("0x0000000000000000000000000000000000000001")
+    );
   }
 }
