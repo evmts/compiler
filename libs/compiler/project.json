@@ -19,8 +19,17 @@
         }
       }
     },
+    "post-build": {
+      "cache": false,
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "pnpm run build:copy-types && pnpm run build:dts && pnpm run build:typecheck",
+        "cwd": "libs/compiler"
+      }
+    },
     "test": {
-      "dependsOn": ["test:rust", "test:js"]
+      "dependsOn": ["test:rust", "test:js", "test:typecheck"]
     },
     "test:rust": {
       "cache": false,
@@ -38,11 +47,20 @@
     "test:js": {
       "cache": true,
       "executor": "nx:run-commands",
+      "dependsOn": ["build", "post-build"],
       "options": {
         "command": "bun test",
         "cwd": "libs/compiler"
-      },
-      "dependsOn": ["build"]
+      }
+    },
+    "test:typecheck": {
+      "cache": true,
+      "executor": "nx:run-commands",
+      "dependsOn": ["build", "post-build"],
+      "options": {
+        "command": "pnpm run test:typecheck",
+        "cwd": "libs/compiler"
+      }
     },
     "lint": {
       "cache": false,

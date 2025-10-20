@@ -36,15 +36,26 @@ export declare class Ast {
   ast(): import('./solc-ast').SourceUnit
 }
 export type JsAst = Ast
-
-export declare class CompileOutput {
-  constructor()
-  get artifactsJson(): Record<string, unknown>
-  get artifacts(): Record<string, SourceArtifacts>
-  get artifact(): SourceArtifacts | undefined
-  get errors(): Array<CompilerError>
-  get hasCompilerErrors(): boolean
+export declare class CompileOutput<
+  THasErrors extends boolean = boolean,
+  TSourcePaths extends readonly string[] | undefined = string[] | undefined
+> {
+  constructor();
+  get artifactsJson(): Record<string, unknown>;
+  get artifacts(): TSourcePaths extends readonly string[]
+    ? THasErrors extends false
+      ? { readonly [K in TSourcePaths[number]]: SourceArtifacts<K> }
+      : { readonly [K in TSourcePaths[number]]?: SourceArtifacts<K> }
+    : never;
+  get artifact(): TSourcePaths extends undefined ? SourceArtifacts : never;
+  get errors(): THasErrors extends true
+    ? ReadonlyArray<CompilerError>
+    : undefined;
+  get diagnostics(): Array<CompilerError>;
+  hasCompilerErrors(): this is CompileOutput<true, TSourcePaths>;
 }
+
+
 export type JsCompileOutput = CompileOutput
 
 export declare class Compiler {
@@ -54,64 +65,65 @@ export declare class Compiler {
   static fromFoundryRoot(root: string, options?: CompilerConfigOptions | undefined): JsCompiler
   static fromHardhatRoot(root: string, options?: CompilerConfigOptions | undefined): JsCompiler
   static fromRoot(root: string, options?: CompilerConfigOptions | undefined): JsCompiler
-  compileSource(target: string | object, options?: CompilerConfigOptions | undefined): CompileOutput
-  compileSources(sources: Record<string, string | object>, options?: CompilerConfigOptions | undefined): CompileOutput
-  compileFiles(paths: string[], options?: CompilerConfigOptions | undefined): CompileOutput
-  compileProject(options?: CompilerConfigOptions | undefined): CompileOutput
-  compileContract(contractName: string, options?: CompilerConfigOptions | undefined): CompileOutput
+  compileSource(target: string | object, options?: CompilerConfigOptions | undefined): CompileOutput<true, undefined> | CompileOutput<false, undefined>
+  compileSources<TSources extends Record<string, string | object> = Record<string, string | object>>(sources: TSources, options?: CompilerConfigOptions | undefined): CompileOutput<true, Extract<keyof TSources, string>[]> | CompileOutput<false, Extract<keyof TSources, string>[]>
+  compileFiles<TFilePaths extends readonly string[] = readonly string[]>(paths: TFilePaths, options?: CompilerConfigOptions | undefined): CompileOutput<true, TFilePaths> | CompileOutput<false, TFilePaths>
+  compileProject(options?: CompilerConfigOptions | undefined): CompileOutput<true, string[]> | CompileOutput<false, string[]>
+  compileContract(contractName: string, options?: CompilerConfigOptions | undefined): CompileOutput<true, undefined> | CompileOutput<false, undefined>
   getPaths(): ProjectPaths
 }
 export type JsCompiler = Compiler
 
 export declare class Contract {
   constructor(state: ContractState)
-  static fromSolcContractOutput(name: string, contract: object | string): Contract
-  get name(): string
-  get address(): `0x${string}` | null | undefined
-  get creationBytecode(): ContractBytecode | null
-  get runtimeBytecode(): ContractBytecode | null
-  get deployedBytecode(): ContractBytecode | null
-  get abi(): import('./index').ContractState['abi']
-  get metadata(): import('./index').ContractState['metadata']
-  get userdoc(): import('./index').ContractState['userdoc']
-  get devdoc(): import('./index').ContractState['devdoc']
-  get storageLayout(): import('./index').ContractState['storageLayout']
-  get immutableReferences(): import('./index').ContractState['immutableReferences']
-  get methodIdentifiers(): import('./index').ContractState['methodIdentifiers']
-  get functionDebugData(): import('./index').ContractState['functionDebugData']
-  get gasEstimates(): import('./index').ContractState['gasEstimates']
-  get assembly(): string | null
-  get legacyAssembly(): import('./index').ContractState['legacyAssembly']
-  get opcodes(): string | null
-  get ir(): string | null
-  get irOptimized(): string | null
-  get ewasm(): import('./index').ContractState['ewasm']
-  get creationSourceMap(): string | null
-  get extras(): Record<string, unknown>
-  withAddress(address?: `0x${string}` | null | undefined): Contract
-  withCreationBytecode(bytecode?: Buffer | undefined | null): Contract
-  withRuntimeBytecode(bytecode?: Buffer | undefined | null): Contract
-  withDeployedBytecode(bytecode?: Buffer | undefined | null): Contract
-  withExtra(key: string, value: any): Contract
-  toJson(): ContractState
+static fromSolcContractOutput(name: string, contract: object | string): Contract & { readonly __state?: ContractState }
+get name(): string
+get address(): `0x${string}` | null | undefined
+get creationBytecode(): ContractBytecode | null
+get runtimeBytecode(): ContractBytecode | null
+get deployedBytecode(): ContractBytecode | null
+get abi(): ContractState['abi']
+get metadata(): ContractState['metadata']
+get userdoc(): ContractState['userdoc']
+get devdoc(): ContractState['devdoc']
+get storageLayout(): ContractState['storageLayout']
+get immutableReferences(): ContractState['immutableReferences']
+get methodIdentifiers(): ContractState['methodIdentifiers']
+get functionDebugData(): ContractState['functionDebugData']
+get gasEstimates(): ContractState['gasEstimates']
+get assembly(): string | null
+get legacyAssembly(): ContractState['legacyAssembly']
+get opcodes(): string | null
+get ir(): string | null
+get irOptimized(): string | null
+get ewasm(): ContractState['ewasm']
+get creationSourceMap(): string | null
+get extras(): Record<string, unknown>
+withAddress<State extends ContractState, NextAddress extends `0x${string}` | null | undefined = `0x${string}` | null | undefined>(this: Contract & { readonly __state?: State }, address?: NextAddress): Contract & { readonly __state?: (State extends ContractState ? (NextAddress extends undefined ? Omit<State, 'address'> & { address?: State['address'] } : Omit<State, 'address'> & { address: Exclude<NextAddress, undefined> }) : never) }
+withCreationBytecode<State extends ContractState, NextBytecode extends Buffer | null | undefined = Buffer | null | undefined>(this: Contract & { readonly __state?: State }, bytecode?: NextBytecode): Contract & { readonly __state?: (State extends ContractState ? (NextBytecode extends undefined ? Omit<State, 'creationBytecode'> & { creationBytecode?: State['creationBytecode'] } : NextBytecode extends null ? Omit<State, 'creationBytecode'> & { creationBytecode: null } : Omit<State, 'creationBytecode'> & { creationBytecode: ContractBytecode }) : never) }
+withRuntimeBytecode<State extends ContractState, NextBytecode extends Buffer | null | undefined = Buffer | null | undefined>(this: Contract & { readonly __state?: State }, bytecode?: NextBytecode): Contract & { readonly __state?: (State extends ContractState ? (NextBytecode extends undefined ? Omit<State, 'runtimeBytecode'> & { runtimeBytecode?: State['runtimeBytecode'] } : NextBytecode extends null ? Omit<State, 'runtimeBytecode'> & { runtimeBytecode: null } : Omit<State, 'runtimeBytecode'> & { runtimeBytecode: ContractBytecode }) : never) }
+withDeployedBytecode<State extends ContractState, NextBytecode extends Buffer | null | undefined = Buffer | null | undefined>(this: Contract & { readonly __state?: State }, bytecode?: NextBytecode): Contract & { readonly __state?: (State extends ContractState ? (NextBytecode extends undefined ? Omit<State, 'deployedBytecode'> & { deployedBytecode?: State['deployedBytecode'] } : NextBytecode extends null ? Omit<State, 'deployedBytecode'> & { deployedBytecode: null } : Omit<State, 'deployedBytecode'> & { deployedBytecode: ContractBytecode }) : never) }
+withExtra<State extends ContractState, Key extends string, Value = unknown>(this: Contract & { readonly __state?: State }, key: Key, value: Value): Contract & { readonly __state?: (State extends ContractState ? Omit<State, 'extras'> & { extras: (State['extras'] extends Record<string, unknown> ? State['extras'] : {}) & Record<Key, Value> } : never) }
+toJson<State extends ContractState>(this: Contract & { readonly __state?: State }): State
 }
 export type JsContract = Contract
-
-export declare class SourceArtifacts {
+export declare class SourceArtifacts<TPath extends string = string> {
   constructor()
-  get sourcePath(): string | null
+  get sourcePath(): TPath | null
   get sourceId(): number | null
   get solcVersion(): string | null
   get astJson(): import('./solc-ast').SourceUnit | undefined
-  get ast(): import('./index').Ast | undefined
-  get contracts(): Record<string, import('./index').Contract>
+  get ast(): Ast | undefined
+  get contracts(): Record<string, Contract>
 }
+
+
 export type JsSourceArtifacts = SourceArtifacts
 
 export interface AstConfigOptions {
   solcVersion?: string | undefined
   solcLanguage?: SolcLanguage
-  solcSettings?: import('./index').CompilerSettings | undefined
+  solcSettings?: CompilerSettings | undefined
   instrumentedContract?: string | undefined
 }
 
@@ -125,7 +137,7 @@ export declare const enum BytecodeHash {
 export interface CompilerConfigOptions {
   solcVersion?: string | undefined
   solcLanguage?: SolcLanguage
-  solcSettings?: import('./index').CompilerSettings | undefined
+  solcSettings?: CompilerSettings | undefined
   cacheEnabled?: boolean | undefined
   offlineMode?: boolean | undefined
   noArtifacts?: boolean | undefined
@@ -147,7 +159,6 @@ export interface CompilerError {
   formattedMessage?: string
   component: string
   severity: SeverityLevel
-  severityLevel: 'error' | 'warning' | 'info'
   errorType: string
   errorCode?: number
   sourceLocation?: SourceLocation
@@ -158,13 +169,13 @@ export interface CompilerError {
 export interface CompilerSettings {
   stopAfter?: 'parsing' | undefined
   remappings?: `${string}=${string}`[] | undefined
-  optimizer?: import('./index').OptimizerSettings | undefined
-  modelChecker?: import('./index').ModelCheckerSettings | undefined
-  metadata?: import('./index').SettingsMetadata | undefined
+  optimizer?: OptimizerSettings | undefined
+  modelChecker?: ModelCheckerSettings | undefined
+  metadata?: SettingsMetadata | undefined
   outputSelection?: import('./solc-settings').OutputSelection | undefined
   evmVersion?: EvmVersion
   viaIr?: boolean
-  debug?: import('./index').DebuggingSettings | undefined
+  debug?: DebuggingSettings | undefined
   libraries?: Record<string, Record<string, string>> | undefined
 }
 
@@ -188,14 +199,14 @@ export interface ContractState {
   storageLayout?: import('./solc-storage-layout').StorageLayout | null | undefined
   immutableReferences?: Record<string, { start: number; length: number }[]> | null | undefined
   methodIdentifiers?: Record<string, `0x${string}`> | null | undefined
-  functionDebugData?: Record<string, import('./index').FunctionDebugDataEntry> | null | undefined
-  gasEstimates?: import('./index').GasEstimates | null | undefined
+  functionDebugData?: Record<string, FunctionDebugDataEntry> | null | undefined
+  gasEstimates?: GasEstimates | null | undefined
   assembly?: string
   legacyAssembly?: Record<string, unknown> | null | undefined
   opcodes?: string
   ir?: string
   irOptimized?: string
-  ewasm?: import('./index').EwasmOutput | null | undefined
+  ewasm?: EwasmOutput | null | undefined
   creationSourceMap?: string | null | undefined
   extras?: Record<string, unknown> | null | undefined
 }
@@ -297,14 +308,14 @@ export interface OptimizerDetails {
   cse?: boolean
   constantOptimizer?: boolean
   yul?: boolean
-  yulDetails?: import('./index').YulDetails | undefined
+  yulDetails?: YulDetails | undefined
   simpleCounterForLoopUncheckedIncrement?: boolean
 }
 
 export interface OptimizerSettings {
   enabled?: boolean
   runs?: number
-  details?: import('./index').OptimizerDetails | undefined
+  details?: OptimizerDetails | undefined
 }
 
 export interface ProjectPaths {
@@ -342,9 +353,9 @@ export interface SettingsMetadata {
 }
 
 export declare const enum SeverityLevel {
-  Error = 0,
-  Warning = 1,
-  Info = 2
+  Error = 'Error',
+  Warning = 'Warning',
+  Info = 'Info'
 }
 
 export declare const enum SolcLanguage {

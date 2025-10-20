@@ -3,8 +3,8 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "all": "nx run-many -t lint format test build",
-    "build": "nx run-many -t build && pnpm --filter @compiler/compiler run copy-types",
+    "all": "nx run-many -t lint format test build post-build",
+    "build": "nx run-many -t build post-build",
     "lint": "nx run-many -t lint format",
     "test": "nx run-many -t test"
   },
@@ -15,6 +15,7 @@
     "@napi-rs/wasm-runtime": "^0.2.4",
     "@nx/workspace": "21.6.4",
     "emnapi": "^1.1.0",
-    "nx": "21.6.4"
+    "nx": "21.6.4",
+    "typescript": "^5.9.3"
   }
 }

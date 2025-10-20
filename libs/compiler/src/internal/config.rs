@@ -284,7 +284,7 @@ pub struct JsCompilerConfigOptions {
   #[napi(ts_type = "string | undefined")]
   pub solc_version: Option<String>,
   pub solc_language: Option<SolcLanguage>,
-  #[napi(ts_type = "import('./index').CompilerSettings | undefined")]
+  #[napi(ts_type = "CompilerSettings | undefined")]
   pub solc_settings: Option<JsCompilerSettingsOptions>,
   #[napi(ts_type = "boolean | undefined")]
   pub cache_enabled: Option<bool>,
@@ -322,7 +322,7 @@ pub struct JsAstConfigOptions {
   #[napi(ts_type = "string | undefined")]
   pub solc_version: Option<String>,
   pub solc_language: Option<SolcLanguage>,
-  #[napi(ts_type = "import('./index').CompilerSettings | undefined")]
+  #[napi(ts_type = "CompilerSettings | undefined")]
   pub solc_settings: Option<JsCompilerSettingsOptions>,
   #[napi(ts_type = "string | undefined")]
   pub instrumented_contract: Option<String>,

@@ -7,10 +7,17 @@ import { Compiler } from "../build/index.js";
 const FIXTURES_DIR = join(__dirname, "fixtures");
 const FOUNDRY_PROJECT = join(FIXTURES_DIR, "foundry-project");
 
-const flattenContracts = (output: {
-  artifacts: Record<string, { contracts: Record<string, any> }>;
-  artifact?: { contracts: Record<string, any> };
-}) => {
+type SourceArtifactsView = {
+  sourcePath?: string | null;
+  contracts?: Record<string, { name?: string }>;
+};
+
+type ArtifactCarrier = {
+  artifact?: SourceArtifactsView;
+  artifacts?: Record<string, SourceArtifactsView | undefined>;
+};
+
+const flattenContracts = (output: ArtifactCarrier) => {
   const seen = new Set<string>();
   const flattened: any[] = [];
 
@@ -33,6 +40,7 @@ const flattenContracts = (output: {
   for (const [sourceName, sourceArtifacts] of Object.entries(
     output.artifacts ?? {}
   )) {
+    if (!sourceArtifacts) continue;
     const resolvedSource =
       sourceArtifacts.sourcePath ??
       (sourceArtifacts as any).source_path ??
@@ -50,15 +58,11 @@ const flattenContracts = (output: {
   return flattened;
 };
 
-const contractNames = (output: {
-  artifacts: Record<string, { contracts: Record<string, any> }>;
-  artifact?: { contracts: Record<string, any> };
-}) => flattenContracts(output).map((contract) => contract.name);
+const contractNames = (output: ArtifactCarrier) =>
+  flattenContracts(output).map((contract) => contract.name);
 
-const firstContract = (output: {
-  artifacts: Record<string, { contracts: Record<string, any> }>;
-  artifact?: { contracts: Record<string, any> };
-}) => flattenContracts(output)[0];
+const firstContract = (output: ArtifactCarrier) =>
+  flattenContracts(output)[0];
 
 const contractBytecodeHex = (contract: any) =>
   contract?.creationBytecode?.hex ??
@@ -93,7 +97,7 @@ describe("Compiler.fromFoundryRoot", () => {
     const output = compiler.compileProject();
 
     expect(contractNames(output)).toEqual(expect.arrayContaining(["Counter"]));
-    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.hasCompilerErrors()).toBe(false);
   });
 
   test("compileContract resolves a single counter artifact", () => {
@@ -103,7 +107,7 @@ describe("Compiler.fromFoundryRoot", () => {
 
     expect(flattenContracts(output)).toHaveLength(1);
     expect(firstContract(output).name).toBe("Counter");
-    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.hasCompilerErrors()).toBe(false);
   });
 
   test("per-call overrides outrank project configuration", () => {

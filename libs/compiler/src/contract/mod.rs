@@ -177,9 +177,9 @@ pub struct JsContractState {
   pub immutable_references: Option<HashMap<String, Vec<ImmutableSlot>>>,
   #[napi(ts_type = "Record<string, `0x${string}`> | null | undefined")]
   pub method_identifiers: Option<HashMap<String, String>>,
-  #[napi(ts_type = "Record<string, import('./index').FunctionDebugDataEntry> | null | undefined")]
+  #[napi(ts_type = "Record<string, FunctionDebugDataEntry> | null | undefined")]
   pub function_debug_data: Option<HashMap<String, JsFunctionDebugDataEntry>>,
-  #[napi(ts_type = "import('./index').GasEstimates | null | undefined")]
+  #[napi(ts_type = "GasEstimates | null | undefined")]
   pub gas_estimates: Option<JsGasEstimates>,
   pub assembly: Option<String>,
   #[napi(ts_type = "Record<string, unknown> | null | undefined")]
@@ -187,7 +187,7 @@ pub struct JsContractState {
   pub opcodes: Option<String>,
   pub ir: Option<String>,
   pub ir_optimized: Option<String>,
-  #[napi(ts_type = "import('./index').EwasmOutput | null | undefined")]
+  #[napi(ts_type = "EwasmOutput | null | undefined")]
   pub ewasm: Option<JsEwasm>,
   #[napi(ts_type = "string | null | undefined")]
   pub creation_source_map: Option<String>,
@@ -428,9 +428,8 @@ impl JsContract {
 
   #[napi(
     factory,
-    js_name = "fromSolcContractOutput",
     ts_args_type = "name: string, contract: object | string",
-    ts_return_type = "Contract"
+    ts_return_type = "Contract & { readonly __state?: ContractState }"
   )]
   pub fn from_solc_contract_output(
     env: Env,
@@ -479,62 +478,47 @@ impl JsContract {
     self.inner.deployed_bytecode().map(JsContractBytecode::from)
   }
 
-  #[napi(getter, ts_return_type = "import('./index').ContractState['abi']")]
+  #[napi(getter, ts_return_type = "ContractState['abi']")]
   pub fn abi(&self) -> Option<Value> {
     self.inner.state().abi.clone()
   }
 
-  #[napi(getter, ts_return_type = "import('./index').ContractState['metadata']")]
+  #[napi(getter, ts_return_type = "ContractState['metadata']")]
   pub fn metadata(&self) -> Option<Value> {
     self.inner.state().metadata.clone()
   }
 
-  #[napi(getter, ts_return_type = "import('./index').ContractState['userdoc']")]
+  #[napi(getter, ts_return_type = "ContractState['userdoc']")]
   pub fn userdoc(&self) -> Option<Value> {
     self.inner.state().userdoc.clone()
   }
 
-  #[napi(getter, ts_return_type = "import('./index').ContractState['devdoc']")]
+  #[napi(getter, ts_return_type = "ContractState['devdoc']")]
   pub fn devdoc(&self) -> Option<Value> {
     self.inner.state().devdoc.clone()
   }
 
-  #[napi(
-    getter,
-    ts_return_type = "import('./index').ContractState['storageLayout']"
-  )]
+  #[napi(getter, ts_return_type = "ContractState['storageLayout']")]
   pub fn storage_layout(&self) -> Option<Value> {
     self.inner.state().storage_layout.clone()
   }
 
-  #[napi(
-    getter,
-    ts_return_type = "import('./index').ContractState['immutableReferences']"
-  )]
+  #[napi(getter, ts_return_type = "ContractState['immutableReferences']")]
   pub fn immutable_references(&self) -> Option<HashMap<String, Vec<ImmutableSlot>>> {
     immutable_references_to_js(self.inner.state())
   }
 
-  #[napi(
-    getter,
-    ts_return_type = "import('./index').ContractState['methodIdentifiers']"
-  )]
+  #[napi(getter, ts_return_type = "ContractState['methodIdentifiers']")]
   pub fn method_identifiers(&self) -> Option<HashMap<String, String>> {
     method_identifiers_to_js(self.inner.state())
   }
 
-  #[napi(
-    getter,
-    ts_return_type = "import('./index').ContractState['functionDebugData']"
-  )]
+  #[napi(getter, ts_return_type = "ContractState['functionDebugData']")]
   pub fn function_debug_data(&self) -> Option<HashMap<String, JsFunctionDebugDataEntry>> {
     function_debug_data_to_js(self.inner.state())
   }
 
-  #[napi(
-    getter,
-    ts_return_type = "import('./index').ContractState['gasEstimates']"
-  )]
+  #[napi(getter, ts_return_type = "ContractState['gasEstimates']")]
   pub fn gas_estimates(&self) -> Option<JsGasEstimates> {
     gas_estimates_to_js(self.inner.state())
   }
@@ -544,10 +528,7 @@ impl JsContract {
     self.inner.state().assembly.clone()
   }
 
-  #[napi(
-    getter,
-    ts_return_type = "import('./index').ContractState['legacyAssembly']"
-  )]
+  #[napi(getter, ts_return_type = "ContractState['legacyAssembly']")]
   pub fn legacy_assembly(&self) -> Option<Value> {
     self.inner.state().legacy_assembly.clone()
   }
@@ -567,7 +548,7 @@ impl JsContract {
     self.inner.state().ir_optimized.clone()
   }
 
-  #[napi(getter, ts_return_type = "import('./index').ContractState['ewasm']")]
+  #[napi(getter, ts_return_type = "ContractState['ewasm']")]
   pub fn ewasm(&self) -> Option<JsEwasm> {
     ewasm_to_js(self.inner.state())
   }
@@ -589,16 +570,21 @@ impl JsContract {
     )
   }
 
-  #[napi]
-  pub fn with_address(
-    &mut self,
-    #[napi(ts_arg_type = "`0x${string}` | null | undefined")] address: Option<String>,
-  ) -> napi::Result<Self> {
+  #[napi(
+    ts_generic_types = "State extends ContractState, NextAddress extends `0x${string}` | null | undefined = `0x${string}` | null | undefined",
+    ts_args_type = "this: Contract & { readonly __state?: State }, address?: NextAddress",
+    ts_return_type = "Contract & { readonly __state?: (State extends ContractState ? (NextAddress extends undefined ? Omit<State, 'address'> & { address?: State['address'] } : Omit<State, 'address'> & { address: Exclude<NextAddress, undefined> }) : never) }"
+  )]
+  pub fn with_address(&mut self, address: Option<String>) -> napi::Result<Self> {
     self.inner.with_address(address);
     Ok(self.clone())
   }
 
-  #[napi]
+  #[napi(
+    ts_generic_types = "State extends ContractState, NextBytecode extends Buffer | null | undefined = Buffer | null | undefined",
+    ts_args_type = "this: Contract & { readonly __state?: State }, bytecode?: NextBytecode",
+    ts_return_type = "Contract & { readonly __state?: (State extends ContractState ? (NextBytecode extends undefined ? Omit<State, 'creationBytecode'> & { creationBytecode?: State['creationBytecode'] } : NextBytecode extends null ? Omit<State, 'creationBytecode'> & { creationBytecode: null } : Omit<State, 'creationBytecode'> & { creationBytecode: ContractBytecode }) : never) }"
+  )]
   pub fn with_creation_bytecode(&mut self, bytecode: Option<Buffer>) -> napi::Result<Self> {
     self
       .inner
@@ -606,7 +592,11 @@ impl JsContract {
     Ok(self.clone())
   }
 
-  #[napi]
+  #[napi(
+    ts_generic_types = "State extends ContractState, NextBytecode extends Buffer | null | undefined = Buffer | null | undefined",
+    ts_args_type = "this: Contract & { readonly __state?: State }, bytecode?: NextBytecode",
+    ts_return_type = "Contract & { readonly __state?: (State extends ContractState ? (NextBytecode extends undefined ? Omit<State, 'runtimeBytecode'> & { runtimeBytecode?: State['runtimeBytecode'] } : NextBytecode extends null ? Omit<State, 'runtimeBytecode'> & { runtimeBytecode: null } : Omit<State, 'runtimeBytecode'> & { runtimeBytecode: ContractBytecode }) : never) }"
+  )]
   pub fn with_runtime_bytecode(&mut self, bytecode: Option<Buffer>) -> napi::Result<Self> {
     self
       .inner
@@ -614,7 +604,11 @@ impl JsContract {
     Ok(self.clone())
   }
 
-  #[napi]
+  #[napi(
+    ts_generic_types = "State extends ContractState, NextBytecode extends Buffer | null | undefined = Buffer | null | undefined",
+    ts_args_type = "this: Contract & { readonly __state?: State }, bytecode?: NextBytecode",
+    ts_return_type = "Contract & { readonly __state?: (State extends ContractState ? (NextBytecode extends undefined ? Omit<State, 'deployedBytecode'> & { deployedBytecode?: State['deployedBytecode'] } : NextBytecode extends null ? Omit<State, 'deployedBytecode'> & { deployedBytecode: null } : Omit<State, 'deployedBytecode'> & { deployedBytecode: ContractBytecode }) : never) }"
+  )]
   pub fn with_deployed_bytecode(&mut self, bytecode: Option<Buffer>) -> napi::Result<Self> {
     self
       .inner
@@ -622,13 +616,21 @@ impl JsContract {
     Ok(self.clone())
   }
 
-  #[napi]
+  #[napi(
+    ts_generic_types = "State extends ContractState, Key extends string, Value = unknown",
+    ts_args_type = "this: Contract & { readonly __state?: State }, key: Key, value: Value",
+    ts_return_type = "Contract & { readonly __state?: (State extends ContractState ? Omit<State, 'extras'> & { extras: (State['extras'] extends Record<string, unknown> ? State['extras'] : {}) & Record<Key, Value> } : never) }"
+  )]
   pub fn with_extra(&mut self, key: String, value: Value) -> napi::Result<Self> {
     self.inner.with_extra(key, value);
     Ok(self.clone())
   }
 
-  #[napi]
+  #[napi(
+    ts_generic_types = "State extends ContractState",
+    ts_args_type = "this: Contract & { readonly __state?: State }",
+    ts_return_type = "State"
+  )]
   pub fn to_json(&self) -> JsContractState {
     self.into_json()
   }

@@ -14,6 +14,9 @@ export type SolcStorageLayout<T extends SolcStorageLayoutTypes = SolcStorageLayo
 	types: T
 }
 
+export type StorageLayout<T extends SolcStorageLayoutTypes = SolcStorageLayoutTypes> =
+	SolcStorageLayout<T>;
+
 /**
  * An item present in the contract's storage
  * @see [Solidity documentation](https://docs.soliditylang.org/en/latest/internals/layout_in_storage.html#json-output)

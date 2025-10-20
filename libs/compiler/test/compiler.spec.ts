@@ -110,10 +110,17 @@ const expectAbiShape = (abi: unknown) => {
   expect(Array.isArray(abi)).toBe(true);
 };
 
-const flattenContracts = (output: {
-  artifacts: Record<string, { contracts: Record<string, any> }>;
-  artifact?: { contracts: Record<string, any> };
-}) => {
+type SourceArtifactsView = {
+  sourcePath?: string | null;
+  contracts?: Record<string, { name?: string }>;
+};
+
+type ArtifactCarrier = {
+  artifact?: SourceArtifactsView;
+  artifacts?: Record<string, SourceArtifactsView | undefined>;
+};
+
+const flattenContracts = (output: ArtifactCarrier) => {
   const seen = new Set<string>();
   const flattened: any[] = [];
 
@@ -136,6 +143,7 @@ const flattenContracts = (output: {
   for (const [sourceName, sourceArtifacts] of Object.entries(
     output.artifacts ?? {}
   )) {
+    if (!sourceArtifacts) continue;
     const resolvedSource =
       sourceArtifacts.sourcePath ??
       (sourceArtifacts as any).source_path ??
@@ -154,15 +162,11 @@ const flattenContracts = (output: {
   return flattened;
 };
 
-const contractNames = (output: {
-  artifacts: Record<string, { contracts: Record<string, any> }>;
-  artifact?: { contracts: Record<string, any> };
-}) => flattenContracts(output).map((contract) => contract.name);
+const contractNames = (output: ArtifactCarrier) =>
+  flattenContracts(output).map((contract) => contract.name);
 
-const firstContract = (output: {
-  artifacts: Record<string, { contracts: Record<string, any> }>;
-  artifact?: { contracts: Record<string, any> };
-}) => flattenContracts(output)[0];
+const firstContract = (output: ArtifactCarrier) =>
+  flattenContracts(output)[0];
 
 let altVersionInstalled = false;
 
@@ -316,7 +320,7 @@ describe("Compiler constructor", () => {
     const third = compiler.compileSource(INLINE_SOURCE);
 
     expect(flattenContracts(first)).toHaveLength(1);
-    expect(second.hasCompilerErrors).toBe(false);
+    expect(second.hasCompilerErrors()).toBe(false);
     expect(flattenContracts(second)).toHaveLength(1);
     expect(flattenContracts(third)).toHaveLength(1);
   });
@@ -325,7 +329,7 @@ describe("Compiler constructor", () => {
     const compiler = new Compiler({ solcVersion: DEFAULT_SOLC_VERSION });
     if (!altVersionInstalled) {
       const baseline = compiler.compileSource(INLINE_SOURCE);
-      expect(baseline.hasCompilerErrors).toBe(false);
+      expect(baseline.hasCompilerErrors()).toBe(false);
       return;
     }
     const baseline = compiler.compileSource(INLINE_SOURCE);
@@ -334,9 +338,9 @@ describe("Compiler constructor", () => {
     });
     const after = compiler.compileSource(INLINE_SOURCE);
 
-    expect(baseline.hasCompilerErrors).toBe(false);
-    expect(alt.hasCompilerErrors).toBe(false);
-    expect(after.hasCompilerErrors).toBe(false);
+    expect(baseline.hasCompilerErrors()).toBe(false);
+    expect(alt.hasCompilerErrors()).toBe(false);
+    expect(after.hasCompilerErrors()).toBe(false);
   });
 
   test("per-call overrides referencing missing solc versions throw and keep state intact", () => {
@@ -347,7 +351,7 @@ describe("Compiler constructor", () => {
       `"Solc 999.0.0 is not installed. Call installSolcVersion first."`
     );
     const result = compiler.compileSource(INLINE_SOURCE);
-    expect(result.hasCompilerErrors).toBe(false);
+    expect(result.hasCompilerErrors()).toBe(false);
   });
 });
 
@@ -356,8 +360,8 @@ describe("Compiler.compileSource with Solidity strings", () => {
     const compiler = new Compiler();
     const output = compiler.compileSource(INLINE_SOURCE);
 
-    expect(output.hasCompilerErrors).toBe(false);
-    expect(output.errors).toHaveLength(0);
+    expect(output.hasCompilerErrors()).toBe(false);
+    expect(output.errors).toBeUndefined();
     expect(flattenContracts(output)).toHaveLength(1);
 
     const [artifact] = flattenContracts(output);
@@ -377,24 +381,27 @@ describe("Compiler.compileSource with Solidity strings", () => {
     const compiler = new Compiler();
     const output = compiler.compileSource(WARNING_SOURCE);
 
-    expect(output.hasCompilerErrors).toBe(false);
-    expect(output.errors.length).toBeGreaterThan(0);
-    const severities = new Set(output.errors.map((err) => err.severity));
+    expect(output.hasCompilerErrors()).toBe(false);
+    expect(output.errors).toBeUndefined();
+    const warnings = output.diagnostics.filter(
+      (diagnostic) => diagnostic.severity === SeverityLevel.Warning
+    );
+    expect(warnings.length).toBeGreaterThan(0);
+    const severities = new Set(output.diagnostics.map((err) => err.severity));
     expect(severities.has(SeverityLevel.Warning)).toBe(true);
-    const levels = new Set(output.errors.map((err) => err.severityLevel));
-    expect(levels.has("warning")).toBe(true);
   });
 
   test("surfaces syntax errors without throwing", () => {
     const compiler = new Compiler();
     const output = compiler.compileSource(BROKEN_SOURCE);
 
-    expect(output.hasCompilerErrors).toBe(true);
-    expect(output.errors.length).toBeGreaterThan(0);
-    const error = output.errors[0];
+    expect(output.hasCompilerErrors()).toBe(true);
+    expect(output.errors).toBeDefined();
+    const errors = output.errors ?? [];
+    expect(errors.length).toBeGreaterThan(0);
+    const error = errors[0];
     expect(error.message).toMatch(/expected ';'/i);
     expect(error.severity).toBe(SeverityLevel.Error);
-    expect(error.severityLevel).toBe("error");
   });
 
   test("supports stopAfter parsing while keeping diagnostics", () => {
@@ -403,8 +410,9 @@ describe("Compiler.compileSource with Solidity strings", () => {
       solcSettings: { stopAfter: "parsing" },
     });
     expect(flattenContracts(parsingOnly)).toHaveLength(0);
-    expect(parsingOnly.hasCompilerErrors).toBe(true);
-    expect(parsingOnly.errors[0]?.message).toMatchInlineSnapshot(
+    expect(parsingOnly.hasCompilerErrors()).toBe(true);
+    expect(parsingOnly.errors).toBeDefined();
+    expect(parsingOnly.errors?.[0]?.message).toMatchInlineSnapshot(
       `"Requested output selection conflicts with "settings.stopAfter"."`
     );
 
@@ -419,7 +427,7 @@ describe("Compiler.compileSource with Solidity strings", () => {
       },
     });
     expect(flattenContracts(parsingOnlyCorrect)).toHaveLength(0);
-    expect(parsingOnlyCorrect.hasCompilerErrors).toBe(false);
+    expect(parsingOnlyCorrect.hasCompilerErrors()).toBe(false);
     expect(parsingOnlyCorrect.artifact?.ast).toBeDefined();
     expect(parsingOnlyCorrect.artifact?.contracts).toBeDefined();
     expect(Object.keys(parsingOnlyCorrect.artifact?.contracts ?? {})).toHaveLength(0);
@@ -459,8 +467,9 @@ describe("Compiler.compileSource with Solidity strings", () => {
     });
 
     expect(flattenContracts(output)).toHaveLength(0);
-    expect(output.hasCompilerErrors).toBe(true);
-    expect(output.errors.length).toBeGreaterThan(0);
+    expect(output.hasCompilerErrors()).toBe(true);
+    expect(output.errors).toBeDefined();
+    expect((output.errors ?? []).length).toBeGreaterThan(0);
   });
 
   test("respects per-call optimizer overrides", () => {
@@ -479,7 +488,7 @@ describe("Compiler.compileSource with Solidity strings", () => {
 
     expect(flattenContracts(withoutOptimizer)).toHaveLength(1);
     expect(flattenContracts(withOptimizer)).toHaveLength(1);
-    expect(withOptimizer.errors).toHaveLength(0);
+    expect(withOptimizer.errors).toBeUndefined();
   });
 
   test("allows metadata and evm version overrides", () => {
@@ -490,7 +499,7 @@ describe("Compiler.compileSource with Solidity strings", () => {
         evmVersion: EvmVersion.London,
       },
     });
-    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.hasCompilerErrors()).toBe(false);
     expect(flattenContracts(output)).toHaveLength(1);
   });
 
@@ -513,8 +522,8 @@ describe("Compiler.compileSource with Solidity strings", () => {
       ),
     ]);
 
-    expect(a.hasCompilerErrors).toBe(false);
-    expect(b.hasCompilerErrors).toBe(false);
+    expect(a.hasCompilerErrors()).toBe(false);
+    expect(b.hasCompilerErrors()).toBe(false);
   });
 });
 
@@ -523,7 +532,7 @@ describe("Compiler.compileSource with AST and Yul inputs", () => {
     const ast = createAst().fromSource(INLINE_SOURCE).ast();
     const compiler = new Compiler();
     const output = compiler.compileSource(ast);
-    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.hasCompilerErrors()).toBe(false);
     expect(firstContract(output).name).toBe("InlineExample");
   });
 
@@ -531,7 +540,8 @@ describe("Compiler.compileSource with AST and Yul inputs", () => {
     const compiler = new Compiler();
     const output = compiler.compileSource(deepClone(EMPTY_SOURCE_UNIT));
     expect(flattenContracts(output)).toHaveLength(0);
-    expect(Array.isArray(output.errors)).toBe(true);
+    expect(output.errors).toBeUndefined();
+    expect(Array.isArray(output.diagnostics)).toBe(true);
   });
 
   test("compiles sanitized AST after instrumentation", () => {
@@ -543,7 +553,7 @@ describe("Compiler.compileSource with AST and Yul inputs", () => {
 
     const compiler = new Compiler();
     const output = compiler.compileSource(instrumented);
-    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.hasCompilerErrors()).toBe(false);
     expect(firstContract(output).name).toBe("InlineExample");
   });
 
@@ -553,7 +563,7 @@ describe("Compiler.compileSource with AST and Yul inputs", () => {
     const output = compiler.compileSource(ast, {
       solcLanguage: SolcLanguage.Yul,
     });
-    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.hasCompilerErrors()).toBe(false);
   });
 
   test("compiles Yul sources when requested", () => {
@@ -561,7 +571,7 @@ describe("Compiler.compileSource with AST and Yul inputs", () => {
     const output = compiler.compileSource(YUL_SOURCE, {
       solcLanguage: SolcLanguage.Yul,
     });
-    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.hasCompilerErrors()).toBe(false);
     expect(flattenContracts(output)).toHaveLength(1);
     const compiled = firstContract(output);
     expectBytecodeShape(compiled.creationBytecode ?? compiled.bytecode);
@@ -591,7 +601,7 @@ describe("Compiler.compileSources", () => {
       { solcLanguage: SolcLanguage.Yul }
     );
 
-    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.hasCompilerErrors()).toBe(false);
     expect(flattenContracts(output)).toHaveLength(1);
   });
 
@@ -600,7 +610,7 @@ describe("Compiler.compileSources", () => {
     const compiler = new Compiler();
     const output = compiler.compileSources({ "InlineExample.sol": ast });
 
-    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.hasCompilerErrors()).toBe(false);
     expect(firstContract(output).name).toBe("InlineExample");
   });
 
@@ -637,7 +647,7 @@ describe("Compiler.compileFiles", () => {
       solcLanguage: SolcLanguage.Yul,
     });
 
-    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.hasCompilerErrors()).toBe(false);
     expect(flattenContracts(output)).toHaveLength(1);
   });
 
@@ -659,7 +669,7 @@ describe("Compiler.compileFiles", () => {
     const compiler = createCompiler();
     const output = compiler.compileFiles([astPath]);
 
-    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.hasCompilerErrors()).toBe(false);
     expect(firstContract(output).name).toBe("InlineExample");
   });
 
@@ -716,7 +726,7 @@ describe("Compiler.compileFiles", () => {
     });
     const output = compiler.compileFiles([INLINE_PATH]);
 
-    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.hasCompilerErrors()).toBe(false);
     expect(firstContract(output).name).toBe("InlineExample");
   });
 

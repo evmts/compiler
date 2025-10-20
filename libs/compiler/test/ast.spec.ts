@@ -373,14 +373,15 @@ describe("integration with Compiler", () => {
     const ast = instrumented.ast();
     const output = sharedCompiler.compileSource(ast);
 
-    expect(output.hasCompilerErrors).toBe(false);
+    expect(output.hasCompilerErrors()).toBe(false);
     expect(collectContracts(output)[0]?.contractName).toBe("InlineExample");
   });
 
   test("handles ast inputs without contracts gracefully", () => {
     const output = sharedCompiler.compileSource(clone(EMPTY_SOURCE_UNIT));
     expect(collectContracts(output)).toHaveLength(0);
-    expect(Array.isArray(output.errors)).toBe(true);
+    expect(output.errors).toBeUndefined();
+    expect(Array.isArray(output.diagnostics)).toBe(true);
   });
 
   test("ast() returns sanitized json without null entries", () => {

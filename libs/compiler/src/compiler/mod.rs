@@ -260,7 +260,10 @@ impl JsCompiler {
     Ok(Self::from_compiler(compiler))
   }
 
-  #[napi(ts_args_type = "target: string | object, options?: CompilerConfigOptions | undefined")]
+  #[napi(
+    ts_args_type = "target: string | object, options?: CompilerConfigOptions | undefined",
+    ts_return_type = "CompileOutput<true, undefined> | CompileOutput<false, undefined>"
+  )]
   pub fn compile_source(
     &self,
     env: Env,
@@ -279,7 +282,9 @@ impl JsCompiler {
   }
 
   #[napi(
-    ts_args_type = "sources: Record<string, string | object>, options?: CompilerConfigOptions | undefined"
+    ts_generic_types = "TSources extends Record<string, string | object> = Record<string, string | object>",
+    ts_args_type = "sources: TSources, options?: CompilerConfigOptions | undefined",
+    ts_return_type = "CompileOutput<true, Extract<keyof TSources, string>[]> | CompileOutput<false, Extract<keyof TSources, string>[]>"
   )]
   pub fn compile_sources(
     &self,
@@ -298,7 +303,11 @@ impl JsCompiler {
     Ok(into_js_compile_output(output))
   }
 
-  #[napi(ts_args_type = "paths: string[], options?: CompilerConfigOptions | undefined")]
+  #[napi(
+    ts_generic_types = "TFilePaths extends readonly string[] = readonly string[]",
+    ts_args_type = "paths: TFilePaths, options?: CompilerConfigOptions | undefined",
+    ts_return_type = "CompileOutput<true, TFilePaths> | CompileOutput<false, TFilePaths>"
+  )]
   pub fn compile_files(
     &self,
     env: Env,
@@ -320,7 +329,10 @@ impl JsCompiler {
     Ok(into_js_compile_output(output))
   }
 
-  #[napi(ts_args_type = "options?: CompilerConfigOptions | undefined")]
+  #[napi(
+    ts_args_type = "options?: CompilerConfigOptions | undefined",
+    ts_return_type = "CompileOutput<true, string[]> | CompileOutput<false, string[]>"
+  )]
   pub fn compile_project(
     &self,
     env: Env,
@@ -336,7 +348,10 @@ impl JsCompiler {
     Ok(into_js_compile_output(output))
   }
 
-  #[napi(ts_args_type = "contractName: string, options?: CompilerConfigOptions | undefined")]
+  #[napi(
+    ts_args_type = "contractName: string, options?: CompilerConfigOptions | undefined",
+    ts_return_type = "CompileOutput<true, undefined> | CompileOutput<false, undefined>"
+  )]
   pub fn compile_contract(
     &self,
     env: Env,

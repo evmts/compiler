@@ -4,5 +4,6 @@
   "rust-analyzer.cargo.buildScripts.enable": true,
   "rust-analyzer.procMacro.ignored": {
     "napi-derive": ["napi"]
-  }
+  },
+  "typescript.tsdk": "node_modules/typescript/lib"
 }

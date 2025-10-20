@@ -178,13 +178,13 @@ pub struct JsCompilerSettingsOptions {
   #[napi(ts_type = "`${string}=${string}`[] | undefined")]
   pub remappings: Option<Vec<String>>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  #[napi(ts_type = "import('./index').OptimizerSettings | undefined")]
+  #[napi(ts_type = "OptimizerSettings | undefined")]
   pub optimizer: Option<JsOptimizerSettingsOptions>,
   #[serde(rename = "modelChecker", skip_serializing_if = "Option::is_none")]
-  #[napi(ts_type = "import('./index').ModelCheckerSettings | undefined")]
+  #[napi(ts_type = "ModelCheckerSettings | undefined")]
   pub model_checker: Option<JsModelCheckerSettingsOptions>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  #[napi(ts_type = "import('./index').SettingsMetadata | undefined")]
+  #[napi(ts_type = "SettingsMetadata | undefined")]
   pub metadata: Option<JsSettingsMetadataOptions>,
   #[serde(rename = "outputSelection", skip_serializing_if = "Option::is_none")]
   #[napi(ts_type = "import('./solc-settings').OutputSelection | undefined")]
@@ -194,7 +194,7 @@ pub struct JsCompilerSettingsOptions {
   #[serde(rename = "viaIR", skip_serializing_if = "Option::is_none")]
   pub via_ir: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  #[napi(ts_type = "import('./index').DebuggingSettings | undefined")]
+  #[napi(ts_type = "DebuggingSettings | undefined")]
   pub debug: Option<JsDebuggingSettingsOptions>,
   #[serde(skip_serializing_if = "Option::is_none")]
   #[napi(ts_type = "Record<string, Record<string, string>> | undefined")]
@@ -210,7 +210,7 @@ pub struct JsOptimizerSettingsOptions {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub runs: Option<u32>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  #[napi(ts_type = "import('./index').OptimizerDetails | undefined")]
+  #[napi(ts_type = "OptimizerDetails | undefined")]
   pub details: Option<JsOptimizerDetailsOptions>,
 }
 
@@ -235,7 +235,7 @@ pub struct JsOptimizerDetailsOptions {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub yul: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  #[napi(ts_type = "import('./index').YulDetails | undefined")]
+  #[napi(ts_type = "YulDetails | undefined")]
   pub yul_details: Option<JsYulDetailsOptions>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub simple_counter_for_loop_unchecked_increment: Option<bool>,

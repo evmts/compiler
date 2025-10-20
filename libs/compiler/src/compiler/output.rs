@@ -11,6 +11,7 @@ use foundry_compilers::artifacts::{
 use foundry_compilers::compilers::Compiler as FoundryCompiler;
 use foundry_compilers::solc::SolcCompiler;
 use foundry_compilers::ProjectCompileOutput;
+use napi::{Env, JsUnknown};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -25,7 +26,7 @@ use crate::internal::errors::napi_error;
 // Shared error and location types
 // -----------------------------------------------------------------------------
 
-#[napi]
+#[napi(string_enum)]
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SeverityLevel {
   Error,
@@ -52,13 +53,12 @@ pub struct SecondarySourceLocation {
 
 #[napi(object)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CompilerError {
   pub message: String,
   pub formatted_message: Option<String>,
   pub component: String,
   pub severity: SeverityLevel,
-  #[napi(ts_type = "'error' | 'warning' | 'info'")]
-  pub severity_level: String,
   pub error_type: String,
   pub error_code: Option<i64>,
   pub source_location: Option<SourceLocation>,
@@ -93,7 +93,15 @@ pub struct CompileOutput {
   pub artifacts: BTreeMap<String, SourceArtifacts>,
   pub artifact: Option<SourceArtifacts>,
   pub errors: Vec<CompilerError>,
-  pub has_compiler_errors: bool,
+}
+
+impl CompileOutput {
+  pub fn has_compiler_errors(&self) -> bool {
+    self
+      .errors
+      .iter()
+      .any(|error| error.severity == SeverityLevel::Error)
+  }
 }
 
 pub fn into_core_compile_output(output: ProjectCompileOutput<SolcCompiler>) -> CompileOutput {
@@ -111,7 +119,6 @@ pub fn into_core_compile_output(output: ProjectCompileOutput<SolcCompiler>) -> C
       .iter()
       .map(to_core_compiler_error)
       .collect(),
-    has_compiler_errors: output.has_compiler_errors(),
     artifact,
     artifacts,
   }
@@ -119,7 +126,6 @@ pub fn into_core_compile_output(output: ProjectCompileOutput<SolcCompiler>) -> C
 
 pub fn from_standard_json(output: CompilerOutput) -> CompileOutput {
   let artifacts_json = serde_json::to_value(&output).unwrap_or(Value::Null);
-  let has_compiler_errors = output.has_error();
 
   let mut artifacts: BTreeMap<String, SourceArtifacts> = BTreeMap::new();
 
@@ -156,7 +162,6 @@ pub fn from_standard_json(output: CompilerOutput) -> CompileOutput {
     artifacts,
     artifact,
     errors: output.errors.iter().map(to_core_compiler_error).collect(),
-    has_compiler_errors,
   }
 }
 
@@ -190,11 +195,6 @@ fn to_core_compiler_error(error: &FoundryCompilerError) -> CompilerError {
     formatted_message: error.formatted_message.clone(),
     component: error.component.clone(),
     severity,
-    severity_level: match severity {
-      SeverityLevel::Error => "error".to_string(),
-      SeverityLevel::Warning => "warning".to_string(),
-      SeverityLevel::Info => "info".to_string(),
-    },
     error_type: error.r#type.clone(),
     error_code: error.error_code.map(|code| code as i64),
     source_location: error.source_location.as_ref().map(|loc| SourceLocation {
@@ -368,17 +368,17 @@ impl JsSourceArtifacts {
     }
   }
 
-  #[napi(getter, js_name = "sourcePath")]
+  #[napi(getter)]
   pub fn source_path(&self) -> Option<String> {
     self.source_path.clone()
   }
 
-  #[napi(getter, js_name = "sourceId")]
+  #[napi(getter)]
   pub fn source_id(&self) -> Option<u32> {
     self.source_id
   }
 
-  #[napi(getter, js_name = "solcVersion")]
+  #[napi(getter)]
   pub fn solc_version(&self) -> Option<String> {
     self
       .solc_version
@@ -386,20 +386,12 @@ impl JsSourceArtifacts {
       .map(|version| version.to_string())
   }
 
-  #[napi(
-    getter,
-    js_name = "astJson",
-    ts_return_type = "import('./solc-ast').SourceUnit | undefined"
-  )]
+  #[napi(getter, ts_return_type = "import('./solc-ast').SourceUnit | undefined")]
   pub fn ast_json(&self) -> Option<Value> {
     self.ast_json.clone()
   }
 
-  #[napi(
-    getter,
-    js_name = "ast",
-    ts_return_type = "import('./index').Ast | undefined"
-  )]
+  #[napi(getter, ts_return_type = "Ast | undefined")]
   pub fn ast(&self) -> napi::Result<Option<JsAst>> {
     let unit = match &self.ast_unit {
       Some(unit) => unit.clone(),
@@ -415,7 +407,7 @@ impl JsSourceArtifacts {
     Ok(Some(JsAst::from_ast(ast)))
   }
 
-  #[napi(getter, ts_return_type = "Record<string, import('./index').Contract>")]
+  #[napi(getter, ts_return_type = "Record<string, Contract>")]
   pub fn contracts(&self) -> HashMap<String, JsContract> {
     self
       .contracts
@@ -437,19 +429,26 @@ pub struct JsCompileOutput {
 
 impl JsCompileOutput {
   fn from_core(core: CompileOutput) -> Self {
-    let artifacts = core
-      .artifacts
+    let has_compiler_errors = core.has_compiler_errors();
+    let CompileOutput {
+      artifacts_json,
+      artifacts,
+      artifact,
+      errors,
+    } = core;
+
+    let artifacts = artifacts
       .into_iter()
       .map(|(path, artifacts)| (path, JsSourceArtifacts::from_core(artifacts)))
       .collect::<HashMap<_, _>>();
-    let artifact = core.artifact.map(JsSourceArtifacts::from_core);
+    let artifact = artifact.map(JsSourceArtifacts::from_core);
 
     Self {
-      artifacts_json: core.artifacts_json,
+      artifacts_json,
       artifacts,
       artifact,
-      errors: core.errors,
-      has_compiler_errors: core.has_compiler_errors,
+      errors,
+      has_compiler_errors,
     }
   }
 }
@@ -486,12 +485,24 @@ impl JsCompileOutput {
     self.artifact.clone()
   }
 
+  #[napi(getter, ts_return_type = "ReadonlyArray<CompilerError> | undefined")]
+  pub fn errors(&self, env: Env) -> napi::Result<JsUnknown> {
+    if self.has_compiler_errors() {
+      let value = env
+        .to_js_value(&self.errors)
+        .map_err(|err| napi_error(err.to_string()))?;
+      Ok(value)
+    } else {
+      Ok(env.get_undefined()?.into_unknown())
+    }
+  }
+
   #[napi(getter)]
-  pub fn errors(&self) -> Vec<CompilerError> {
+  pub fn diagnostics(&self) -> Vec<CompilerError> {
     self.errors.clone()
   }
 
-  #[napi(getter, js_name = "hasCompilerErrors")]
+  #[napi]
   pub fn has_compiler_errors(&self) -> bool {
     self.has_compiler_errors
   }
@@ -549,7 +560,7 @@ mod tests {
     let output: StandardCompilerOutput = serde_json::from_str(json).expect("compiler output");
     let core = from_standard_json(output);
 
-    assert!(core.has_compiler_errors);
+    assert!(core.has_compiler_errors());
     assert!(core.artifacts_json["contracts"]["Test.sol"]["Test"].is_object());
     let entry = core.artifacts.get("Test.sol").expect("source entry");
     assert!(entry.contracts.contains_key("Test"));
@@ -624,7 +635,6 @@ mod tests {
     assert_eq!(core.errors.len(), 1);
     let error = &core.errors[0];
     assert_eq!(error.severity, SeverityLevel::Warning);
-    assert_eq!(error.severity_level, "warning");
     assert_eq!(error.error_code, Some(256));
   }
 
@@ -639,7 +649,6 @@ mod tests {
         formatted_message: None,
         component: "general".into(),
         severity: SeverityLevel::Error,
-        severity_level: "error".into(),
         error_type: "TypeError".into(),
         error_code: Some(1),
         source_location: Some(SourceLocation {
@@ -654,7 +663,6 @@ mod tests {
           message: Some("secondary".into()),
         }]),
       }],
-      has_compiler_errors: true,
     };
 
     let mut artifacts = SourceArtifacts::default();
@@ -669,9 +677,9 @@ mod tests {
       .get("Widget.sol")
       .and_then(|entry| entry.contracts.get("Widget"))
       .is_some());
-    assert!(js_output.has_compiler_errors);
+    assert!(js_output.has_compiler_errors());
     assert_eq!(js_output.errors.len(), 1);
-    assert_eq!(js_output.errors[0].severity_level, "error");
+    assert_eq!(js_output.errors[0].severity, SeverityLevel::Error);
     assert_eq!(
       js_output.errors[0]
         .source_location

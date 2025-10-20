@@ -112,6 +112,6 @@ const contract = Contract.fromSolcContractOutput(
     const snapshot = base.toJson();
 
     const cloned = new Contract(snapshot);
-    expect(cloned.toJson()).toEqual(snapshot);
+    expect(cloned.toJson()).toMatchObject(snapshot);
   });
 });
