@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 
 use foundry_compilers::artifacts::ast::SourceUnit;
 use foundry_compilers::artifacts::SolcLanguage as FoundrySolcLanguage;
-use hex;
 use napi::bindgen_prelude::*;
 use napi::{Env, JsObject, JsUnknown};
 use serde_json::Value;
@@ -14,6 +13,13 @@ use crate::internal::errors::{map_napi_error, napi_error, to_napi_result, Error,
 use crate::internal::path::ProjectPaths;
 use crate::internal::project::{default_cache_dir, synthetic_project_paths, ProjectContext};
 use crate::internal::solc;
+pub use core::{
+  compile_contract, compile_files, compile_project, compile_source, compile_sources, init,
+  init_from_foundry_root, init_from_hardhat_root, init_from_root, resolve_config, SourceTarget,
+  SourceValue, State,
+};
+pub use input::CompilationInput;
+use output::{into_js_compile_output, CompileOutput, JsCompileOutput};
 
 pub mod core;
 mod input;
@@ -22,17 +28,6 @@ mod project_runner;
 
 #[cfg(test)]
 mod compiler_tests;
-
-pub use core::{
-  compile_contract, compile_files, compile_project, compile_source, compile_sources, init,
-  init_from_foundry_root, init_from_hardhat_root, init_from_root, resolve_config, SourceTarget,
-  SourceValue, State,
-};
-pub use input::CompilationInput;
-use output::{
-  CompileOutput, CompilerError, ContractArtifact, ContractBytecode, CoreCompileOutput,
-  CoreCompilerError, CoreContractArtifact, CoreSourceLocation, SourceLocation,
-};
 
 #[derive(Clone)]
 pub struct Compiler {
@@ -87,7 +82,7 @@ impl Compiler {
     &self,
     target: SourceTarget,
     options: Option<CompilerConfigOptions>,
-  ) -> Result<CoreCompileOutput> {
+  ) -> Result<CompileOutput> {
     let config = self.resolve_call_config(options.as_ref())?;
     compile_source(&self.state, &config, target)
   }
@@ -96,7 +91,7 @@ impl Compiler {
     &self,
     sources: BTreeMap<String, SourceValue>,
     options: Option<CompilerConfigOptions>,
-  ) -> Result<CoreCompileOutput> {
+  ) -> Result<CompileOutput> {
     let config = self.resolve_call_config(options.as_ref())?;
     compile_sources(&self.state, &config, sources)
   }
@@ -105,7 +100,7 @@ impl Compiler {
     &self,
     paths: Vec<PathBuf>,
     options: Option<CompilerConfigOptions>,
-  ) -> Result<CoreCompileOutput> {
+  ) -> Result<CompileOutput> {
     if paths.is_empty() {
       return Err(Error::new("compileFiles requires at least one path."));
     }
@@ -114,10 +109,7 @@ impl Compiler {
     compile_files(&config, paths, language_override)
   }
 
-  pub fn compile_project(
-    &self,
-    options: Option<CompilerConfigOptions>,
-  ) -> Result<CoreCompileOutput> {
+  pub fn compile_project(&self, options: Option<CompilerConfigOptions>) -> Result<CompileOutput> {
     let config = self.resolve_call_config(options.as_ref())?;
     compile_project(&self.state, &config)
   }
@@ -126,7 +118,7 @@ impl Compiler {
     &self,
     contract_name: &str,
     options: Option<CompilerConfigOptions>,
-  ) -> Result<CoreCompileOutput> {
+  ) -> Result<CompileOutput> {
     let config = self.resolve_call_config(options.as_ref())?;
     compile_contract(&self.state, &config, contract_name)
   }
@@ -274,7 +266,7 @@ impl JsCompiler {
     env: Env,
     target: Either<String, JsObject>,
     options: Option<JsUnknown>,
-  ) -> napi::Result<CompileOutput> {
+  ) -> napi::Result<JsCompileOutput> {
     let parsed = parse_js_compiler_config(&env, options)?;
     let overrides = parsed
       .as_ref()
@@ -283,7 +275,7 @@ impl JsCompiler {
     let config = self.resolve_call_config(overrides.as_ref())?;
     let target = parse_source_target(&env, target)?;
     let output = to_napi_result(compile_source(&self.inner.state, &config, target))?;
-    Ok(map_compile_output(output))
+    Ok(into_js_compile_output(output))
   }
 
   #[napi(
@@ -294,7 +286,7 @@ impl JsCompiler {
     env: Env,
     sources: JsObject,
     options: Option<JsUnknown>,
-  ) -> napi::Result<CompileOutput> {
+  ) -> napi::Result<JsCompileOutput> {
     let parsed = parse_js_compiler_config(&env, options)?;
     let overrides = parsed
       .as_ref()
@@ -303,7 +295,7 @@ impl JsCompiler {
     let config = self.resolve_call_config(overrides.as_ref())?;
     let map = Self::parse_sources_object(&env, sources)?;
     let output = to_napi_result(compile_sources(&self.inner.state, &config, map))?;
-    Ok(map_compile_output(output))
+    Ok(into_js_compile_output(output))
   }
 
   #[napi(ts_args_type = "paths: string[], options?: CompilerConfigOptions | undefined")]
@@ -312,7 +304,7 @@ impl JsCompiler {
     env: Env,
     paths: Vec<String>,
     options: Option<JsUnknown>,
-  ) -> napi::Result<CompileOutput> {
+  ) -> napi::Result<JsCompileOutput> {
     if paths.is_empty() {
       return Err(napi_error("compileFiles requires at least one path."));
     }
@@ -325,7 +317,7 @@ impl JsCompiler {
     let language_override = language_override(overrides.as_ref());
     let path_bufs = paths.into_iter().map(PathBuf::from).collect();
     let output = to_napi_result(compile_files(&config, path_bufs, language_override))?;
-    Ok(map_compile_output(output))
+    Ok(into_js_compile_output(output))
   }
 
   #[napi(ts_args_type = "options?: CompilerConfigOptions | undefined")]
@@ -333,7 +325,7 @@ impl JsCompiler {
     &self,
     env: Env,
     options: Option<JsUnknown>,
-  ) -> napi::Result<CompileOutput> {
+  ) -> napi::Result<JsCompileOutput> {
     let parsed = parse_js_compiler_config(&env, options)?;
     let overrides = parsed
       .as_ref()
@@ -341,7 +333,7 @@ impl JsCompiler {
       .transpose()?;
     let config = self.resolve_call_config(overrides.as_ref())?;
     let output = to_napi_result(compile_project(&self.inner.state, &config))?;
-    Ok(map_compile_output(output))
+    Ok(into_js_compile_output(output))
   }
 
   #[napi(ts_args_type = "contractName: string, options?: CompilerConfigOptions | undefined")]
@@ -350,7 +342,7 @@ impl JsCompiler {
     env: Env,
     contract_name: String,
     options: Option<JsUnknown>,
-  ) -> napi::Result<CompileOutput> {
+  ) -> napi::Result<JsCompileOutput> {
     let parsed = parse_js_compiler_config(&env, options)?;
     let overrides = parsed
       .as_ref()
@@ -358,7 +350,7 @@ impl JsCompiler {
       .transpose()?;
     let config = self.resolve_call_config(overrides.as_ref())?;
     let output = to_napi_result(compile_contract(&self.inner.state, &config, &contract_name))?;
-    Ok(map_compile_output(output))
+    Ok(into_js_compile_output(output))
   }
 
   #[napi]
@@ -421,65 +413,6 @@ fn parse_source_target(env: &Env, target: Either<String, JsObject>) -> napi::Res
   }
 }
 
-fn map_compile_output(output: CoreCompileOutput) -> CompileOutput {
-  let artifacts = output
-    .artifacts
-    .into_iter()
-    .map(map_contract_artifact)
-    .collect();
-  let errors = output.errors.into_iter().map(map_compiler_error).collect();
-  CompileOutput {
-    artifacts,
-    errors,
-    has_compiler_errors: output.has_compiler_errors,
-  }
-}
-
 fn language_override(overrides: Option<&CompilerConfigOptions>) -> Option<FoundrySolcLanguage> {
   overrides.and_then(|opts| opts.solc.language)
-}
-
-fn map_contract_artifact(artifact: CoreContractArtifact) -> ContractArtifact {
-  let CoreContractArtifact {
-    contract_name,
-    abi,
-    bytecode,
-    deployed_bytecode,
-  } = artifact;
-
-  let abi_json = abi.as_ref().and_then(|abi| serde_json::to_string(abi).ok());
-
-  let bytecode = bytecode.map(make_bytecode);
-  let deployed_bytecode = deployed_bytecode.map(make_bytecode);
-
-  ContractArtifact {
-    contract_name,
-    abi,
-    abi_json,
-    bytecode,
-    deployed_bytecode,
-  }
-}
-
-fn make_bytecode(bytes: Vec<u8>) -> ContractBytecode {
-  ContractBytecode {
-    hex: Some(format!("0x{}", hex::encode(&bytes))),
-    bytes: Some(bytes),
-  }
-}
-
-fn map_compiler_error(error: CoreCompilerError) -> CompilerError {
-  CompilerError {
-    message: error.message,
-    severity: error.severity,
-    source_location: error.source_location.map(map_source_location),
-  }
-}
-
-fn map_source_location(location: CoreSourceLocation) -> SourceLocation {
-  SourceLocation {
-    file: location.file,
-    start: location.start,
-    end: location.end,
-  }
 }

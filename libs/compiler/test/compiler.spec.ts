@@ -17,6 +17,7 @@ import {
   EvmVersion,
   ModelCheckerEngine,
   RevertStrings,
+  SeverityLevel,
   SolcLanguage,
 } from "../build/index.js";
 import type { OutputSelection } from "../build/solc-settings.js";
@@ -105,11 +106,63 @@ const expectBytecodeShape = (bytecode?: BytecodeView) => {
   }
 };
 
-const expectAbiShape = (abi: unknown, abiJson?: string | null) => {
+const expectAbiShape = (abi: unknown) => {
   expect(Array.isArray(abi)).toBe(true);
-  expect(typeof abiJson === "string").toBe(true);
-  expect(abiJson && abiJson.startsWith("[")).toBe(true);
 };
+
+const flattenContracts = (output: {
+  artifacts: Record<string, { contracts: Record<string, any> }>;
+  artifact?: { contracts: Record<string, any> };
+}) => {
+  const seen = new Set<string>();
+  const flattened: any[] = [];
+
+  if (output.artifact) {
+    const sourceName =
+      output.artifact.sourcePath ??
+      (output.artifact as any).source_path ??
+      "__virtual__";
+    for (const [contractName, contract] of Object.entries(
+      output.artifact.contracts ?? {}
+    )) {
+      const name = (contract as any)?.name ?? contractName;
+      const key = `${sourceName}:${name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      flattened.push(contract);
+    }
+  }
+
+  for (const [sourceName, sourceArtifacts] of Object.entries(
+    output.artifacts ?? {}
+  )) {
+    const resolvedSource =
+      sourceArtifacts.sourcePath ??
+      (sourceArtifacts as any).source_path ??
+      sourceName;
+    for (const [contractName, contract] of Object.entries(
+      sourceArtifacts.contracts ?? {}
+    )) {
+      const name = (contract as any)?.name ?? contractName;
+      const key = `${resolvedSource}:${name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      flattened.push(contract);
+    }
+  }
+
+  return flattened;
+};
+
+const contractNames = (output: {
+  artifacts: Record<string, { contracts: Record<string, any> }>;
+  artifact?: { contracts: Record<string, any> };
+}) => flattenContracts(output).map((contract) => contract.name);
+
+const firstContract = (output: {
+  artifacts: Record<string, { contracts: Record<string, any> }>;
+  artifact?: { contracts: Record<string, any> };
+}) => flattenContracts(output)[0];
 
 let altVersionInstalled = false;
 
@@ -245,8 +298,8 @@ describe("Compiler constructor", () => {
     const first = compiler.compileSource(INLINE_SOURCE);
     const second = compiler.compileSource(INLINE_SOURCE);
 
-    expect(first.artifacts).toHaveLength(1);
-    expect(second.artifacts).toHaveLength(1);
+    expect(flattenContracts(first)).toHaveLength(1);
+    expect(flattenContracts(second)).toHaveLength(1);
   });
 
   test("per-call overrides leaving outputSelection empty are sanitized", () => {
@@ -262,10 +315,10 @@ describe("Compiler constructor", () => {
     });
     const third = compiler.compileSource(INLINE_SOURCE);
 
-    expect(first.artifacts).toHaveLength(1);
+    expect(flattenContracts(first)).toHaveLength(1);
     expect(second.hasCompilerErrors).toBe(false);
-    expect(second.artifacts).toHaveLength(1);
-    expect(third.artifacts).toHaveLength(1);
+    expect(flattenContracts(second)).toHaveLength(1);
+    expect(flattenContracts(third)).toHaveLength(1);
   });
 
   test("per-call solc version overrides do not leak into subsequent compiles", () => {
@@ -305,13 +358,19 @@ describe("Compiler.compileSource with Solidity strings", () => {
 
     expect(output.hasCompilerErrors).toBe(false);
     expect(output.errors).toHaveLength(0);
-    expect(output.artifacts).toHaveLength(1);
+    expect(flattenContracts(output)).toHaveLength(1);
 
-    const artifact = output.artifacts[0];
-    expect(artifact.contractName).toBe("InlineExample");
-    expectBytecodeShape(artifact.bytecode);
-    expectBytecodeShape(artifact.deployedBytecode);
-    expectAbiShape(artifact.abi, artifact.abiJson);
+    const [artifact] = flattenContracts(output);
+    expect(artifact.name).toBe("InlineExample");
+    expectBytecodeShape(artifact.creationBytecode);
+    expectBytecodeShape(artifact.runtimeBytecode ?? artifact.deployedBytecode);
+    expectAbiShape(artifact.abi);
+    if (artifact.methodIdentifiers) {
+      expect(typeof artifact.methodIdentifiers).toBe("object");
+    }
+    if (artifact.immutableReferences) {
+      expect(typeof artifact.immutableReferences).toBe("object");
+    }
   });
 
   test("produces warnings without marking compilation as failed", () => {
@@ -321,7 +380,9 @@ describe("Compiler.compileSource with Solidity strings", () => {
     expect(output.hasCompilerErrors).toBe(false);
     expect(output.errors.length).toBeGreaterThan(0);
     const severities = new Set(output.errors.map((err) => err.severity));
-    expect(severities.has("Warning")).toBe(true);
+    expect(severities.has(SeverityLevel.Warning)).toBe(true);
+    const levels = new Set(output.errors.map((err) => err.severityLevel));
+    expect(levels.has("warning")).toBe(true);
   });
 
   test("surfaces syntax errors without throwing", () => {
@@ -332,7 +393,8 @@ describe("Compiler.compileSource with Solidity strings", () => {
     expect(output.errors.length).toBeGreaterThan(0);
     const error = output.errors[0];
     expect(error.message).toMatch(/expected ';'/i);
-    expect(error.severity).toBe("Error");
+    expect(error.severity).toBe(SeverityLevel.Error);
+    expect(error.severityLevel).toBe("error");
   });
 
   test("supports stopAfter parsing while keeping diagnostics", () => {
@@ -340,7 +402,7 @@ describe("Compiler.compileSource with Solidity strings", () => {
     const parsingOnly = compiler.compileSource(BROKEN_SOURCE, {
       solcSettings: { stopAfter: "parsing" },
     });
-    expect(parsingOnly.artifacts).toHaveLength(0);
+    expect(flattenContracts(parsingOnly)).toHaveLength(0);
     expect(parsingOnly.hasCompilerErrors).toBe(true);
     expect(parsingOnly.errors[0]?.message).toMatchInlineSnapshot(
       `"Requested output selection conflicts with "settings.stopAfter"."`
@@ -356,10 +418,11 @@ describe("Compiler.compileSource with Solidity strings", () => {
         },
       },
     });
-    console.log(parsingOnlyCorrect);
-    expect(parsingOnlyCorrect.artifacts).toHaveLength(1);
+    expect(flattenContracts(parsingOnlyCorrect)).toHaveLength(0);
     expect(parsingOnlyCorrect.hasCompilerErrors).toBe(false);
-    expect(parsingOnlyCorrect.artifacts[0].contractName).toBe("InlineExample");
+    expect(parsingOnlyCorrect.artifact?.ast).toBeDefined();
+    expect(parsingOnlyCorrect.artifact?.contracts).toBeDefined();
+    expect(Object.keys(parsingOnlyCorrect.artifact?.contracts ?? {})).toHaveLength(0);
   });
 
   test("accepts complete solcSettings payload", () => {
@@ -395,7 +458,7 @@ describe("Compiler.compileSource with Solidity strings", () => {
       solcSettings: settings,
     });
 
-    expect(output.artifacts).toHaveLength(0);
+    expect(flattenContracts(output)).toHaveLength(0);
     expect(output.hasCompilerErrors).toBe(true);
     expect(output.errors.length).toBeGreaterThan(0);
   });
@@ -414,8 +477,8 @@ describe("Compiler.compileSource with Solidity strings", () => {
       },
     });
 
-    expect(withoutOptimizer.artifacts).toHaveLength(1);
-    expect(withOptimizer.artifacts).toHaveLength(1);
+    expect(flattenContracts(withoutOptimizer)).toHaveLength(1);
+    expect(flattenContracts(withOptimizer)).toHaveLength(1);
     expect(withOptimizer.errors).toHaveLength(0);
   });
 
@@ -428,14 +491,14 @@ describe("Compiler.compileSource with Solidity strings", () => {
       },
     });
     expect(output.hasCompilerErrors).toBe(false);
-    expect(output.artifacts).toHaveLength(1);
+    expect(flattenContracts(output)).toHaveLength(1);
   });
 
   test("compiles multiple contracts in a single source", () => {
     const compiler = new Compiler();
     const output = compiler.compileSource(MULTI_CONTRACT_SOURCE);
 
-    const names = output.artifacts.map((artifact) => artifact.contractName);
+    const names = contractNames(output);
     expect(names).toEqual(
       expect.arrayContaining(["First", "Second", "Target"])
     );
@@ -461,13 +524,13 @@ describe("Compiler.compileSource with AST and Yul inputs", () => {
     const compiler = new Compiler();
     const output = compiler.compileSource(ast);
     expect(output.hasCompilerErrors).toBe(false);
-    expect(output.artifacts[0].contractName).toBe("InlineExample");
+    expect(firstContract(output).name).toBe("InlineExample");
   });
 
   test("returns diagnostics when AST lacks contract definitions", () => {
     const compiler = new Compiler();
     const output = compiler.compileSource(deepClone(EMPTY_SOURCE_UNIT));
-    expect(output.artifacts).toHaveLength(0);
+    expect(flattenContracts(output)).toHaveLength(0);
     expect(Array.isArray(output.errors)).toBe(true);
   });
 
@@ -481,7 +544,7 @@ describe("Compiler.compileSource with AST and Yul inputs", () => {
     const compiler = new Compiler();
     const output = compiler.compileSource(instrumented);
     expect(output.hasCompilerErrors).toBe(false);
-    expect(output.artifacts[0].contractName).toBe("InlineExample");
+    expect(firstContract(output).name).toBe("InlineExample");
   });
 
   test("ignores unsupported solc languages for AST sources", () => {
@@ -499,8 +562,9 @@ describe("Compiler.compileSource with AST and Yul inputs", () => {
       solcLanguage: SolcLanguage.Yul,
     });
     expect(output.hasCompilerErrors).toBe(false);
-    expect(output.artifacts).toHaveLength(1);
-    expectBytecodeShape(output.artifacts[0].bytecode);
+    expect(flattenContracts(output)).toHaveLength(1);
+    const compiled = firstContract(output);
+    expectBytecodeShape(compiled.creationBytecode ?? compiled.bytecode);
   });
 });
 
@@ -512,7 +576,7 @@ describe("Compiler.compileSources", () => {
       "WarningContract.sol": WARNING_SOURCE,
     });
 
-    const names = output.artifacts.map((artifact) => artifact.contractName);
+    const names = contractNames(output);
     expect(names).toEqual(
       expect.arrayContaining(["InlineExample", "WarningContract"])
     );
@@ -528,7 +592,7 @@ describe("Compiler.compileSources", () => {
     );
 
     expect(output.hasCompilerErrors).toBe(false);
-    expect(output.artifacts).toHaveLength(1);
+    expect(flattenContracts(output)).toHaveLength(1);
   });
 
   test("compiles AST entries keyed by path", () => {
@@ -537,7 +601,7 @@ describe("Compiler.compileSources", () => {
     const output = compiler.compileSources({ "InlineExample.sol": ast });
 
     expect(output.hasCompilerErrors).toBe(false);
-    expect(output.artifacts[0].contractName).toBe("InlineExample");
+    expect(firstContract(output).name).toBe("InlineExample");
   });
 
   test("rejects mixing ast and source strings", () => {
@@ -561,7 +625,7 @@ describe("Compiler.compileFiles", () => {
     const compiler = createCompiler();
     const output = compiler.compileFiles([INLINE_PATH, WARNING_PATH]);
 
-    const names = output.artifacts.map((artifact) => artifact.contractName);
+    const names = contractNames(output);
     expect(names).toEqual(
       expect.arrayContaining(["InlineExample", "WarningContract"])
     );
@@ -574,7 +638,7 @@ describe("Compiler.compileFiles", () => {
     });
 
     expect(output.hasCompilerErrors).toBe(false);
-    expect(output.artifacts).toHaveLength(1);
+    expect(flattenContracts(output)).toHaveLength(1);
   });
 
   test("throws when a path cannot be read", () => {
@@ -596,7 +660,7 @@ describe("Compiler.compileFiles", () => {
     const output = compiler.compileFiles([astPath]);
 
     expect(output.hasCompilerErrors).toBe(false);
-    expect(output.artifacts[0].contractName).toBe("InlineExample");
+    expect(firstContract(output).name).toBe("InlineExample");
   });
 
   test("compiles ast files with unrecognized extensions", () => {
@@ -608,7 +672,7 @@ describe("Compiler.compileFiles", () => {
     const compiler = createCompiler();
     const output = compiler.compileFiles([astPath]);
 
-    expect(output.artifacts[0].contractName).toBe("InlineExample");
+    expect(firstContract(output).name).toBe("InlineExample");
   });
 
   test("errors when mixing ast and source inputs", () => {
@@ -653,7 +717,7 @@ describe("Compiler.compileFiles", () => {
     const output = compiler.compileFiles([INLINE_PATH]);
 
     expect(output.hasCompilerErrors).toBe(false);
-    expect(output.artifacts[0].contractName).toBe("InlineExample");
+    expect(firstContract(output).name).toBe("InlineExample");
   });
 
   test("rejects json files that are not objects", () => {

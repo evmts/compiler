@@ -29,9 +29,10 @@ contract Sample {
       .expect("compile inline");
     assert!(!output.artifacts.is_empty());
     assert!(output
-      .artifacts
-      .iter()
-      .any(|artifact| artifact.contract_name == "Sample"));
+      .artifact
+      .as_ref()
+      .and_then(|entry| entry.contracts.get("Sample"))
+      .is_some());
   }
 
   #[test]

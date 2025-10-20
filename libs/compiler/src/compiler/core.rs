@@ -10,7 +10,7 @@ use foundry_compilers::artifacts::{
 use serde_json::{json, Value};
 
 use super::input::CompilationInput;
-use super::output::{from_standard_json, CoreCompileOutput};
+use super::output::{from_standard_json, CompileOutput};
 use super::project_runner::ProjectRunner;
 use crate::ast::utils;
 use crate::internal::config::{CompilerConfig, CompilerConfigOptions, SolcConfig};
@@ -80,7 +80,7 @@ pub fn compile_source(
   state: &State,
   config: &CompilerConfig,
   target: SourceTarget,
-) -> Result<CoreCompileOutput> {
+) -> Result<CompileOutput> {
   let input = match target {
     SourceTarget::Text(source) => CompilationInput::InlineSource { source },
     SourceTarget::Ast(unit) => {
@@ -96,7 +96,7 @@ pub fn compile_sources(
   state: &State,
   config: &CompilerConfig,
   sources: BTreeMap<String, SourceValue>,
-) -> Result<CoreCompileOutput> {
+) -> Result<CompileOutput> {
   let input = compilation_input_from_values(sources)?;
   compile_as(state, config, input)
 }
@@ -105,7 +105,7 @@ pub fn compile_files(
   config: &CompilerConfig,
   paths: Vec<PathBuf>,
   language_override: Option<FoundrySolcLanguage>,
-) -> Result<CoreCompileOutput> {
+) -> Result<CompileOutput> {
   compile_file_paths(config, paths, language_override)
 }
 
@@ -113,7 +113,7 @@ pub fn compile_as(
   state: &State,
   config: &CompilerConfig,
   input: CompilationInput,
-) -> Result<CoreCompileOutput> {
+) -> Result<CompileOutput> {
   if let Some(context) = &state.project {
     let config_cow = if matches!(context.layout, ProjectLayout::Synthetic) {
       let mut clone = config.clone();
@@ -131,7 +131,7 @@ pub fn compile_as(
   compile_pure(config, input)
 }
 
-pub fn compile_project(state: &State, config: &CompilerConfig) -> Result<CoreCompileOutput> {
+pub fn compile_project(state: &State, config: &CompilerConfig) -> Result<CompileOutput> {
   let runner = project_runner(state)?;
   runner.compile_project(config)
 }
@@ -140,12 +140,12 @@ pub fn compile_contract(
   state: &State,
   config: &CompilerConfig,
   contract_name: &str,
-) -> Result<CoreCompileOutput> {
+) -> Result<CompileOutput> {
   let runner = project_runner(state)?;
   runner.compile_contract(config, contract_name)
 }
 
-fn compile_pure(config: &CompilerConfig, input: CompilationInput) -> Result<CoreCompileOutput> {
+fn compile_pure(config: &CompilerConfig, input: CompilationInput) -> Result<CompileOutput> {
   match input {
     CompilationInput::InlineSource { source } => compile_inline_source(config, source),
     CompilationInput::SourceMap { sources } => {
@@ -160,7 +160,7 @@ fn compile_pure(config: &CompilerConfig, input: CompilationInput) -> Result<Core
   }
 }
 
-fn compile_inline_source(config: &CompilerConfig, source: String) -> Result<CoreCompileOutput> {
+fn compile_inline_source(config: &CompilerConfig, source: String) -> Result<CompileOutput> {
   let mut sources = Sources::new();
   sources.insert(PathBuf::from("__VIRTUAL__.sol"), Source::new(source));
   compile_standard_sources(config, sources, config.solc_language)
@@ -170,7 +170,7 @@ fn compile_standard_sources(
   config: &CompilerConfig,
   sources: Sources,
   language: FoundrySolcLanguage,
-) -> Result<CoreCompileOutput> {
+) -> Result<CompileOutput> {
   let solc_config = SolcConfig {
     version: config.solc_version.clone(),
     settings: config.solc_settings.clone(),
@@ -187,7 +187,7 @@ fn compile_standard_sources(
 fn compile_ast_sources(
   config: &CompilerConfig,
   ast_sources: BTreeMap<String, SourceUnit>,
-) -> Result<CoreCompileOutput> {
+) -> Result<CompileOutput> {
   let solc_config = SolcConfig {
     version: config.solc_version.clone(),
     settings: config.solc_settings.clone(),
@@ -222,7 +222,7 @@ fn compile_file_paths(
   config: &CompilerConfig,
   paths: Vec<PathBuf>,
   language_override: Option<FoundrySolcLanguage>,
-) -> Result<CoreCompileOutput> {
+) -> Result<CompileOutput> {
   if paths.is_empty() {
     return Err(Error::new("compileFiles requires at least one path."));
   }

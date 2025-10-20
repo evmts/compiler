@@ -107,7 +107,7 @@ pub struct JsAst {
 }
 
 impl JsAst {
-  fn from_ast(ast: Ast) -> Self {
+  pub(crate) fn from_ast(ast: Ast) -> Self {
     Self { inner: ast }
   }
 }

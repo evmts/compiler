@@ -37,6 +37,16 @@ export declare class Ast {
 }
 export type JsAst = Ast
 
+export declare class CompileOutput {
+  constructor()
+  get artifactsJson(): Record<string, unknown>
+  get artifacts(): Record<string, SourceArtifacts>
+  get artifact(): SourceArtifacts | undefined
+  get errors(): Array<CompilerError>
+  get hasCompilerErrors(): boolean
+}
+export type JsCompileOutput = CompileOutput
+
 export declare class Compiler {
   static installSolcVersion(version: string): Promise<unknown>
   static isSolcVersionInstalled(version: string): boolean
@@ -53,6 +63,51 @@ export declare class Compiler {
 }
 export type JsCompiler = Compiler
 
+export declare class Contract {
+  constructor(state: ContractState)
+  static fromSolcContractOutput(name: string, contract: object | string): Contract
+  get name(): string
+  get address(): `0x${string}` | null | undefined
+  get creationBytecode(): ContractBytecode | null
+  get runtimeBytecode(): ContractBytecode | null
+  get deployedBytecode(): ContractBytecode | null
+  get abi(): import('./index').ContractState['abi']
+  get metadata(): import('./index').ContractState['metadata']
+  get userdoc(): import('./index').ContractState['userdoc']
+  get devdoc(): import('./index').ContractState['devdoc']
+  get storageLayout(): import('./index').ContractState['storageLayout']
+  get immutableReferences(): import('./index').ContractState['immutableReferences']
+  get methodIdentifiers(): import('./index').ContractState['methodIdentifiers']
+  get functionDebugData(): import('./index').ContractState['functionDebugData']
+  get gasEstimates(): import('./index').ContractState['gasEstimates']
+  get assembly(): string | null
+  get legacyAssembly(): import('./index').ContractState['legacyAssembly']
+  get opcodes(): string | null
+  get ir(): string | null
+  get irOptimized(): string | null
+  get ewasm(): import('./index').ContractState['ewasm']
+  get creationSourceMap(): string | null
+  get extras(): Record<string, unknown>
+  withAddress(address?: `0x${string}` | null | undefined): Contract
+  withCreationBytecode(bytecode?: Buffer | undefined | null): Contract
+  withRuntimeBytecode(bytecode?: Buffer | undefined | null): Contract
+  withDeployedBytecode(bytecode?: Buffer | undefined | null): Contract
+  withExtra(key: string, value: any): Contract
+  toJson(): ContractState
+}
+export type JsContract = Contract
+
+export declare class SourceArtifacts {
+  constructor()
+  get sourcePath(): string | null
+  get sourceId(): number | null
+  get solcVersion(): string | null
+  get astJson(): import('./solc-ast').SourceUnit | undefined
+  get ast(): import('./index').Ast | undefined
+  get contracts(): Record<string, import('./index').Contract>
+}
+export type JsSourceArtifacts = SourceArtifacts
+
 export interface AstConfigOptions {
   solcVersion?: string | undefined
   solcLanguage?: SolcLanguage
@@ -64,12 +119,6 @@ export declare const enum BytecodeHash {
   Ipfs = 'Ipfs',
   None = 'None',
   Bzzr1 = 'Bzzr1'
-}
-
-export interface CompileOutput {
-  artifacts: Array<ContractArtifact>
-  errors: Array<CompilerError>
-  hasCompilerErrors: boolean
 }
 
 /** JavaScript-facing configuration captured through N-API bindings. */
@@ -95,8 +144,14 @@ export interface CompilerConfigOptions {
 
 export interface CompilerError {
   message: string
-  severity: string
+  formattedMessage?: string
+  component: string
+  severity: SeverityLevel
+  severityLevel: 'error' | 'warning' | 'info'
+  errorType: string
+  errorCode?: number
   sourceLocation?: SourceLocation
+  secondarySourceLocations?: Array<SecondarySourceLocation>
 }
 
 /** JavaScript-facing wrappers mirroring the option structs. */
@@ -113,17 +168,36 @@ export interface CompilerSettings {
   libraries?: Record<string, Record<string, string>> | undefined
 }
 
-export interface ContractArtifact {
-  contractName: string
-  abi?: unknown | undefined
-  abiJson?: string
-  bytecode?: ContractBytecode
-  deployedBytecode?: ContractBytecode
+export interface ContractBytecode {
+  hex?: `0x${string}` | null | undefined
+  bytes?: Uint8Array | null | undefined
 }
 
-export interface ContractBytecode {
-  hex?: string
-  bytes?: Uint8Array | undefined
+export interface ContractState {
+  name: string
+  address?: `0x${string}` | null | undefined
+  abi?: unknown | null | undefined
+  sourcePath?: string
+  sourceId?: number
+  creationBytecode?: ContractBytecode | null | undefined
+  runtimeBytecode?: ContractBytecode | null | undefined
+  deployedBytecode?: ContractBytecode | null | undefined
+  metadata?: string | Record<string, unknown> | null | undefined
+  userdoc?: Record<string, unknown> | null | undefined
+  devdoc?: Record<string, unknown> | null | undefined
+  storageLayout?: import('./solc-storage-layout').StorageLayout | null | undefined
+  immutableReferences?: Record<string, { start: number; length: number }[]> | null | undefined
+  methodIdentifiers?: Record<string, `0x${string}`> | null | undefined
+  functionDebugData?: Record<string, import('./index').FunctionDebugDataEntry> | null | undefined
+  gasEstimates?: import('./index').GasEstimates | null | undefined
+  assembly?: string
+  legacyAssembly?: Record<string, unknown> | null | undefined
+  opcodes?: string
+  ir?: string
+  irOptimized?: string
+  ewasm?: import('./index').EwasmOutput | null | undefined
+  creationSourceMap?: string | null | undefined
+  extras?: Record<string, unknown> | null | undefined
 }
 
 export interface DebuggingSettings {
@@ -142,6 +216,35 @@ export declare const enum EvmVersion {
   Shanghai = 'Shanghai',
   Cancun = 'Cancun',
   Prague = 'Prague'
+}
+
+export interface EwasmOutput {
+  wast?: string | null | undefined
+  wasm: string
+}
+
+export interface FunctionDebugDataEntry {
+  entryPoint?: number | null | undefined
+  id?: number | null | undefined
+  parameterSlots?: number | null | undefined
+  returnSlots?: number | null | undefined
+}
+
+export interface GasEstimates {
+  creation: GasEstimatesCreation
+  external: Record<string, string>
+  internal: Record<string, string>
+}
+
+export interface GasEstimatesCreation {
+  codeDepositCost: string
+  executionCost: string
+  totalCost: string
+}
+
+export interface ImmutableSlot {
+  start: number
+  length: number
 }
 
 export declare const enum ModelCheckerEngine {
@@ -225,10 +328,23 @@ export declare const enum RevertStrings {
   VerboseDebug = 'VerboseDebug'
 }
 
+export interface SecondarySourceLocation {
+  file?: string
+  start?: number
+  end?: number
+  message?: string
+}
+
 export interface SettingsMetadata {
   useLiteralContent?: boolean
   bytecodeHash?: BytecodeHash
   cborMetadata?: boolean
+}
+
+export declare const enum SeverityLevel {
+  Error = 0,
+  Warning = 1,
+  Info = 2
 }
 
 export declare const enum SolcLanguage {

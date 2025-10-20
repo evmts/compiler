@@ -363,8 +363,14 @@ if (!nativeBinding) {
 
 module.exports.Ast = nativeBinding.Ast
 module.exports.JsAst = nativeBinding.JsAst
+module.exports.CompileOutput = nativeBinding.CompileOutput
+module.exports.JsCompileOutput = nativeBinding.JsCompileOutput
 module.exports.Compiler = nativeBinding.Compiler
 module.exports.JsCompiler = nativeBinding.JsCompiler
+module.exports.Contract = nativeBinding.Contract
+module.exports.JsContract = nativeBinding.JsContract
+module.exports.SourceArtifacts = nativeBinding.SourceArtifacts
+module.exports.JsSourceArtifacts = nativeBinding.JsSourceArtifacts
 module.exports.BytecodeHash = nativeBinding.BytecodeHash
 module.exports.EvmVersion = nativeBinding.EvmVersion
 module.exports.ModelCheckerEngine = nativeBinding.ModelCheckerEngine
@@ -373,4 +379,5 @@ module.exports.ModelCheckerInvariantKind = nativeBinding.ModelCheckerInvariantKi
 module.exports.ModelCheckerSolver = nativeBinding.ModelCheckerSolver
 module.exports.ModelCheckerTarget = nativeBinding.ModelCheckerTarget
 module.exports.RevertStrings = nativeBinding.RevertStrings
+module.exports.SeverityLevel = nativeBinding.SeverityLevel
 module.exports.SolcLanguage = nativeBinding.SolcLanguage

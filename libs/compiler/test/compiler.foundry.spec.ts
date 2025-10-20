@@ -7,6 +7,65 @@ import { Compiler } from "../build/index.js";
 const FIXTURES_DIR = join(__dirname, "fixtures");
 const FOUNDRY_PROJECT = join(FIXTURES_DIR, "foundry-project");
 
+const flattenContracts = (output: {
+  artifacts: Record<string, { contracts: Record<string, any> }>;
+  artifact?: { contracts: Record<string, any> };
+}) => {
+  const seen = new Set<string>();
+  const flattened: any[] = [];
+
+  if (output.artifact) {
+    const sourceName =
+      output.artifact.sourcePath ??
+      (output.artifact as any).source_path ??
+      "__virtual__";
+    for (const [contractName, contract] of Object.entries(
+      output.artifact.contracts ?? {}
+    )) {
+      const name = (contract as any)?.name ?? contractName;
+      const key = `${sourceName}:${name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      flattened.push(contract);
+    }
+  }
+
+  for (const [sourceName, sourceArtifacts] of Object.entries(
+    output.artifacts ?? {}
+  )) {
+    const resolvedSource =
+      sourceArtifacts.sourcePath ??
+      (sourceArtifacts as any).source_path ??
+      sourceName;
+    for (const [contractName, contract] of Object.entries(
+      sourceArtifacts.contracts ?? {}
+    )) {
+      const name = (contract as any)?.name ?? contractName;
+      const key = `${resolvedSource}:${name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      flattened.push(contract);
+    }
+  }
+  return flattened;
+};
+
+const contractNames = (output: {
+  artifacts: Record<string, { contracts: Record<string, any> }>;
+  artifact?: { contracts: Record<string, any> };
+}) => flattenContracts(output).map((contract) => contract.name);
+
+const firstContract = (output: {
+  artifacts: Record<string, { contracts: Record<string, any> }>;
+  artifact?: { contracts: Record<string, any> };
+}) => flattenContracts(output)[0];
+
+const contractBytecodeHex = (contract: any) =>
+  contract?.creationBytecode?.hex ??
+  contract?.runtimeBytecode?.hex ??
+  contract?.deployedBytecode?.hex ??
+  null;
+
 const tempDirs: string[] = [];
 
 const cloneFoundryProject = () => {
@@ -33,11 +92,7 @@ describe("Compiler.fromFoundryRoot", () => {
     const compiler = Compiler.fromFoundryRoot(root);
     const output = compiler.compileProject();
 
-    const contractNames = output.artifacts.map(
-      (artifact: any) => artifact.contractName
-    );
-
-    expect(contractNames).toEqual(expect.arrayContaining(["Counter"]));
+    expect(contractNames(output)).toEqual(expect.arrayContaining(["Counter"]));
     expect(output.hasCompilerErrors).toBe(false);
   });
 
@@ -46,8 +101,8 @@ describe("Compiler.fromFoundryRoot", () => {
     const compiler = Compiler.fromFoundryRoot(root);
     const output = compiler.compileContract("Counter");
 
-    expect(output.artifacts).toHaveLength(1);
-    expect(output.artifacts[0].contractName).toBe("Counter");
+    expect(flattenContracts(output)).toHaveLength(1);
+    expect(firstContract(output).name).toBe("Counter");
     expect(output.hasCompilerErrors).toBe(false);
   });
 
@@ -61,8 +116,8 @@ describe("Compiler.fromFoundryRoot", () => {
       solcSettings: { optimizer: { enabled: false } },
     });
 
-    const optimizedBytecode = optimized.artifacts[0]?.bytecode?.hex;
-    const unoptimizedBytecode = unoptimized.artifacts[0]?.bytecode?.hex;
+    const optimizedBytecode = contractBytecodeHex(firstContract(optimized));
+    const unoptimizedBytecode = contractBytecodeHex(firstContract(unoptimized));
 
     expect(optimizedBytecode).toBeTruthy();
     expect(unoptimizedBytecode).toBeTruthy();
@@ -79,10 +134,13 @@ describe("Compiler.fromFoundryRoot", () => {
     const baselineOutput = baseline.compileContract("Counter");
     const overriddenOutput = overridden.compileContract("Counter");
 
-    const baselineBytecode = baselineOutput.artifacts[0]?.bytecode?.hex;
-    const overriddenBytecode = overriddenOutput.artifacts[0]?.bytecode?.hex;
+    const baselineContract = firstContract(baselineOutput);
+    const overriddenContract = firstContract(overriddenOutput);
+    const baselineBytecode = contractBytecodeHex(baselineContract);
+    const overriddenBytecode = contractBytecodeHex(overriddenContract);
 
     expect(overriddenBytecode).toBe(baselineBytecode);
+    expect(baselineContract.methodIdentifiers).toBeDefined();
   });
 
   test("throws when the contract is missing", () => {

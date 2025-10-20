@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use super::input::CompilationInput;
-use super::output::{into_core_compile_output, CoreCompileOutput};
+use super::output::{into_core_compile_output, CompileOutput};
 use crate::internal::{
   config::CompilerConfig,
   errors::{map_err_with_context, Error, Result},
@@ -28,7 +28,7 @@ impl<'a> ProjectRunner<'a> {
     &self,
     config: &CompilerConfig,
     input: &CompilationInput,
-  ) -> Result<Option<CoreCompileOutput>> {
+  ) -> Result<Option<CompileOutput>> {
     match input {
       CompilationInput::InlineSource { source } => {
         if matches!(self.context.layout, ProjectLayout::Synthetic) && config.cache_enabled {
@@ -55,7 +55,7 @@ impl<'a> ProjectRunner<'a> {
     }
   }
 
-  pub fn compile_project(&self, config: &CompilerConfig) -> Result<CoreCompileOutput> {
+  pub fn compile_project(&self, config: &CompilerConfig) -> Result<CompileOutput> {
     let output = self.compile_with_project(config, "Project compilation failed", |project| {
       project.compile()
     });
@@ -66,7 +66,7 @@ impl<'a> ProjectRunner<'a> {
     &self,
     config: &CompilerConfig,
     contract_name: &str,
-  ) -> Result<CoreCompileOutput> {
+  ) -> Result<CompileOutput> {
     let name = contract_name.to_owned();
     let output = self.compile_with_project(config, "Contract compilation failed", move |project| {
       let path = project.find_contract_path(&name)?;

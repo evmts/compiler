@@ -24,7 +24,7 @@ Rust + N-API bridge used by the Shadow toolchain to expose Foundry's Solidity co
 2. **Context detection** – `CompilerCore::new` optionally loads project metadata via `FoundryAdapter`/`HardhatAdapter` or synthesises an ephemeral workspace for inline sources.
 3. **Input selection** – `CompilationInput` handles inline strings, source maps, AST units, or file paths. Mixed inputs are rejected at the binding layer for clarity.
 4. **Execution** – `CompilerCore::compile_as` runs against an attached project via `ProjectRunner` when available, otherwise falls back to a "pure" `foundry-compilers` invocation with temporary sources.
-5. **Result mapping** – outputs are converted into serialisable `CompileOutput`/`ContractArtifact` structs that align with the TypeScript bindings in `build/index.d.ts`.
+5. **Result mapping** – outputs are converted into serialisable `JsCompileOutput`/`ContractArtifact` structs that align with the TypeScript bindings in `build/index.d.ts`.
 
 The `Compiler` N-API class threads this flow into four primary entry points (`compileSource`, `compileSources`, `compileFiles`, `compileProject`) plus helpers for installing `solc` versions and instantiating from known project roots.
 
@@ -61,3 +61,34 @@ console.log(output.contracts["MyContract.sol"]);
 ```
 
 Pair AST transforms with compilation by using the `Ast` helper (`src/ast/README.md`) to stitch fragments, then feed the resulting source map or AST back through `compileSources`.
+
+## Contract State Helpers
+
+Rust callers can materialise contract metadata in a single step using the new wrappers:
+
+```rust
+use compiler::contract::Contract;
+use foundry_compilers::artifacts::contract::Contract as FoundryContract;
+
+fn hydrate(contract: &FoundryContract) -> compiler::Result<()> {
+  let mut wrapper = Contract::from_foundry_standard_json("MyContract", contract);
+  wrapper.with_address(Some("0xdeadbeef".into()));
+  let state = wrapper.into_state();
+  assert_eq!(state.name, "MyContract");
+  Ok(())
+}
+```
+
+JavaScript bindings expose the same surface through the exported `Contract` class—no `build()` ceremony required:
+
+```ts
+import { Contract } from "@compiler/compiler";
+
+const contract = Contract.fromSolcContractOutput("Example", solcArtifact).withAddress("0x1234").withExtra("tag", { env: "test" });
+
+console.log(contract.toJson());
+
+const manual = new Contract({ name: "Manual" }).withAddress("0xdeadbeef").withExtra("note", "local override");
+
+console.log(manual.toJson());
+```

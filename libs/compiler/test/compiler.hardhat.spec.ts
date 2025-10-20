@@ -7,6 +7,65 @@ import { Compiler } from "../build/index.js";
 const FIXTURES_DIR = join(__dirname, "fixtures");
 const HARDHAT_PROJECT = join(FIXTURES_DIR, "hardhat-project");
 
+const flattenContracts = (output: {
+  artifacts: Record<string, { contracts: Record<string, any> }>;
+  artifact?: { contracts: Record<string, any> };
+}) => {
+  const seen = new Set<string>();
+  const flattened: any[] = [];
+
+  if (output.artifact) {
+    const sourceName =
+      output.artifact.sourcePath ??
+      (output.artifact as any).source_path ??
+      "__virtual__";
+    for (const [contractName, contract] of Object.entries(
+      output.artifact.contracts ?? {}
+    )) {
+      const name = (contract as any)?.name ?? contractName;
+      const key = `${sourceName}:${name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      flattened.push(contract);
+    }
+  }
+
+  for (const [sourceName, sourceArtifacts] of Object.entries(
+    output.artifacts ?? {}
+  )) {
+    const resolvedSource =
+      sourceArtifacts.sourcePath ??
+      (sourceArtifacts as any).source_path ??
+      sourceName;
+    for (const [contractName, contract] of Object.entries(
+      sourceArtifacts.contracts ?? {}
+    )) {
+      const name = (contract as any)?.name ?? contractName;
+      const key = `${resolvedSource}:${name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      flattened.push(contract);
+    }
+  }
+  return flattened;
+};
+
+const contractNames = (output: {
+  artifacts: Record<string, { contracts: Record<string, any> }>;
+  artifact?: { contracts: Record<string, any> };
+}) => flattenContracts(output).map((contract) => contract.name);
+
+const firstContract = (output: {
+  artifacts: Record<string, { contracts: Record<string, any> }>;
+  artifact?: { contracts: Record<string, any> };
+}) => flattenContracts(output)[0];
+
+const contractBytecodeHex = (contract: any) =>
+  contract?.creationBytecode?.hex ??
+  contract?.runtimeBytecode?.hex ??
+  contract?.deployedBytecode?.hex ??
+  null;
+
 const tempDirs: string[] = [];
 
 const cloneHardhatProject = () => {
@@ -32,22 +91,22 @@ describe("Compiler.fromHardhatRoot", () => {
     const compiler = Compiler.fromHardhatRoot(HARDHAT_PROJECT);
     const output = compiler.compileProject();
 
-    const artifactNames = output.artifacts.map(
-      (artifact: any) => artifact.contractName
-    );
-
-    expect(artifactNames).toEqual(
+    expect(contractNames(output)).toEqual(
       expect.arrayContaining(["SimpleStorage", "Greeter", "Counter"])
     );
     expect(output.hasCompilerErrors).toBe(false);
+    const greeter = flattenContracts(output).find(
+      (contract: any) => contract.name === "Greeter"
+    );
+    expect(greeter?.methodIdentifiers).toBeDefined();
   });
 
   test("compileContract returns a single matching artifact", () => {
     const compiler = Compiler.fromHardhatRoot(HARDHAT_PROJECT);
     const output = compiler.compileContract("Greeter");
 
-    expect(output.artifacts).toHaveLength(1);
-    expect(output.artifacts[0].contractName).toBe("Greeter");
+    expect(flattenContracts(output)).toHaveLength(1);
+    expect(firstContract(output).name).toBe("Greeter");
     expect(output.hasCompilerErrors).toBe(false);
   });
 
@@ -60,8 +119,8 @@ describe("Compiler.fromHardhatRoot", () => {
       solcSettings: { optimizer: { enabled: false } },
     });
 
-    const optimizedBytecode = optimized.artifacts[0]?.bytecode?.hex;
-    const unoptimizedBytecode = unoptimized.artifacts[0]?.bytecode?.hex;
+    const optimizedBytecode = contractBytecodeHex(firstContract(optimized));
+    const unoptimizedBytecode = contractBytecodeHex(firstContract(unoptimized));
 
     expect(optimizedBytecode).toBeTruthy();
     expect(unoptimizedBytecode).toBeTruthy();
@@ -80,7 +139,7 @@ describe("Compiler.fromHardhatRoot", () => {
     const compiler = Compiler.fromHardhatRoot(clone);
     const output = compiler.compileProject();
 
-    expect(output.artifacts.length).toBeGreaterThan(0);
+    expect(flattenContracts(output).length).toBeGreaterThan(0);
   });
 
   test("exposes hardhat project paths", () => {

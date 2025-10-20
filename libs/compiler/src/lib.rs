@@ -3,6 +3,7 @@ extern crate napi_derive;
 
 mod ast;
 mod compiler;
+mod contract;
 mod internal;
 
 pub use ast::{
@@ -14,11 +15,14 @@ pub use compiler::{
     State as CompilerState,
   },
   output::{
-    from_standard_json, into_core_compile_output, CompileOutput, CompilerError, ContractArtifact,
-    ContractBytecode, CoreCompileOutput, CoreCompilerError, CoreContractArtifact,
-    CoreSourceLocation, SourceLocation,
+    from_standard_json, into_core_compile_output, CompilerError, JsCompileOutput,
+    JsSourceArtifacts, SecondarySourceLocation, SeverityLevel, SourceLocation,
   },
   CompilationInput, Compiler,
+};
+pub use contract::{
+  Contract as ContractOutput, ContractBytecode, ContractState, ImmutableSlot, JsContract,
+  JsContractState,
 };
 pub use internal::config::{
   AstConfig, AstConfigOptions, CompilerConfig, CompilerConfigOptions, JsAstConfigOptions,

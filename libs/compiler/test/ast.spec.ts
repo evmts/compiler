@@ -72,27 +72,33 @@ const collectIds = (value: unknown, ids: number[]) => {
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
 const normaliseArtifacts = (output: any) => {
-  const artifacts = output.artifacts;
-  if (!artifacts) {
-    return {} as Record<string, any>;
+  const result: Record<string, any> = {};
+  const primary = output.artifact;
+  if (primary) {
+    const key = primary.sourcePath ?? output.primarySource ?? "__virtual__";
+    result[key] = primary;
   }
-  if ((artifacts as any).contracts) {
-    return {
-      [output.primarySource ?? "__virtual__"]: artifacts,
-    } as Record<string, any>;
+  for (const [sourceName, sourceArtifacts] of Object.entries(
+    output.artifacts ?? {}
+  )) {
+    result[sourceName] = sourceArtifacts;
   }
-  return artifacts as Record<string, any>;
+  return result;
 };
 
 const collectContracts = (output: any) => {
   return Object.entries(normaliseArtifacts(output)).flatMap(
     ([sourceName, sourceArtifacts]) =>
       Object.entries((sourceArtifacts as any).contracts ?? {}).map(
-        ([contractName, contract]) => ({
-          sourceName,
-          contractName,
-          artifact: contract as any,
-        })
+        ([contractName, contract]) => {
+          const resolved = contract as any;
+          const name = resolved?.name ?? contractName;
+          return {
+            sourceName,
+            contractName: name,
+            artifact: resolved,
+          };
+        }
       )
   );
 };

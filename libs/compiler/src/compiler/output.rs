@@ -1,22 +1,40 @@
-use foundry_compilers::artifacts::{
-  ast::{Node, NodeType},
-  CompilerOutput, Contract, Error, SourceFile,
-};
-use foundry_compilers::solc::SolcCompiler;
-use foundry_compilers::{Artifact, ProjectCompileOutput};
-use serde_json::Value;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, HashMap};
 
-#[napi(object)]
-#[derive(Debug, Clone)]
-pub struct CompilerError {
-  pub message: String,
-  pub severity: String,
-  pub source_location: Option<SourceLocation>,
+use foundry_compilers::artifacts::{
+  ast::SourceUnit,
+  error::{
+    Error as FoundryCompilerError, SecondarySourceLocation as FoundrySecondarySourceLocation,
+    Severity,
+  },
+  CompilerOutput, SourceFile,
+};
+use foundry_compilers::compilers::Compiler as FoundryCompiler;
+use foundry_compilers::solc::SolcCompiler;
+use foundry_compilers::ProjectCompileOutput;
+use semver::Version;
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+
+use crate::ast::{utils::sanitize_ast_value, Ast, JsAst, SourceTarget};
+use crate::contract;
+use crate::contract::{Contract, JsContract};
+use crate::internal::config::AstConfigOptions;
+use crate::internal::errors::napi_error;
+
+// -----------------------------------------------------------------------------
+// Shared error and location types
+// -----------------------------------------------------------------------------
+
+#[napi]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SeverityLevel {
+  Error,
+  Warning,
+  Info,
 }
 
 #[napi(object)]
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SourceLocation {
   pub file: String,
   pub start: i32,
@@ -24,218 +42,479 @@ pub struct SourceLocation {
 }
 
 #[napi(object)]
-#[derive(Debug, Clone)]
-pub struct ContractBytecode {
-  pub hex: Option<String>,
-  #[napi(ts_type = "Uint8Array | undefined")]
-  pub bytes: Option<Vec<u8>>,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SecondarySourceLocation {
+  pub file: Option<String>,
+  pub start: Option<i32>,
+  pub end: Option<i32>,
+  pub message: Option<String>,
 }
 
 #[napi(object)]
-#[derive(Debug, Clone)]
-pub struct ContractArtifact {
-  pub contract_name: String,
-  #[napi(ts_type = "unknown | undefined")]
-  pub abi: Option<Value>,
-  pub abi_json: Option<String>,
-  pub bytecode: Option<ContractBytecode>,
-  pub deployed_bytecode: Option<ContractBytecode>,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CompilerError {
+  pub message: String,
+  pub formatted_message: Option<String>,
+  pub component: String,
+  pub severity: SeverityLevel,
+  #[napi(ts_type = "'error' | 'warning' | 'info'")]
+  pub severity_level: String,
+  pub error_type: String,
+  pub error_code: Option<i64>,
+  pub source_location: Option<SourceLocation>,
+  pub secondary_source_locations: Option<Vec<SecondarySourceLocation>>,
 }
 
-#[napi(object)]
-#[derive(Debug, Clone)]
+// -----------------------------------------------------------------------------
+// Core domain types (Rust-facing)
+// -----------------------------------------------------------------------------
+
+#[derive(Clone, Debug, Default)]
+pub struct SourceArtifacts {
+  pub source_path: Option<String>,
+  pub source_id: Option<u32>,
+  pub solc_version: Option<Version>,
+  pub ast: Option<SourceUnit>,
+  pub contracts: BTreeMap<String, Contract>,
+}
+
+impl SourceArtifacts {
+  fn new(source_path: Option<String>) -> Self {
+    Self {
+      source_path,
+      ..Default::default()
+    }
+  }
+}
+
+#[derive(Clone, Debug)]
 pub struct CompileOutput {
-  pub artifacts: Vec<ContractArtifact>,
+  pub artifacts_json: Value,
+  pub artifacts: BTreeMap<String, SourceArtifacts>,
+  pub artifact: Option<SourceArtifacts>,
   pub errors: Vec<CompilerError>,
   pub has_compiler_errors: bool,
 }
 
-#[derive(Debug, Clone)]
-pub struct CoreCompilerError {
-  pub message: String,
-  pub severity: String,
-  pub source_location: Option<CoreSourceLocation>,
-}
-
-#[derive(Debug, Clone)]
-pub struct CoreSourceLocation {
-  pub file: String,
-  pub start: i32,
-  pub end: i32,
-}
-
-#[derive(Debug, Clone)]
-pub struct CoreContractArtifact {
-  pub contract_name: String,
-  pub abi: Option<Value>,
-  pub bytecode: Option<Vec<u8>>,
-  pub deployed_bytecode: Option<Vec<u8>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct CoreCompileOutput {
-  pub artifacts: Vec<CoreContractArtifact>,
-  pub errors: Vec<CoreCompilerError>,
-  pub has_compiler_errors: bool,
-}
-
-pub fn into_core_compile_output(output: ProjectCompileOutput<SolcCompiler>) -> CoreCompileOutput {
-  let has_compiler_errors = output.has_compiler_errors();
-  let artifacts = output
-    .artifacts()
-    .map(|(name, artifact)| project_contract(&name, artifact))
-    .collect();
-  let errors = output
-    .output()
-    .errors
-    .iter()
-    .map(to_compiler_error)
-    .collect();
-
-  CoreCompileOutput {
+pub fn into_core_compile_output(output: ProjectCompileOutput<SolcCompiler>) -> CompileOutput {
+  let artifacts = collate_project_artifacts(&output);
+  let artifact = artifacts
+    .values()
+    .next()
+    .cloned()
+    .filter(|_| artifacts.len() == 1);
+  CompileOutput {
+    artifacts_json: aggregated_to_value(output.output()),
+    errors: output
+      .output()
+      .errors
+      .iter()
+      .map(to_core_compiler_error)
+      .collect(),
+    has_compiler_errors: output.has_compiler_errors(),
+    artifact,
     artifacts,
-    has_compiler_errors,
-    errors,
   }
 }
 
-pub fn from_standard_json(output: CompilerOutput) -> CoreCompileOutput {
+pub fn from_standard_json(output: CompilerOutput) -> CompileOutput {
+  let artifacts_json = serde_json::to_value(&output).unwrap_or(Value::Null);
   let has_compiler_errors = output.has_error();
-  let CompilerOutput {
-    errors,
-    contracts,
-    sources,
-    ..
-  } = output;
-  let mut artifacts: Vec<CoreContractArtifact> = contracts
-    .into_values()
-    .flat_map(|set| set.into_iter())
-    .map(|(name, contract)| standard_contract(name, contract))
-    .collect();
-  // TODO: remove that, just a stub until we actually return the sources
-  if artifacts.is_empty() {
-    artifacts = contract_stubs_from_ast(&sources)
-      .into_iter()
-      .map(|name| CoreContractArtifact {
-        contract_name: name,
-        abi: None,
-        bytecode: None,
-        deployed_bytecode: None,
-      })
-      .collect();
-  }
-  let errors = errors.iter().map(to_compiler_error).collect();
 
-  CoreCompileOutput {
-    artifacts,
-    has_compiler_errors,
-    errors,
-  }
-}
+  let mut artifacts: BTreeMap<String, SourceArtifacts> = BTreeMap::new();
 
-fn project_contract(name: &str, artifact: &impl Artifact) -> CoreContractArtifact {
-  let bytecode_cow = artifact.get_contract_bytecode();
-  let abi = bytecode_cow
-    .abi
-    .as_ref()
-    .and_then(|abi| serde_json::to_value(&**abi).ok());
-  let bytecode = bytecode_cow
-    .bytecode
-    .as_ref()
-    .and_then(|bytecode| bytecode.object.as_bytes())
-    .map(|bytes| bytes.to_vec());
-  let deployed_bytecode = bytecode_cow
-    .deployed_bytecode
-    .as_ref()
-    .and_then(|bytecode| bytecode.bytecode.as_ref())
-    .and_then(|bytecode| bytecode.object.as_bytes())
-    .map(|bytes| bytes.to_vec());
+  for (path, contracts) in &output.contracts {
+    let key = path.to_string_lossy().to_string();
+    let entry = artifacts
+      .entry(key.clone())
+      .or_insert_with(|| SourceArtifacts::new(Some(key.clone())));
 
-  CoreContractArtifact {
-    contract_name: name.to_string(),
-    abi,
-    bytecode,
-    deployed_bytecode,
-  }
-}
-
-fn standard_contract(name: String, contract: Contract) -> CoreContractArtifact {
-  let abi = contract
-    .abi
-    .as_ref()
-    .and_then(|abi| serde_json::to_value(abi).ok());
-  let bytecode = contract
-    .evm
-    .as_ref()
-    .and_then(|evm| evm.bytecode.as_ref())
-    .and_then(|bytecode| bytecode.object.as_bytes())
-    .map(|bytes| bytes.to_vec());
-  let deployed_bytecode = contract
-    .evm
-    .as_ref()
-    .and_then(|evm| evm.deployed_bytecode.as_ref())
-    .and_then(|bytecode| bytecode.bytes())
-    .map(|bytes| bytes.to_vec());
-
-  CoreContractArtifact {
-    contract_name: name,
-    abi,
-    bytecode,
-    deployed_bytecode,
-  }
-}
-
-fn contract_stubs_from_ast(
-  sources: &std::collections::BTreeMap<std::path::PathBuf, SourceFile>,
-) -> Vec<String> {
-  let mut names = BTreeSet::new();
-  for source in sources.values() {
-    if let Some(ast) = &source.ast {
-      collect_contract_names(&ast.nodes, &mut names);
+    for (name, contract) in contracts {
+      let mut core = Contract::from_foundry_standard_json(name.clone(), contract);
+      core.state_mut().source_path = Some(key.clone());
+      entry.contracts.insert(name.clone(), core);
     }
   }
-  names.into_iter().collect()
+
+  for (path, source) in &output.sources {
+    let key = path.to_string_lossy().to_string();
+    let entry = artifacts
+      .entry(key.clone())
+      .or_insert_with(|| SourceArtifacts::new(Some(key.clone())));
+    entry.source_id = Some(source.id);
+    entry.ast = convert_source_ast(source);
+  }
+
+  let artifact = artifacts
+    .values()
+    .next()
+    .cloned()
+    .filter(|_| artifacts.len() == 1);
+
+  CompileOutput {
+    artifacts_json,
+    artifacts,
+    artifact,
+    errors: output.errors.iter().map(to_core_compiler_error).collect(),
+    has_compiler_errors,
+  }
 }
 
-fn collect_contract_names(nodes: &[Node], acc: &mut BTreeSet<String>) {
-  for node in nodes {
-    if matches!(node.node_type, NodeType::ContractDefinition) {
-      if let Some(name) = node.attribute::<String>("name") {
-        if !name.is_empty() {
-          acc.insert(name);
+fn convert_source_ast(source: &SourceFile) -> Option<SourceUnit> {
+  let ast = source.ast.as_ref()?;
+  let mut value = serde_json::to_value(ast).ok()?;
+  sanitize_ast_value(&mut value);
+  serde_json::from_value(value).ok()
+}
+
+fn to_core_compiler_error(error: &FoundryCompilerError) -> CompilerError {
+  let severity = match error.severity {
+    Severity::Error => SeverityLevel::Error,
+    Severity::Warning => SeverityLevel::Warning,
+    Severity::Info => SeverityLevel::Info,
+  };
+  let secondary = if error.secondary_source_locations.is_empty() {
+    None
+  } else {
+    Some(
+      error
+        .secondary_source_locations
+        .iter()
+        .map(to_core_secondary_location)
+        .collect(),
+    )
+  };
+
+  CompilerError {
+    message: error.message.clone(),
+    formatted_message: error.formatted_message.clone(),
+    component: error.component.clone(),
+    severity,
+    severity_level: match severity {
+      SeverityLevel::Error => "error".to_string(),
+      SeverityLevel::Warning => "warning".to_string(),
+      SeverityLevel::Info => "info".to_string(),
+    },
+    error_type: error.r#type.clone(),
+    error_code: error.error_code.map(|code| code as i64),
+    source_location: error.source_location.as_ref().map(|loc| SourceLocation {
+      file: loc.file.clone(),
+      start: loc.start,
+      end: loc.end,
+    }),
+    secondary_source_locations: secondary,
+  }
+}
+
+fn to_core_secondary_location(
+  location: &FoundrySecondarySourceLocation,
+) -> SecondarySourceLocation {
+  SecondarySourceLocation {
+    file: location.file.clone(),
+    start: location.start,
+    end: location.end,
+    message: location.message.clone(),
+  }
+}
+
+fn collate_project_artifacts(
+  output: &ProjectCompileOutput<SolcCompiler>,
+) -> BTreeMap<String, SourceArtifacts> {
+  let mut artifacts: BTreeMap<String, SourceArtifacts> = BTreeMap::new();
+
+  let mut version_lookup: BTreeMap<(String, String), Version> = BTreeMap::new();
+  for (path, name, _, version) in output.output().contracts.contracts_with_files_and_version() {
+    let key = path.to_string_lossy().to_string();
+    version_lookup.insert((key, name.clone()), version.clone());
+  }
+
+  for (path, name, artifact) in output.artifacts_with_files() {
+    let key = path.to_string_lossy().to_string();
+    let entry = artifacts
+      .entry(key.clone())
+      .or_insert_with(|| SourceArtifacts::new(Some(key.clone())));
+
+    let version = version_lookup.get(&(key.clone(), name.clone())).cloned();
+    if entry.solc_version.is_none() {
+      entry.solc_version = version.clone();
+    }
+
+    let mut contract = Contract::from_configurable_artifact(name.clone(), artifact);
+    contract.state_mut().source_path = Some(key.clone());
+    if entry.source_id.is_none() {
+      entry.source_id = contract.state().source_id;
+    }
+    entry.contracts.insert(name.clone(), contract);
+  }
+
+  for (path, source, version) in output.output().sources.sources_with_version() {
+    let key = path.to_string_lossy().to_string();
+    let entry = artifacts
+      .entry(key.clone())
+      .or_insert_with(|| SourceArtifacts::new(Some(key.clone())));
+    if entry.solc_version.is_none() {
+      entry.solc_version = Some(version.clone());
+    }
+    if entry.source_id.is_none() {
+      entry.source_id = Some(source.id);
+    }
+    if entry.ast.is_none() {
+      entry.ast = convert_source_ast(source);
+    }
+  }
+
+  artifacts
+}
+
+fn aggregated_to_value<C>(aggregated: &foundry_compilers::AggregatedCompilerOutput<C>) -> Value
+where
+  C: FoundryCompiler,
+  C::CompilationError: Serialize,
+{
+  let mut root = Map::new();
+  let mut contracts_map = Map::new();
+  for (path, entries) in aggregated.contracts.0.iter() {
+    let mut contract_map = Map::new();
+    for (name, versions) in entries.iter() {
+      if let Some(latest) = versions.last() {
+        if let Ok(value) = serde_json::to_value(&latest.contract) {
+          contract_map.insert(name.clone(), value);
         }
       }
     }
-    if let Some(body) = node.body.as_deref() {
-      collect_contract_names(std::slice::from_ref(body), acc);
+    contracts_map.insert(
+      path.to_string_lossy().to_string(),
+      Value::Object(contract_map),
+    );
+  }
+  root.insert("contracts".to_string(), Value::Object(contracts_map));
+
+  let mut sources_map = Map::new();
+  for (path, entries) in aggregated.sources.0.iter() {
+    if let Some(latest) = entries.last() {
+      if let Ok(value) = serde_json::to_value(&latest.source_file) {
+        sources_map.insert(path.to_string_lossy().to_string(), value);
+      }
     }
-    if !node.nodes.is_empty() {
-      collect_contract_names(&node.nodes, acc);
+  }
+  root.insert("sources".to_string(), Value::Object(sources_map));
+  root.insert(
+    "errors".to_string(),
+    serde_json::to_value(&aggregated.errors).unwrap_or(Value::Null),
+  );
+  Value::Object(root)
+}
+
+// -----------------------------------------------------------------------------
+// JS-facing compile output wrappers
+// -----------------------------------------------------------------------------
+
+#[napi(js_name = "SourceArtifacts")]
+#[derive(Clone, Debug)]
+pub struct JsSourceArtifacts {
+  source_path: Option<String>,
+  source_id: Option<u32>,
+  solc_version: Option<Version>,
+  ast_unit: Option<SourceUnit>,
+  ast_json: Option<Value>,
+  contracts: HashMap<String, Contract>,
+}
+
+impl JsSourceArtifacts {
+  fn from_core(artifacts: SourceArtifacts) -> Self {
+    let ast_json = artifacts
+      .ast
+      .as_ref()
+      .and_then(|unit| serde_json::to_value(unit).ok());
+
+    Self {
+      source_path: artifacts.source_path,
+      source_id: artifacts.source_id,
+      solc_version: artifacts.solc_version,
+      ast_unit: artifacts.ast,
+      ast_json,
+      contracts: artifacts.contracts.into_iter().collect(),
+    }
+  }
+
+  fn ast_config(&self) -> Option<AstConfigOptions> {
+    let mut options = AstConfigOptions::default();
+    let mut has_override = false;
+
+    if let Some(version) = &self.solc_version {
+      options.solc.version = Some(version.clone());
+      has_override = true;
+    }
+
+    if has_override {
+      Some(options)
+    } else {
+      None
     }
   }
 }
 
-fn to_compiler_error(error: &Error) -> CoreCompilerError {
-  CoreCompilerError {
-    message: error.message.clone(),
-    severity: format!("{:?}", error.severity),
-    source_location: error
-      .source_location
+#[napi]
+impl JsSourceArtifacts {
+  #[napi(constructor)]
+  pub fn new() -> Self {
+    Self {
+      source_path: None,
+      source_id: None,
+      solc_version: None,
+      ast_unit: None,
+      ast_json: None,
+      contracts: HashMap::new(),
+    }
+  }
+
+  #[napi(getter, js_name = "sourcePath")]
+  pub fn source_path(&self) -> Option<String> {
+    self.source_path.clone()
+  }
+
+  #[napi(getter, js_name = "sourceId")]
+  pub fn source_id(&self) -> Option<u32> {
+    self.source_id
+  }
+
+  #[napi(getter, js_name = "solcVersion")]
+  pub fn solc_version(&self) -> Option<String> {
+    self
+      .solc_version
       .as_ref()
-      .map(|loc| CoreSourceLocation {
-        file: loc.file.clone(),
-        start: loc.start,
-        end: loc.end,
-      }),
+      .map(|version| version.to_string())
+  }
+
+  #[napi(
+    getter,
+    js_name = "astJson",
+    ts_return_type = "import('./solc-ast').SourceUnit | undefined"
+  )]
+  pub fn ast_json(&self) -> Option<Value> {
+    self.ast_json.clone()
+  }
+
+  #[napi(
+    getter,
+    js_name = "ast",
+    ts_return_type = "import('./index').Ast | undefined"
+  )]
+  pub fn ast(&self) -> napi::Result<Option<JsAst>> {
+    let unit = match &self.ast_unit {
+      Some(unit) => unit.clone(),
+      None => return Ok(None),
+    };
+
+    let options = self.ast_config();
+    let mut ast = Ast::new(options.clone()).map_err(|err| napi_error(err.to_string()))?;
+    ast
+      .from_source(SourceTarget::Ast(unit), options)
+      .map_err(|err| napi_error(err.to_string()))?;
+
+    Ok(Some(JsAst::from_ast(ast)))
+  }
+
+  #[napi(getter, ts_return_type = "Record<string, import('./index').Contract>")]
+  pub fn contracts(&self) -> HashMap<String, JsContract> {
+    self
+      .contracts
+      .iter()
+      .map(|(name, contract)| (name.clone(), contract::contract_class(contract)))
+      .collect()
   }
 }
+
+#[napi(js_name = "CompileOutput")]
+#[derive(Clone, Debug)]
+pub struct JsCompileOutput {
+  artifacts_json: Value,
+  artifacts: HashMap<String, JsSourceArtifacts>,
+  artifact: Option<JsSourceArtifacts>,
+  errors: Vec<CompilerError>,
+  has_compiler_errors: bool,
+}
+
+impl JsCompileOutput {
+  fn from_core(core: CompileOutput) -> Self {
+    let artifacts = core
+      .artifacts
+      .into_iter()
+      .map(|(path, artifacts)| (path, JsSourceArtifacts::from_core(artifacts)))
+      .collect::<HashMap<_, _>>();
+    let artifact = core.artifact.map(JsSourceArtifacts::from_core);
+
+    Self {
+      artifacts_json: core.artifacts_json,
+      artifacts,
+      artifact,
+      errors: core.errors,
+      has_compiler_errors: core.has_compiler_errors,
+    }
+  }
+}
+
+#[napi]
+impl JsCompileOutput {
+  #[napi(constructor)]
+  pub fn new() -> Self {
+    Self {
+      artifacts_json: Value::Null,
+      artifacts: HashMap::new(),
+      artifact: None,
+      errors: Vec::new(),
+      has_compiler_errors: false,
+    }
+  }
+
+  #[napi(
+    getter,
+    js_name = "artifactsJson",
+    ts_return_type = "Record<string, unknown>"
+  )]
+  pub fn artifacts_json(&self) -> Value {
+    self.artifacts_json.clone()
+  }
+
+  #[napi(getter, ts_return_type = "Record<string, SourceArtifacts>")]
+  pub fn artifacts(&self) -> HashMap<String, JsSourceArtifacts> {
+    self.artifacts.clone()
+  }
+
+  #[napi(getter, ts_return_type = "SourceArtifacts | undefined")]
+  pub fn artifact(&self) -> Option<JsSourceArtifacts> {
+    self.artifact.clone()
+  }
+
+  #[napi(getter)]
+  pub fn errors(&self) -> Vec<CompilerError> {
+    self.errors.clone()
+  }
+
+  #[napi(getter, js_name = "hasCompilerErrors")]
+  pub fn has_compiler_errors(&self) -> bool {
+    self.has_compiler_errors
+  }
+}
+
+pub fn into_js_compile_output(core: CompileOutput) -> JsCompileOutput {
+  JsCompileOutput::from_core(core)
+}
+
+// -----------------------------------------------------------------------------
+// Tests
+// -----------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
   use super::*;
+  use foundry_compilers::artifacts::CompilerOutput as StandardCompilerOutput;
+  use foundry_compilers::artifacts::SourceFile;
+  use serde_json::json;
+  use std::path::PathBuf;
 
   #[test]
-  fn from_standard_json_converts_artifacts_and_errors() {
+  fn from_standard_json_populates_contracts_map() {
     let json = r#"{
       "contracts": {
         "Test.sol": {
@@ -243,7 +522,7 @@ mod tests {
             "abi": [],
             "evm": {
               "bytecode": { "object": "0x6000" },
-              "deployedBytecode": { "bytecode": { "object": "0x6001" } }
+              "deployedBytecode": { "bytecode": { "object": "0x6001" }, "immutableReferences": {} }
             }
           }
         }
@@ -251,103 +530,154 @@ mod tests {
       "errors": [
         {
           "component": "general",
-          "formattedMessage": "Error: failure",
-          "message": "failure",
+          "errorCode": "42",
+          "formattedMessage": "Error: detail",
+          "message": "detail",
           "severity": "error",
-          "type": "ParserError",
+          "type": "TypeError",
           "sourceLocation": { "file": "Test.sol", "start": 0, "end": 10 }
         }
       ],
-      "sources": {},
-      "version": "0.8.30"
+      "sources": {
+        "Test.sol": {
+          "id": 1
+        }
+      },
+      "version": "0.8.21"
     }"#;
 
-    let output: CompilerOutput = serde_json::from_str(json).expect("parse compiler output");
+    let output: StandardCompilerOutput = serde_json::from_str(json).expect("compiler output");
     let core = from_standard_json(output);
 
     assert!(core.has_compiler_errors);
-    assert_eq!(core.artifacts.len(), 1);
-    let artifact = &core.artifacts[0];
-    assert_eq!(artifact.contract_name, "Test");
-    assert_eq!(artifact.abi.as_ref().unwrap(), &serde_json::json!([]));
-    if let Some(bytecode) = &artifact.bytecode {
-      assert!(!bytecode.is_empty());
-    }
-    if let Some(deployed) = &artifact.deployed_bytecode {
-      assert!(!deployed.is_empty());
-    }
-
-    assert_eq!(core.errors.len(), 1);
+    assert!(core.artifacts_json["contracts"]["Test.sol"]["Test"].is_object());
+    let entry = core.artifacts.get("Test.sol").expect("source entry");
+    assert!(entry.contracts.contains_key("Test"));
     let error = &core.errors[0];
-    assert_eq!(error.message, "failure");
-    assert_eq!(error.severity, "Error");
-    let location = error.source_location.as_ref().expect("location");
-    assert_eq!(location.file, "Test.sol");
-    assert_eq!(location.start, 0);
-    assert_eq!(location.end, 10);
+    assert_eq!(error.severity, SeverityLevel::Error);
+    assert_eq!(error.error_code, Some(42));
   }
 
   #[test]
-  fn from_standard_json_falls_back_to_ast_contracts() {
-    use foundry_compilers::artifacts::ast::{Ast, LowFidelitySourceLocation, Node, NodeType};
-    use serde_json::json;
-    use std::collections::BTreeMap;
-    use std::path::PathBuf;
+  fn from_standard_json_captures_ast_when_present() {
+    use foundry_compilers::artifacts::ast::Ast;
 
-    let ast = Ast {
-      absolute_path: "InlineExample.sol".to_string(),
-      id: 1,
-      exported_symbols: Default::default(),
-      node_type: NodeType::SourceUnit,
-      src: "0:0:0".parse::<LowFidelitySourceLocation>().expect("src"),
-      nodes: vec![Node {
-        id: Some(2),
-        node_type: NodeType::ContractDefinition,
-        src: "0:0:0".parse::<LowFidelitySourceLocation>().expect("src"),
-        nodes: vec![],
-        body: None,
-        other: BTreeMap::from([("name".to_string(), json!("InlineExample"))]),
-      }],
-      other: Default::default(),
-    };
+    let ast: Ast = serde_json::from_value(json!({
+      "absolutePath": "Inline.sol",
+      "id": 1,
+      "exportedSymbols": {},
+      "nodeType": "SourceUnit",
+      "src": "0:0:0",
+      "nodes": [
+        {
+          "id": 2,
+          "nodeType": "ContractDefinition",
+          "src": "0:0:0",
+          "nodes": [],
+          "body": null,
+          "contractKind": "contract",
+          "fullyImplemented": true,
+          "name": "Inline"
+        }
+      ]
+    }))
+    .expect("ast");
 
     let source_file = SourceFile {
       id: 1,
       ast: Some(ast),
     };
-    let mut sources = BTreeMap::new();
-    sources.insert(PathBuf::from("InlineExample.sol"), source_file);
 
-    let mut output: CompilerOutput = Default::default();
-    output.sources = sources;
-
+    let mut output = CompilerOutput::default();
+    output
+      .sources
+      .insert(PathBuf::from("Inline.sol"), source_file);
     let core = from_standard_json(output);
-    assert!(!core.has_compiler_errors);
-    assert_eq!(core.artifacts.len(), 1);
-    assert_eq!(core.artifacts[0].contract_name, "InlineExample");
-    assert!(core.artifacts[0].abi.is_none());
-    assert!(core.artifacts[0].bytecode.is_none());
-    assert!(core.artifacts[0].deployed_bytecode.is_none());
+
+    let entry = core.artifacts.get("Inline.sol").expect("source entry");
+    assert_eq!(entry.source_id, Some(1));
+    assert!(core.artifacts_json["sources"]["Inline.sol"]
+      .get("ast")
+      .is_some());
   }
 
   #[test]
-  fn to_compiler_error_rewrites_fields() {
+  fn compiler_error_maps_severity_labels() {
     let json = r#"{
-      "component": "general",
-      "formattedMessage": "Warning: detail",
-      "message": "detail",
-      "severity": "warning",
-      "type": "Warning",
-      "sourceLocation": { "file": "Lib.sol", "start": 1, "end": 2 }
+      "contracts": {},
+      "errors": [
+        {
+          "component": "general",
+          "formattedMessage": "Warning: detail",
+          "message": "detail",
+          "severity": "warning",
+          "type": "Warning",
+          "errorCode": "256"
+        }
+      ],
+      "sources": {},
+      "version": "0.8.24"
     }"#;
-    let error: Error = serde_json::from_str(json).expect("parse error");
-    let converted = super::to_compiler_error(&error);
 
-    assert_eq!(converted.message, "detail");
-    assert_eq!(converted.severity, "Warning");
-    let location = converted.source_location.expect("location");
-    assert_eq!(location.file, "Lib.sol");
-    assert_eq!(location.start, 1);
-    assert_eq!(location.end, 2);
+    let output: StandardCompilerOutput = serde_json::from_str(json).expect("compiler output");
+    let core = from_standard_json(output);
+    assert_eq!(core.errors.len(), 1);
+    let error = &core.errors[0];
+    assert_eq!(error.severity, SeverityLevel::Warning);
+    assert_eq!(error.severity_level, "warning");
+    assert_eq!(error.error_code, Some(256));
+  }
+
+  #[test]
+  fn into_js_compile_output_preserves_contracts_and_errors() {
+    let mut core = CompileOutput {
+      artifacts_json: json!({ "contracts": {} }),
+      artifacts: BTreeMap::new(),
+      artifact: None,
+      errors: vec![CompilerError {
+        message: "detail".into(),
+        formatted_message: None,
+        component: "general".into(),
+        severity: SeverityLevel::Error,
+        severity_level: "error".into(),
+        error_type: "TypeError".into(),
+        error_code: Some(1),
+        source_location: Some(SourceLocation {
+          file: "Test.sol".into(),
+          start: 0,
+          end: 4,
+        }),
+        secondary_source_locations: Some(vec![SecondarySourceLocation {
+          file: Some("Dep.sol".into()),
+          start: Some(2),
+          end: Some(6),
+          message: Some("secondary".into()),
+        }]),
+      }],
+      has_compiler_errors: true,
+    };
+
+    let mut artifacts = SourceArtifacts::default();
+    let mut contract = Contract::new("Widget");
+    contract.with_address(Some("0xabc".into()));
+    artifacts.contracts.insert("Widget".into(), contract);
+    core.artifacts.insert("Widget.sol".into(), artifacts);
+
+    let js_output = into_js_compile_output(core);
+    assert!(js_output
+      .artifacts
+      .get("Widget.sol")
+      .and_then(|entry| entry.contracts.get("Widget"))
+      .is_some());
+    assert!(js_output.has_compiler_errors);
+    assert_eq!(js_output.errors.len(), 1);
+    assert_eq!(js_output.errors[0].severity_level, "error");
+    assert_eq!(
+      js_output.errors[0]
+        .source_location
+        .as_ref()
+        .map(|loc| loc.file.as_str()),
+      Some("Test.sol")
+    );
   }
 }
