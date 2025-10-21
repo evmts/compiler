@@ -24,6 +24,12 @@ impl ContractBytecode {
     }
   }
 
+  pub fn from_hex_string(hex_string: &str) -> Result<Self, hex::FromHexError> {
+    let trimmed = hex_string.strip_prefix("0x").unwrap_or(hex_string);
+    let bytes = hex::decode(trimmed)?;
+    Ok(Self::from_bytes(bytes))
+  }
+
   pub fn from_bytecode(bytecode: &Bytecode) -> Option<Self> {
     Self::from_bytecode_object(&bytecode.object)
   }
@@ -575,6 +581,13 @@ where
 mod tests {
   use super::*;
   use serde_json::json;
+
+  #[test]
+  fn contract_bytecode_from_hex_string_parses() {
+    let bytecode = ContractBytecode::from_hex_string("0xDEADBEEF").expect("hex");
+    assert_eq!(bytecode.to_hex(), "0xdeadbeef");
+    assert_eq!(bytecode.bytes(), &[0xde, 0xad, 0xbe, 0xef]);
+  }
 
   #[test]
   fn contract_bytecode_helpers_work() {

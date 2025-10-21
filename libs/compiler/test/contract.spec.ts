@@ -103,6 +103,25 @@ describe("Contract", () => {
     expect(snapshot.deployedBytecode?.hex).toBe("0xcafe");
   });
 
+  test("hex string bytecode is accepted", () => {
+    const creationHex = "0xDEADBEEF";
+    const deployedHex = "0xFEEDFACE";
+
+    const contract = new Contract({ name: "Hex" })
+      .withCreationBytecode(creationHex)
+      .withDeployedBytecode(deployedHex);
+
+    const snapshot = contract.toJson();
+    expect(snapshot.creationBytecode?.hex).toBe("0xdeadbeef");
+    expect(Array.from(snapshot.creationBytecode?.bytes ?? [])).toEqual([
+      0xde, 0xad, 0xbe, 0xef,
+    ]);
+    expect(snapshot.deployedBytecode?.hex).toBe("0xfeedface");
+    expect(Array.from(snapshot.deployedBytecode?.bytes ?? [])).toEqual([
+      0xfe, 0xed, 0xfa, 0xce,
+    ]);
+  });
+
   test("constructor accepts existing state", () => {
     const base = Contract.fromSolcContractOutput(
       "Existing",

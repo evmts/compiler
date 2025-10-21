@@ -3,10 +3,8 @@ import {
   type CompileOutput,
   type CompilerError,
   type ContractBytecode,
-  type ContractState,
   type SourceArtifacts,
 } from "../build/index.js";
-import type { Buffer } from "node:buffer";
 
 type Expect<T extends true> = T;
 type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
@@ -290,7 +288,10 @@ type _TypeGuardAccessible = Expect<
 // Contract type inference
 // -----------------------------------------------------------------------------
 
-const bufferForBytecode = undefined as unknown as Buffer;
+const bytecodeBytes = undefined as unknown as
+  | Uint8Array
+  | `0x${string}`
+  | string;
 
 const contractNameOnly = new Contract({ name: "ContractNameOnly" });
 type ContractNameOnly = typeof contractNameOnly;
@@ -367,7 +368,7 @@ type _ContractWithAddressSetNullGetter = Expect<
 
 const contractWithCreationBytecode = new Contract({
   name: "ContractWithCreationBytecode",
-}).withCreationBytecode(bufferForBytecode);
+}).withCreationBytecode(bytecodeBytes);
 type _ContractWithCreationBytecodeGetter = Expect<
   Equal<
     (typeof contractWithCreationBytecode)["creationBytecode"],
@@ -390,9 +391,27 @@ type _ContractWithCreationBytecodeNullGetter = Expect<
   Equal<(typeof contractWithCreationBytecodeNull)["creationBytecode"], null>
 >;
 
+const contractWithCreationBytecodeHex = new Contract({
+  name: "ContractWithCreationBytecodeHex",
+}).withCreationBytecode("0xdeadbeef");
+type _ContractWithCreationBytecodeHexGetter = Expect<
+  Equal<
+    (typeof contractWithCreationBytecodeHex)["creationBytecode"],
+    ContractBytecode
+  >
+>;
+type _ContractWithCreationBytecodeHexState = Expect<
+  Equal<
+    ContractInstanceState<
+      typeof contractWithCreationBytecodeHex
+    >["creationBytecode"],
+    ContractBytecode
+  >
+>;
+
 const contractWithDeployedBytecode = new Contract({
   name: "ContractWithDeployedBytecode",
-}).withDeployedBytecode(bufferForBytecode);
+}).withDeployedBytecode(bytecodeBytes);
 type _ContractWithDeployedBytecodeGetter = Expect<
   Equal<
     (typeof contractWithDeployedBytecode)["deployedBytecode"],
@@ -405,6 +424,24 @@ const contractWithDeployedBytecodeNull = new Contract({
 }).withDeployedBytecode(null);
 type _ContractWithDeployedBytecodeNullGetter = Expect<
   Equal<(typeof contractWithDeployedBytecodeNull)["deployedBytecode"], null>
+>;
+
+const contractWithDeployedBytecodeHex = new Contract({
+  name: "ContractWithDeployedBytecodeHex",
+}).withDeployedBytecode("0xfeedface");
+type _ContractWithDeployedBytecodeHexGetter = Expect<
+  Equal<
+    (typeof contractWithDeployedBytecodeHex)["deployedBytecode"],
+    ContractBytecode
+  >
+>;
+type _ContractWithDeployedBytecodeHexState = Expect<
+  Equal<
+    ContractInstanceState<
+      typeof contractWithDeployedBytecodeHex
+    >["deployedBytecode"],
+    ContractBytecode
+  >
 >;
 
 const contractFromSolc = Contract.fromSolcContractOutput(
@@ -421,9 +458,6 @@ type _ContractFromSolcAbiNoUndefined = Expect<
 >;
 type _ContractFromSolcCreationBytecodeNoUndefined = Expect<
   Equal<NoUndefined<ContractFromSolcInstance["creationBytecode"]>, true>
->;
-type _ContractFromSolcRuntimeBytecodeNoUndefined = Expect<
-  Equal<NoUndefined<ContractFromSolcInstance["runtimeBytecode"]>, true>
 >;
 type _ContractFromSolcDeployedBytecodeNoUndefined = Expect<
   Equal<NoUndefined<ContractFromSolcInstance["deployedBytecode"]>, true>

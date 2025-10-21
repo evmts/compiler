@@ -76,7 +76,6 @@ export interface Contract<
   readonly name: Name;
   readonly address: FieldValue<Map, "address">;
   readonly creationBytecode: FieldValue<Map, "creationBytecode">;
-  readonly runtimeBytecode: FieldValue<Map, "runtimeBytecode">;
   readonly deployedBytecode: FieldValue<Map, "deployedBytecode">;
   readonly abi: FieldValue<Map, "abi">;
   readonly metadata: FieldValue<Map, "metadata">;
@@ -110,29 +109,13 @@ export interface Contract<
     bytecode: null
   ): Contract<Name, UpdateMap<Map, "creationBytecode", null>>;
   withCreationBytecode(
-    bytecode: Buffer | Uint8Array
+    bytecode: Uint8Array | `0x${string}` | string
   ): Contract<Name, UpdateMap<Map, "creationBytecode", ContractBytecode>>;
   withCreationBytecode(
-    bytecode?: Buffer | Uint8Array | null
+    bytecode?: Uint8Array | `0x${string}` | string | null
   ): Contract<
     Name,
     UpdateMap<Map, "creationBytecode", BytecodeMapValue<typeof bytecode>>
-  >;
-  withRuntimeBytecode(): Contract<
-    Name,
-    UpdateMap<Map, "runtimeBytecode", undefined>
-  >;
-  withRuntimeBytecode(
-    bytecode: null
-  ): Contract<Name, UpdateMap<Map, "runtimeBytecode", null>>;
-  withRuntimeBytecode(
-    bytecode: Buffer | Uint8Array
-  ): Contract<Name, UpdateMap<Map, "runtimeBytecode", ContractBytecode>>;
-  withRuntimeBytecode(
-    bytecode?: Buffer | Uint8Array | null
-  ): Contract<
-    Name,
-    UpdateMap<Map, "runtimeBytecode", BytecodeMapValue<typeof bytecode>>
   >;
   withDeployedBytecode(): Contract<
     Name,
@@ -142,10 +125,10 @@ export interface Contract<
     bytecode: null
   ): Contract<Name, UpdateMap<Map, "deployedBytecode", null>>;
   withDeployedBytecode(
-    bytecode: Buffer | Uint8Array
+    bytecode: Uint8Array | `0x${string}` | string
   ): Contract<Name, UpdateMap<Map, "deployedBytecode", ContractBytecode>>;
   withDeployedBytecode(
-    bytecode?: Buffer | Uint8Array | null
+    bytecode?: Uint8Array | `0x${string}` | string | null
   ): Contract<
     Name,
     UpdateMap<Map, "deployedBytecode", BytecodeMapValue<typeof bytecode>>
@@ -226,8 +209,8 @@ export interface CompilerSettings {
 }
 
 export interface ContractBytecode {
-  hex?: `0x${string}` | null | undefined
-  bytes?: Uint8Array | null | undefined
+  hex: `0x${string}`
+  bytes: Uint8Array
 }
 
 export interface ContractState {
@@ -453,15 +436,11 @@ type ArtifactValue<
  * replace matching declarations in build/index.d.ts after every build.
  */
 
-type BaseContractState = ContractState & {
-  runtimeBytecode?: ContractBytecode | null | undefined;
-};
-
 type ContractStateInput = { name: string } & Partial<
-  Omit<BaseContractState, "name">
+  Omit<ContractState, "name">
 >;
 
-type ContractStateKeys = keyof BaseContractState;
+type ContractStateKeys = keyof ContractState;
 
 type MutableContractStateKeys = Exclude<ContractStateKeys, "name">;
 
@@ -470,7 +449,7 @@ type NormalizeValue<Value> = [Exclude<Value, undefined>] extends [never]
   : Exclude<Value, undefined>;
 
 type DefinedValue<Key extends MutableContractStateKeys> = NormalizeValue<
-  BaseContractState[Key]
+  ContractState[Key]
 >;
 
 export type ContractStateMap = Partial<{
@@ -557,7 +536,7 @@ type SnapshotToInput<State extends ContractStateShape> = {
 };
 
 type ContractBytecodeStateValue<
-  Next extends Buffer | Uint8Array | null | undefined
+  Next extends Uint8Array | `0x${string}` | string | null | undefined
 > = BytecodeMapValue<Next>;
 
 type UpdateField<

@@ -10,7 +10,7 @@ use core::{
 use foundry_compilers::artifacts::ConfigurableContractArtifact;
 use foundry_compilers::Artifact;
 use napi::bindgen_prelude::*;
-use napi::{JsUnknown, ValueType};
+use napi::{Either, JsUnknown, ValueType};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -118,17 +118,17 @@ impl From<ContractState> for Contract {
 #[napi(object, js_name = "ContractBytecode")]
 #[derive(Clone, Debug)]
 pub struct JsContractBytecode {
-  #[napi(ts_type = "`0x${string}` | null | undefined")]
-  pub hex: Option<String>,
-  #[napi(ts_type = "Uint8Array | null | undefined")]
-  pub bytes: Option<Vec<u8>>,
+  #[napi(ts_type = "`0x${string}`")]
+  pub hex: String,
+  #[napi(ts_type = "Uint8Array")]
+  pub bytes: Vec<u8>,
 }
 
 impl From<&ContractBytecode> for JsContractBytecode {
   fn from(bytecode: &ContractBytecode) -> Self {
     Self {
-      hex: Some(bytecode.to_hex()),
-      bytes: Some(bytecode.bytes().to_vec()),
+      hex: bytecode.to_hex(),
+      bytes: bytecode.bytes().to_vec(),
     }
   }
 }
@@ -294,7 +294,9 @@ fn json_to_bytecode(value: Option<&Value>) -> napi::Result<Option<ContractByteco
   }
 
   if let Some(string) = value.as_str() {
-    return hex_to_bytecode(string);
+    return ContractBytecode::from_hex_string(string)
+      .map(Some)
+      .map_err(|err| napi_error(format!("Invalid hex-encoded bytecode: {err}")));
   }
 
   let obj = value
@@ -302,7 +304,9 @@ fn json_to_bytecode(value: Option<&Value>) -> napi::Result<Option<ContractByteco
     .ok_or_else(|| napi_error("Bytecode must be a string or object".to_string()))?;
 
   if let Some(hex) = obj.get("hex").and_then(Value::as_str) {
-    return hex_to_bytecode(hex);
+    return ContractBytecode::from_hex_string(hex)
+      .map(Some)
+      .map_err(|err| napi_error(format!("Invalid hex-encoded bytecode: {err}")));
   }
 
   if let Some(bytes) = obj.get("bytes") {
@@ -339,14 +343,6 @@ fn json_to_bytecode(value: Option<&Value>) -> napi::Result<Option<ContractByteco
 
   Err(napi_error("Invalid bytecode format".to_string()))
 }
-
-fn hex_to_bytecode(hex: &str) -> napi::Result<Option<ContractBytecode>> {
-  let trimmed = hex.strip_prefix("0x").unwrap_or(hex);
-  let bytes = hex::decode(trimmed)
-    .map_err(|err| napi_error(format!("Invalid hex-encoded bytecode: {err}")))?;
-  Ok(Some(ContractBytecode::from_bytes(bytes)))
-}
-
 // -----------------------------------------------------------------------------
 // JsContract wrapper (exposed via N-API)
 // -----------------------------------------------------------------------------
@@ -510,18 +506,36 @@ impl JsContract {
   }
 
   #[napi]
-  pub fn with_creation_bytecode(&mut self, bytecode: Option<Buffer>) -> napi::Result<Self> {
-    self
-      .inner
-      .with_creation_bytecode(bytecode.map(|buffer| ContractBytecode::from_bytes(buffer.to_vec())));
+  pub fn with_creation_bytecode(
+    &mut self,
+    bytecode: Option<Either<Buffer, String>>,
+  ) -> napi::Result<Self> {
+    let next_bytecode = match bytecode {
+      Some(Either::A(buffer)) => Some(ContractBytecode::from_bytes(buffer.to_vec())),
+      Some(Either::B(hex)) => Some(
+        ContractBytecode::from_hex_string(&hex)
+          .map_err(|err| napi_error(format!("Invalid hex-encoded bytecode: {err}")))?,
+      ),
+      None => None,
+    };
+    self.inner.with_creation_bytecode(next_bytecode);
     Ok(self.clone())
   }
 
   #[napi]
-  pub fn with_deployed_bytecode(&mut self, bytecode: Option<Buffer>) -> napi::Result<Self> {
-    self
-      .inner
-      .with_deployed_bytecode(bytecode.map(|buffer| ContractBytecode::from_bytes(buffer.to_vec())));
+  pub fn with_deployed_bytecode(
+    &mut self,
+    bytecode: Option<Either<Buffer, String>>,
+  ) -> napi::Result<Self> {
+    let next_bytecode = match bytecode {
+      Some(Either::A(buffer)) => Some(ContractBytecode::from_bytes(buffer.to_vec())),
+      Some(Either::B(hex)) => Some(
+        ContractBytecode::from_hex_string(&hex)
+          .map_err(|err| napi_error(format!("Invalid hex-encoded bytecode: {err}")))?,
+      ),
+      None => None,
+    };
+    self.inner.with_deployed_bytecode(next_bytecode);
     Ok(self.clone())
   }
 
