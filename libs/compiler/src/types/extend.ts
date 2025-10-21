@@ -1,8 +1,10 @@
 import type {
   Ast,
+  CompileOutputJson,
   CompilerError,
   ContractBytecode,
   ContractState,
+  SourceArtifactsJson,
 } from "../../build";
 
 type WithPathKey<TPath, TValue> = TValue extends SourceArtifacts<infer _>
@@ -52,6 +54,7 @@ export declare class CompileOutput<
     : undefined;
   get diagnostics(): Array<CompilerError>;
   hasCompilerErrors(): this is CompileOutput<true, TSourcePaths>;
+  toJson(): CompileOutputJson;
 }
 
 type ContractStateInput = { name: string } & Partial<
@@ -251,7 +254,7 @@ export declare class SourceArtifacts<TPath extends string = string> {
   get sourcePath(): TPath | null;
   get sourceId(): number | null;
   get solcVersion(): string | null;
-  get astJson(): import("./solc-ast").SourceUnit | undefined;
   get ast(): Ast | undefined;
   get contracts(): Record<string, Contract>;
+  toJson(): SourceArtifactsJson;
 }

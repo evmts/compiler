@@ -222,7 +222,7 @@ fn compile_standard_sources(
         "Vyper compilation failed",
       )?;
       let compiler_output = FoundryCompilerOutput::from(output);
-      let artifacts_json = map_err_with_context(
+      let raw_artifacts = map_err_with_context(
         serde_json::to_value(&compiler_output),
         "Failed to serialise Vyper compiler output",
       )?;
@@ -234,7 +234,7 @@ fn compile_standard_sources(
       Ok(build_compile_output(
         &compiler_output.contracts,
         &compiler_output.sources,
-        artifacts_json,
+        raw_artifacts,
         errors,
       ))
     }
@@ -546,7 +546,7 @@ mod tests {
     );
 
     let result = compile_sources(&state, &state.config, sources).expect("compile");
-    assert!(result.artifacts_json.is_object());
+    assert!(result.raw_artifacts.is_object());
   }
 
   #[test]

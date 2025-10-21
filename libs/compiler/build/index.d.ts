@@ -49,6 +49,7 @@ export declare class CompileOutput<
     : undefined;
   get diagnostics(): Array<CompilerError>;
   hasCompilerErrors(): this is CompileOutput<true, TSourcePaths>;
+  toJson(): CompileOutputJson;
 }
 
 export type JsCompileOutput = CompileOutput
@@ -142,9 +143,9 @@ export declare class SourceArtifacts<TPath extends string = string> {
   get sourcePath(): TPath | null;
   get sourceId(): number | null;
   get solcVersion(): string | null;
-  get astJson(): import("./solc-ast").SourceUnit | undefined;
   get ast(): Ast | undefined;
   get contracts(): Record<string, Contract>;
+  toJson(): SourceArtifactsJson;
 }
 
 export type JsSourceArtifacts = SourceArtifacts
@@ -160,6 +161,13 @@ export declare const enum BytecodeHash {
   Ipfs = 'Ipfs',
   None = 'None',
   Bzzr1 = 'Bzzr1'
+}
+
+export interface CompileOutputJson {
+  artifact?: SourceArtifactsJson | undefined
+  artifacts?: Record<string, SourceArtifactsJson> | undefined
+  errors?: ReadonlyArray<CompilerError> | undefined
+  rawArtifacts?: Record<string, unknown> | undefined
 }
 
 /** JavaScript-facing configuration captured through N-API bindings. */
@@ -396,6 +404,14 @@ export declare const enum SeverityLevel {
 export declare const enum SolcLanguage {
   Solidity = 'Solidity',
   Yul = 'Yul'
+}
+
+export interface SourceArtifactsJson {
+  sourcePath?: string | undefined
+  sourceId?: number | undefined
+  solcVersion?: string | undefined
+  ast?: import('./solc-ast').SourceUnit | undefined
+  contracts?: Record<string, ContractState> | undefined
 }
 
 export interface SourceLocation {

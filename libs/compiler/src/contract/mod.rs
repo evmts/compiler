@@ -11,6 +11,7 @@ use foundry_compilers::artifacts::ConfigurableContractArtifact;
 use foundry_compilers::Artifact;
 use napi::bindgen_prelude::*;
 use napi::{Either, JsUnknown, ValueType};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -116,7 +117,7 @@ impl From<ContractState> for Contract {
 // -----------------------------------------------------------------------------
 
 #[napi(object, js_name = "ContractBytecode")]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JsContractBytecode {
   #[napi(ts_type = "`0x${string}`")]
   pub hex: String,
@@ -134,7 +135,8 @@ impl From<&ContractBytecode> for JsContractBytecode {
 }
 
 #[napi(object, js_name = "ContractState")]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct JsContractState {
   pub name: String,
   #[napi(ts_type = "`0x${string}` | null | undefined")]

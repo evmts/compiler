@@ -12,7 +12,7 @@ use hex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContractBytecode {
   bytes: Vec<u8>,
 }
@@ -96,7 +96,8 @@ pub struct ImmutableSlot {
 }
 
 #[napi(object, js_name = "FunctionDebugDataEntry")]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct JsFunctionDebugDataEntry {
   #[napi(ts_type = "number | null | undefined")]
   pub entry_point: Option<u32>,
@@ -120,7 +121,8 @@ impl From<&FunctionDebugData> for JsFunctionDebugDataEntry {
 }
 
 #[napi(object, js_name = "GasEstimatesCreation")]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct JsGasEstimatesCreation {
   pub code_deposit_cost: String,
   pub execution_cost: String,
@@ -138,7 +140,7 @@ impl From<&Creation> for JsGasEstimatesCreation {
 }
 
 #[napi(object, js_name = "GasEstimates")]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JsGasEstimates {
   pub creation: JsGasEstimatesCreation,
   pub external: HashMap<String, String>,
@@ -156,7 +158,7 @@ impl From<&GasEstimates> for JsGasEstimates {
 }
 
 #[napi(object, js_name = "EwasmOutput")]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JsEwasm {
   #[napi(ts_type = "string | null | undefined")]
   pub wast: Option<String>,
@@ -172,7 +174,8 @@ impl From<&Ewasm> for JsEwasm {
   }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ContractState {
   pub name: String,
   pub address: Option<String>,

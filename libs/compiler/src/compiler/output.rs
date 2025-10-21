@@ -22,7 +22,7 @@ use serde_json::{Map, Value};
 
 use crate::ast::{utils::sanitize_ast_value, Ast, JsAst, SourceTarget};
 use crate::contract;
-use crate::contract::{Contract, JsContract};
+use crate::contract::{Contract, JsContract, JsContractState};
 use crate::internal::config::AstConfigOptions;
 use crate::internal::errors::napi_error;
 
@@ -98,11 +98,67 @@ impl SourceArtifacts {
       ..Default::default()
     }
   }
+
+  pub fn to_json(&self) -> SourceArtifactsJson {
+    SourceArtifactsJson::from_source_artifacts(self)
+  }
+}
+
+#[napi(object, js_name = "SourceArtifactsJson")]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceArtifactsJson {
+  #[napi(ts_type = "string | undefined")]
+  pub source_path: Option<String>,
+  #[napi(ts_type = "number | undefined")]
+  pub source_id: Option<u32>,
+  #[napi(ts_type = "string | undefined")]
+  pub solc_version: Option<String>,
+  #[napi(ts_type = "import('./solc-ast').SourceUnit | undefined")]
+  pub ast: Option<Value>,
+  #[napi(ts_type = "Record<string, ContractState> | undefined")]
+  pub contracts: Option<BTreeMap<String, JsContractState>>,
+}
+
+impl SourceArtifactsJson {
+  fn from_source_artifacts(artifacts: &SourceArtifacts) -> Self {
+    let ast = artifacts.ast.as_ref().and_then(|unit| {
+      let mut value = serde_json::to_value(unit).ok()?;
+      sanitize_ast_value(&mut value);
+      Some(value)
+    });
+
+    let contracts = if artifacts.contracts.is_empty() {
+      None
+    } else {
+      Some(
+        artifacts
+          .contracts
+          .iter()
+          .map(|(name, contract)| {
+            let snapshot = contract::contract_state_to_js(contract.state());
+            (name.clone(), snapshot)
+          })
+          .collect(),
+      )
+    };
+
+    Self {
+      source_path: artifacts.source_path.clone(),
+      source_id: artifacts.source_id,
+      solc_version: artifacts
+        .solc_version
+        .as_ref()
+        .map(|version| version.to_string()),
+      ast,
+      contracts,
+    }
+  }
 }
 
 #[derive(Clone, Debug)]
 pub struct CompileOutput {
-  pub artifacts_json: Value,
+  pub raw_artifacts: Value,
   pub artifacts: BTreeMap<String, SourceArtifacts>,
   pub artifact: Option<SourceArtifacts>,
   pub errors: Vec<CompilerError>,
@@ -115,6 +171,59 @@ impl CompileOutput {
       .iter()
       .any(|error| error.severity == SeverityLevel::Error)
   }
+
+  pub fn to_json(&self) -> CompileOutputJson {
+    CompileOutputJson::from_compile_output(self)
+  }
+}
+
+#[napi(object, js_name = "CompileOutputJson")]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompileOutputJson {
+  #[napi(ts_type = "SourceArtifactsJson | undefined")]
+  pub artifact: Option<SourceArtifactsJson>,
+  #[napi(ts_type = "Record<string, SourceArtifactsJson> | undefined")]
+  pub artifacts: Option<BTreeMap<String, SourceArtifactsJson>>,
+  #[napi(ts_type = "ReadonlyArray<CompilerError> | undefined")]
+  pub errors: Option<Vec<CompilerError>>,
+  #[napi(ts_type = "Record<string, unknown> | undefined")]
+  pub raw_artifacts: Option<Value>,
+}
+
+impl CompileOutputJson {
+  fn from_compile_output(output: &CompileOutput) -> Self {
+    let artifact = output.artifact.as_ref().map(SourceArtifacts::to_json);
+
+    let artifacts = if output.artifacts.is_empty() {
+      None
+    } else {
+      Some(
+        output
+          .artifacts
+          .iter()
+          .map(|(path, artifacts)| (path.clone(), artifacts.to_json()))
+          .collect(),
+      )
+    };
+
+    let errors = if output.errors.is_empty() {
+      None
+    } else {
+      Some(output.errors.clone())
+    };
+
+    Self {
+      artifact,
+      artifacts,
+      errors,
+      raw_artifacts: if output.raw_artifacts.is_null() {
+        None
+      } else {
+        Some(output.raw_artifacts.clone())
+      },
+    }
+  }
 }
 
 pub fn into_core_compile_output(output: ProjectCompileOutput<MultiCompiler>) -> CompileOutput {
@@ -125,7 +234,7 @@ pub fn into_core_compile_output(output: ProjectCompileOutput<MultiCompiler>) -> 
     .cloned()
     .filter(|_| artifacts.len() == 1);
   CompileOutput {
-    artifacts_json: aggregated_to_value(output.output()),
+    raw_artifacts: aggregated_to_value(output.output()),
     errors: output
       .output()
       .errors
@@ -138,13 +247,13 @@ pub fn into_core_compile_output(output: ProjectCompileOutput<MultiCompiler>) -> 
 }
 
 pub fn from_standard_json(output: CompilerOutput) -> CompileOutput {
-  let artifacts_json = serde_json::to_value(&output).unwrap_or(Value::Null);
+  let raw_artifacts = serde_json::to_value(&output).unwrap_or(Value::Null);
   let errors = output
     .errors
     .iter()
     .map(|error: &FoundryCompilerError| solc_error_to_core(error))
     .collect();
-  build_compile_output(&output.contracts, &output.sources, artifacts_json, errors)
+  build_compile_output(&output.contracts, &output.sources, raw_artifacts, errors)
 }
 
 fn convert_source_ast(source: &SourceFile) -> Option<SourceUnit> {
@@ -225,7 +334,7 @@ fn multi_error_to_core(error: &MultiCompilerError) -> CompilerError {
 pub(crate) fn build_compile_output(
   contracts: &FileToContractsMap<FoundryContract>,
   sources: &BTreeMap<PathBuf, SourceFile>,
-  artifacts_json: Value,
+  raw_artifacts: Value,
   errors: Vec<CompilerError>,
 ) -> CompileOutput {
   let mut artifacts: BTreeMap<String, SourceArtifacts> = BTreeMap::new();
@@ -259,7 +368,7 @@ pub(crate) fn build_compile_output(
     .filter(|_| artifacts.len() == 1);
 
   CompileOutput {
-    artifacts_json,
+    raw_artifacts,
     artifacts,
     artifact,
     errors,
@@ -394,24 +503,29 @@ pub struct JsSourceArtifacts {
   source_id: Option<u32>,
   solc_version: Option<Version>,
   ast_unit: Option<SourceUnit>,
-  ast_json: Option<Value>,
+  json: SourceArtifactsJson,
   contracts: HashMap<String, Contract>,
 }
 
 impl JsSourceArtifacts {
   fn from_core(artifacts: SourceArtifacts) -> Self {
-    let ast_json = artifacts
-      .ast
-      .as_ref()
-      .and_then(|unit| serde_json::to_value(unit).ok());
+    let json = artifacts.to_json();
+
+    let SourceArtifacts {
+      source_path,
+      source_id,
+      solc_version,
+      ast,
+      contracts,
+    } = artifacts;
 
     Self {
-      source_path: artifacts.source_path,
-      source_id: artifacts.source_id,
-      solc_version: artifacts.solc_version,
-      ast_unit: artifacts.ast,
-      ast_json,
-      contracts: artifacts.contracts.into_iter().collect(),
+      source_path,
+      source_id,
+      solc_version,
+      ast_unit: ast,
+      json,
+      contracts: contracts.into_iter().collect(),
     }
   }
 
@@ -441,7 +555,7 @@ impl JsSourceArtifacts {
       source_id: None,
       solc_version: None,
       ast_unit: None,
-      ast_json: None,
+      json: SourceArtifactsJson::default(),
       contracts: HashMap::new(),
     }
   }
@@ -462,11 +576,6 @@ impl JsSourceArtifacts {
       .solc_version
       .as_ref()
       .map(|version| version.to_string())
-  }
-
-  #[napi(getter, ts_return_type = "import('./solc-ast').SourceUnit | undefined")]
-  pub fn ast_json(&self) -> Option<Value> {
-    self.ast_json.clone()
   }
 
   #[napi(getter, ts_return_type = "Ast | undefined")]
@@ -493,12 +602,18 @@ impl JsSourceArtifacts {
       .map(|(name, contract)| (name.clone(), contract::contract_class(contract)))
       .collect()
   }
+
+  #[napi(js_name = "toJson", ts_return_type = "SourceArtifactsJson")]
+  pub fn to_json(&self) -> SourceArtifactsJson {
+    self.json.clone()
+  }
 }
 
 #[napi(js_name = "CompileOutput")]
 #[derive(Clone, Debug)]
 pub struct JsCompileOutput {
-  artifacts_json: Value,
+  json: CompileOutputJson,
+  raw_artifacts: Value,
   artifacts: HashMap<String, JsSourceArtifacts>,
   artifact: Option<JsSourceArtifacts>,
   errors: Vec<CompilerError>,
@@ -508,8 +623,9 @@ pub struct JsCompileOutput {
 impl JsCompileOutput {
   fn from_core(core: CompileOutput) -> Self {
     let has_compiler_errors = core.has_compiler_errors();
+    let json = core.to_json();
     let CompileOutput {
-      artifacts_json,
+      raw_artifacts,
       artifacts,
       artifact,
       errors,
@@ -522,7 +638,8 @@ impl JsCompileOutput {
     let artifact = artifact.map(JsSourceArtifacts::from_core);
 
     Self {
-      artifacts_json,
+      json,
+      raw_artifacts,
       artifacts,
       artifact,
       errors,
@@ -536,7 +653,8 @@ impl JsCompileOutput {
   #[napi(constructor)]
   pub fn new() -> Self {
     Self {
-      artifacts_json: Value::Null,
+      json: CompileOutputJson::default(),
+      raw_artifacts: Value::Null,
       artifacts: HashMap::new(),
       artifact: None,
       errors: Vec::new(),
@@ -549,8 +667,8 @@ impl JsCompileOutput {
     js_name = "artifactsJson",
     ts_return_type = "Record<string, unknown>"
   )]
-  pub fn artifacts_json(&self) -> Value {
-    self.artifacts_json.clone()
+  pub fn raw_artifacts(&self) -> Value {
+    self.raw_artifacts.clone()
   }
 
   #[napi(getter, ts_return_type = "Record<string, SourceArtifacts>")]
@@ -583,6 +701,11 @@ impl JsCompileOutput {
   #[napi]
   pub fn has_compiler_errors(&self) -> bool {
     self.has_compiler_errors
+  }
+
+  #[napi(js_name = "toJson", ts_return_type = "CompileOutputJson")]
+  pub fn to_json(&self) -> CompileOutputJson {
+    self.json.clone()
   }
 }
 
@@ -639,7 +762,18 @@ mod tests {
     let core = from_standard_json(output);
 
     assert!(core.has_compiler_errors());
-    assert!(core.artifacts_json["contracts"]["Test.sol"]["Test"].is_object());
+    assert!(core.raw_artifacts["contracts"]["Test.sol"]["Test"].is_object());
+    let snapshot = core.to_json();
+    let artifacts = snapshot.artifacts.expect("artifacts snapshot");
+    let source_snapshot = artifacts.get("Test.sol").expect("source snapshot");
+    assert!(snapshot.raw_artifacts.is_some());
+    assert!(source_snapshot
+      .contracts
+      .as_ref()
+      .and_then(|contracts| contracts.get("Test"))
+      .is_some());
+    let snapshot_errors = snapshot.errors.expect("errors snapshot");
+    assert!(!snapshot_errors.is_empty());
     let entry = core.artifacts.get("Test.sol").expect("source entry");
     assert!(entry.contracts.contains_key("Test"));
     let error = &core.errors[0];
@@ -685,9 +819,19 @@ mod tests {
 
     let entry = core.artifacts.get("Inline.sol").expect("source entry");
     assert_eq!(entry.source_id, Some(1));
-    assert!(core.artifacts_json["sources"]["Inline.sol"]
+    assert!(core.raw_artifacts["sources"]["Inline.sol"]
       .get("ast")
       .is_some());
+    let snapshot = core.to_json();
+    let source_snapshot = snapshot
+      .artifacts
+      .as_ref()
+      .expect("artifacts snapshot")
+      .get("Inline.sol")
+      .expect("inline snapshot");
+    assert!(source_snapshot.ast.is_some());
+    let raw_snapshot = snapshot.raw_artifacts.expect("raw snapshot");
+    assert!(raw_snapshot["sources"]["Inline.sol"].get("ast").is_some());
   }
 
   #[test]
@@ -719,7 +863,7 @@ mod tests {
   #[test]
   fn into_js_compile_output_preserves_contracts_and_errors() {
     let mut core = CompileOutput {
-      artifacts_json: json!({ "contracts": {} }),
+      raw_artifacts: json!({ "contracts": {} }),
       artifacts: BTreeMap::new(),
       artifact: None,
       errors: vec![CompilerError {
@@ -756,6 +900,15 @@ mod tests {
       .get("Widget.sol")
       .and_then(|entry| entry.contracts.get("Widget"))
       .is_some());
+    let snapshot = js_output.to_json();
+    assert!(snapshot
+      .artifacts
+      .as_ref()
+      .and_then(|entries| entries.get("Widget.sol"))
+      .and_then(|entry| entry.contracts.as_ref())
+      .and_then(|contracts| contracts.get("Widget"))
+      .is_some());
+    assert!(snapshot.raw_artifacts.is_some());
     assert!(js_output.has_compiler_errors());
     assert_eq!(js_output.errors.len(), 1);
     assert_eq!(js_output.errors[0].severity, SeverityLevel::Error);

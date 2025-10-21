@@ -74,35 +74,13 @@ pub fn renumber_contract_definition(
 }
 
 pub fn sanitize_ast_value(value: &mut Value) {
-  fn prune(value: &mut Value, parent_key: Option<&str>) -> bool {
-    match value {
+  fn sanitize(node: &mut Value, parent_key: Option<&str>) -> bool {
+    match node {
       Value::Object(map) => {
         let keys: Vec<String> = map.keys().cloned().collect();
         for key in keys {
           if let Some(child) = map.get_mut(&key) {
-            prune(child, Some(&key));
-
-            let mut remove_entry = false;
-            match child {
-              Value::Null => {
-                if key == "typeDescriptions" {
-                  *child = Value::Object(Default::default());
-                } else {
-                  remove_entry = true;
-                }
-              }
-              Value::Object(obj) => {
-                if key == "typeDescriptions" && obj.is_empty() {
-                  // keep as empty object
-                }
-              }
-              Value::Array(items) => {
-                items.retain(|item| !item.is_null());
-              }
-              _ => {}
-            }
-
-            if remove_entry {
+            if !sanitize(child, Some(&key)) {
               map.remove(&key);
             }
           }
@@ -112,7 +90,7 @@ pub fn sanitize_ast_value(value: &mut Value) {
       Value::Array(items) => {
         let mut idx = 0;
         while idx < items.len() {
-          if prune(&mut items[idx], None) {
+          if sanitize(&mut items[idx], None) {
             idx += 1;
           } else {
             items.remove(idx);
@@ -122,7 +100,7 @@ pub fn sanitize_ast_value(value: &mut Value) {
       }
       Value::Null => {
         if parent_key == Some("typeDescriptions") {
-          *value = Value::Object(Default::default());
+          *node = Value::Object(Default::default());
           true
         } else {
           false
@@ -132,7 +110,47 @@ pub fn sanitize_ast_value(value: &mut Value) {
     }
   }
 
-  prune(value, None);
+  fn ensure_array(map: &mut serde_json::Map<String, Value>, key: &str) {
+    match map.get_mut(key) {
+      Some(Value::Array(_)) => {}
+      Some(Value::Null) => {
+        map.insert(key.to_string(), Value::Array(Vec::new()));
+      }
+      Some(other) => {
+        if !other.is_array() {
+          *other = Value::Array(Vec::new());
+        }
+      }
+      None => {
+        map.insert(key.to_string(), Value::Array(Vec::new()));
+      }
+    }
+  }
+
+  fn apply_defaults(node: &mut Value) {
+    match node {
+      Value::Object(map) => {
+        if let Some(Value::String(node_type)) = map.get("nodeType") {
+          if node_type == "ContractDefinition" {
+            ensure_array(map, "baseContracts");
+            ensure_array(map, "contractDependencies");
+          }
+        }
+        for child in map.values_mut() {
+          apply_defaults(child);
+        }
+      }
+      Value::Array(items) => {
+        for item in items {
+          apply_defaults(item);
+        }
+      }
+      _ => {}
+    }
+  }
+
+  sanitize(value, None);
+  apply_defaults(value);
 
   if let Value::Object(map) = value {
     map

@@ -656,6 +656,35 @@ describe("Compiler.compileSources", () => {
   });
 });
 
+describe("Compiler toJson snapshots", () => {
+  test("captures structured Solidity artifacts", () => {
+    const compiler = new Compiler();
+    const output = compiler.compileSources({
+      "InlineExample.sol": INLINE_SOURCE,
+    });
+    expect(output.toJson()).toMatchSnapshot();
+  });
+
+  test("captures structured Yul artifacts", () => {
+    const compiler = new Compiler();
+    const output = compiler.compileSources(
+      {
+        "Echo.yul": YUL_SOURCE,
+      },
+      { language: CompilerLanguage.Yul }
+    );
+    expect(output.toJson()).toMatchSnapshot();
+  });
+
+  test("captures structured Vyper artifacts", () => {
+    const compiler = new Compiler({ language: CompilerLanguage.Vyper });
+    const output = compiler.compileSources({
+      "Counter.vy": VYPER_COUNTER_SOURCE,
+    });
+    expect(output.toJson()).toMatchSnapshot();
+  });
+});
+
 describe("Compiler.compileFiles", () => {
   const createCompiler = () => new Compiler();
 
