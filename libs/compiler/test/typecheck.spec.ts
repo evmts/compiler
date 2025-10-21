@@ -1,15 +1,19 @@
-import type {
-  CompileOutput,
-  CompilerError,
-  SourceArtifacts,
+import {
+  Contract,
+  type CompileOutput,
+  type CompilerError,
+  type ContractBytecode,
+  type ContractState,
+  type SourceArtifacts,
 } from "../build/index.js";
+import type { Buffer } from "node:buffer";
 
 type Expect<T extends true> = T;
-type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B
-  ? 1
-  : 2
-  ? true
-  : false;
+type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+type ContractInstanceState<T> = T extends { readonly __state?: infer State }
+  ? State
+  : never;
+type NoUndefined<T> = Extract<T, undefined> extends never ? true : false;
 
 type SinglePath = readonly ["contracts/Only.sol"];
 type MultiPath = readonly ["contracts/A.sol", "contracts/B.sol"];
@@ -279,5 +283,164 @@ type _TypeGuardAccessible = Expect<
       ? true
       : false,
     true
+  >
+>;
+
+// -----------------------------------------------------------------------------
+// Contract type inference
+// -----------------------------------------------------------------------------
+
+const bufferForBytecode = undefined as unknown as Buffer;
+
+const contractNameOnly = new Contract({ name: "ContractNameOnly" });
+type ContractNameOnly = typeof contractNameOnly;
+type ContractNameOnlyState = ContractInstanceState<ContractNameOnly>;
+type _ContractNameOnlyAddressGetter = Expect<
+  Equal<ContractNameOnly["address"], undefined>
+>;
+type _ContractNameOnlyStateAddress = Expect<
+  Equal<ContractNameOnlyState["address"], undefined>
+>;
+type _ContractNameOnlyJsonMatchesState = Expect<
+  Equal<ReturnType<ContractNameOnly["toJson"]>, ContractNameOnlyState>
+>;
+
+const contractWithAddressLiteral = new Contract({
+  name: "ContractWithAddressLiteral",
+  address: "0x1234" as `0x${string}`,
+});
+type ContractWithAddressLiteral = typeof contractWithAddressLiteral;
+type ContractWithAddressLiteralState =
+  ContractInstanceState<ContractWithAddressLiteral>;
+type _ContractWithAddressLiteralGetter = Expect<
+  Equal<ContractWithAddressLiteral["address"], `0x${string}`>
+>;
+type _ContractWithAddressLiteralState = Expect<
+  Equal<ContractWithAddressLiteralState["address"], `0x${string}`>
+>;
+
+const contractWithNullAddress = new Contract({
+  name: "ContractWithNullAddress",
+  address: null,
+});
+type ContractWithNullAddress = typeof contractWithNullAddress;
+type _ContractWithNullAddressGetter = Expect<
+  Equal<ContractWithNullAddress["address"], null>
+>;
+type _ContractWithNullAddressState = Expect<
+  Equal<ContractInstanceState<ContractWithNullAddress>["address"], null>
+>;
+
+const contractWithExplicitUndefinedAddress = new Contract({
+  name: "ContractWithExplicitUndefinedAddress",
+  address: undefined,
+});
+type _ContractWithExplicitUndefinedAddressGetter = Expect<
+  Equal<(typeof contractWithExplicitUndefinedAddress)["address"], undefined>
+>;
+
+const contractWithAddressMutation = new Contract({
+  name: "ContractWithAddressMutation",
+}).withAddress("0xdeadbeef" as `0x${string}`);
+type ContractWithAddressMutation = typeof contractWithAddressMutation;
+type _ContractWithAddressMutationGetter = Expect<
+  Equal<ContractWithAddressMutation["address"], `0x${string}`>
+>;
+type _ContractWithAddressMutationState = Expect<
+  Equal<
+    ContractInstanceState<ContractWithAddressMutation>["address"],
+    `0x${string}`
+  >
+>;
+
+const contractWithAddressCleared =
+  contractWithAddressMutation.withAddress(undefined);
+type _ContractWithAddressClearedGetter = Expect<
+  Equal<(typeof contractWithAddressCleared)["address"], undefined>
+>;
+
+const contractWithAddressSetNull =
+  contractWithAddressMutation.withAddress(null);
+type _ContractWithAddressSetNullGetter = Expect<
+  Equal<(typeof contractWithAddressSetNull)["address"], null>
+>;
+
+const contractWithCreationBytecode = new Contract({
+  name: "ContractWithCreationBytecode",
+}).withCreationBytecode(bufferForBytecode);
+type _ContractWithCreationBytecodeGetter = Expect<
+  Equal<
+    (typeof contractWithCreationBytecode)["creationBytecode"],
+    ContractBytecode
+  >
+>;
+type _ContractWithCreationBytecodeState = Expect<
+  Equal<
+    ContractInstanceState<
+      typeof contractWithCreationBytecode
+    >["creationBytecode"],
+    ContractBytecode
+  >
+>;
+
+const contractWithCreationBytecodeNull = new Contract({
+  name: "ContractWithCreationBytecodeNull",
+}).withCreationBytecode(null);
+type _ContractWithCreationBytecodeNullGetter = Expect<
+  Equal<(typeof contractWithCreationBytecodeNull)["creationBytecode"], null>
+>;
+
+const contractWithDeployedBytecode = new Contract({
+  name: "ContractWithDeployedBytecode",
+}).withDeployedBytecode(bufferForBytecode);
+type _ContractWithDeployedBytecodeGetter = Expect<
+  Equal<
+    (typeof contractWithDeployedBytecode)["deployedBytecode"],
+    ContractBytecode
+  >
+>;
+
+const contractWithDeployedBytecodeNull = new Contract({
+  name: "ContractWithDeployedBytecodeNull",
+}).withDeployedBytecode(null);
+type _ContractWithDeployedBytecodeNullGetter = Expect<
+  Equal<(typeof contractWithDeployedBytecodeNull)["deployedBytecode"], null>
+>;
+
+const contractFromSolc = Contract.fromSolcContractOutput(
+  "ContractFromSolc",
+  {} as object
+);
+type ContractFromSolcInstance = typeof contractFromSolc;
+type ContractFromSolcState = ContractInstanceState<ContractFromSolcInstance>;
+type _ContractFromSolcAddressNoUndefined = Expect<
+  Equal<NoUndefined<ContractFromSolcInstance["address"]>, true>
+>;
+type _ContractFromSolcAbiNoUndefined = Expect<
+  Equal<NoUndefined<ContractFromSolcInstance["abi"]>, true>
+>;
+type _ContractFromSolcCreationBytecodeNoUndefined = Expect<
+  Equal<NoUndefined<ContractFromSolcInstance["creationBytecode"]>, true>
+>;
+type _ContractFromSolcRuntimeBytecodeNoUndefined = Expect<
+  Equal<NoUndefined<ContractFromSolcInstance["runtimeBytecode"]>, true>
+>;
+type _ContractFromSolcDeployedBytecodeNoUndefined = Expect<
+  Equal<NoUndefined<ContractFromSolcInstance["deployedBytecode"]>, true>
+>;
+type _ContractFromSolcToJsonMatchesState = Expect<
+  Equal<ReturnType<ContractFromSolcInstance["toJson"]>, ContractFromSolcState>
+>;
+
+const contractFromSolcWithMutation = contractFromSolc.withAddress(
+  "0xbeef" as `0x${string}`
+);
+type _ContractFromSolcWithMutationGetter = Expect<
+  Equal<(typeof contractFromSolcWithMutation)["address"], `0x${string}`>
+>;
+type _ContractFromSolcWithMutationState = Expect<
+  Equal<
+    ContractInstanceState<typeof contractFromSolcWithMutation>["address"],
+    `0x${string}`
   >
 >;

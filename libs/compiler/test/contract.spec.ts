@@ -33,7 +33,7 @@ const sampleConfigurableArtifact = {
   storageLayout: { storage: [] },
   userdoc: { notice: "notice" },
   devdoc: { details: "details" },
-  rawMetadata: "{\"compiler\":\"solc\"}",
+  rawMetadata: '{"compiler":"solc"}',
   methodIdentifiers: { "foo()": "0xdeadbeef" },
 };
 
@@ -47,7 +47,7 @@ describe("Contract", () => {
   });
 
   test("fromSolcOutput hydrates compiler metadata", () => {
-const contract = Contract.fromSolcContractOutput(
+    const contract = Contract.fromSolcContractOutput(
       "FromSolc",
       sampleSolcContract
     );
@@ -95,18 +95,19 @@ const contract = Contract.fromSolcContractOutput(
     const contract = new Contract({ name: "Tweaks" })
       .withAddress("0x1234")
       .withCreationBytecode(Buffer.from([0xde, 0xad]))
-      .withDeployedBytecode(Buffer.from([0xca, 0xfe]))
-      .withExtra("custom", { value: 1 });
+      .withDeployedBytecode(Buffer.from([0xca, 0xfe]));
 
     const snapshot = contract.toJson();
     expect(snapshot.address).toBe("0x1234");
     expect(snapshot.creationBytecode?.hex).toBe("0xdead");
     expect(snapshot.deployedBytecode?.hex).toBe("0xcafe");
-    expect(snapshot.extras).toEqual({ custom: { value: 1 } });
   });
 
   test("constructor accepts existing state", () => {
-    const base = Contract.fromSolcContractOutput("Existing", sampleSolcContract);
+    const base = Contract.fromSolcContractOutput(
+      "Existing",
+      sampleSolcContract
+    );
     const snapshot = base.toJson();
 
     const cloned = new Contract(snapshot);

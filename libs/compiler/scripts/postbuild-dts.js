@@ -33,7 +33,11 @@ if (definitions.length === 0) {
 }
 
 for (const { kind, name, definition } of definitions) {
-  const classPrefix = kind.includes('class') ? '(?:declare\\s+)?class' : kind;
+  const classPrefix = kind === 'interface'
+    ? '(?:declare\\s+)?(?:class|interface)'
+    : kind.includes('class')
+      ? '(?:declare\\s+)?class'
+      : kind;
   const replacePattern = new RegExp(
     `(^|\\n)\\s*(?:export\\s+)?${classPrefix}\\s+${name}\\b[\\s\\S]*?(?=\\n\\s*(?:export\\s+)?(?:type|interface|(?:declare\\s+)?class)\\s+[A-Za-z0-9_]+\\b|\\s*$)`,
     'g'

@@ -12,7 +12,7 @@ use foundry_compilers::Artifact;
 use napi::bindgen_prelude::*;
 use napi::{JsUnknown, ValueType};
 use serde_json::Value;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 pub use core::{
   ContractBytecode, ContractState, ImmutableSlot, JsEwasm, JsFunctionDebugDataEntry, JsGasEstimates,
@@ -86,10 +86,6 @@ impl Contract {
     self.state.deployed_bytecode.as_ref()
   }
 
-  pub fn extras(&self) -> &BTreeMap<String, Value> {
-    &self.state.extras
-  }
-
   pub fn with_address(&mut self, address: Option<String>) {
     self.state.address = address;
   }
@@ -100,10 +96,6 @@ impl Contract {
 
   pub fn with_deployed_bytecode(&mut self, bytecode: Option<ContractBytecode>) {
     self.state.deployed_bytecode = bytecode;
-  }
-
-  pub fn with_extra(&mut self, key: impl Into<String>, value: Value) {
-    self.state.extras.insert(key.into(), value);
   }
 }
 
@@ -181,8 +173,6 @@ pub struct JsContractState {
   pub ewasm: Option<JsEwasm>,
   #[napi(ts_type = "string | null | undefined")]
   pub creation_source_map: Option<String>,
-  #[napi(ts_type = "Record<string, unknown> | null | undefined")]
-  pub extras: Option<Value>,
 }
 
 // -----------------------------------------------------------------------------
@@ -223,17 +213,6 @@ pub fn contract_state_to_js(state: &ContractState) -> JsContractState {
     ir_optimized: state.ir_optimized.clone(),
     ewasm: ewasm_to_js(state),
     creation_source_map: state.creation_source_map.clone(),
-    extras: if state.extras.is_empty() {
-      None
-    } else {
-      Some(Value::Object(
-        state
-          .extras
-          .iter()
-          .map(|(k, v)| (k.clone(), v.clone()))
-          .collect(),
-      ))
-    },
   }
 }
 
@@ -287,16 +266,6 @@ fn contract_state_from_json_value(value: &Value) -> napi::Result<ContractState> 
     .get("ewasm")
     .and_then(|value| serde_json::from_value(value.clone()).ok());
   state.creation_source_map = obj.get("creationSourceMap").and_then(value_to_string);
-
-  if let Some(extras) = obj.get("extras") {
-    let extras_obj = extras
-      .as_object()
-      .ok_or_else(|| napi_error("extras must be an object".to_string()))?;
-    state.extras = extras_obj
-      .iter()
-      .map(|(key, value)| (key.clone(), value.clone()))
-      .collect();
-  }
 
   Ok(state)
 }
@@ -534,18 +503,6 @@ impl JsContract {
     self.inner.state().creation_source_map.clone()
   }
 
-  #[napi(getter, ts_return_type = "Record<string, unknown>")]
-  pub fn extras(&self) -> Value {
-    Value::Object(
-      self
-        .inner
-        .extras()
-        .iter()
-        .map(|(key, value)| (key.clone(), value.clone()))
-        .collect(),
-    )
-  }
-
   #[napi]
   pub fn with_address(&mut self, address: Option<String>) -> napi::Result<Self> {
     self.inner.with_address(address);
@@ -565,12 +522,6 @@ impl JsContract {
     self
       .inner
       .with_deployed_bytecode(bytecode.map(|buffer| ContractBytecode::from_bytes(buffer.to_vec())));
-    Ok(self.clone())
-  }
-
-  #[napi]
-  pub fn with_extra(&mut self, key: String, value: Value) -> napi::Result<Self> {
-    self.inner.with_extra(key, value);
     Ok(self.clone())
   }
 

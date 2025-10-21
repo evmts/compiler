@@ -190,7 +190,6 @@ pub struct ContractState {
   pub ir_optimized: Option<String>,
   pub ewasm: Option<Ewasm>,
   pub creation_source_map: Option<String>,
-  pub extras: BTreeMap<String, Value>,
 }
 
 impl ContractState {
@@ -310,7 +309,6 @@ impl ContractBuilder {
     self.state.ewasm = value;
     self
   }
-
   fn set_source_id(mut self, value: Option<u32>) -> Self {
     self.state.source_id = value;
     self
@@ -635,7 +633,6 @@ mod tests {
     state.creation_source_map = Some("0:0:0".into());
     state.source_path = Some("src/Fixture.sol".into());
     state.source_id = Some(7);
-    state.extras.insert("custom".into(), json!({ "value": 1 }));
 
     assert_eq!(state.name, "Fixture");
     assert_eq!(state.address.as_deref(), Some("0xabc"));
@@ -658,7 +655,6 @@ mod tests {
     assert_eq!(state.creation_source_map.as_deref(), Some("0:0:0"));
     assert_eq!(state.source_path.as_deref(), Some("src/Fixture.sol"));
     assert_eq!(state.source_id, Some(7));
-    assert_eq!(state.extras.get("custom"), Some(&json!({ "value": 1 })));
   }
 
   #[test]
