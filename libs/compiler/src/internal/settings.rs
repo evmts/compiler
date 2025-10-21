@@ -1,6 +1,11 @@
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
-use foundry_compilers::artifacts::{output_selection::OutputSelection, Settings};
+use foundry_compilers::artifacts::{
+  output_selection::OutputSelection,
+  vyper::{VyperOptimizationMode, VyperSettings},
+  Settings,
+};
 use napi::bindgen_prelude::Result;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json;
@@ -68,6 +73,47 @@ impl CompilerSettingsOptions {
     map_napi_error(
       serde_json::from_value(base_value),
       "Failed to parse compiler settings",
+    )
+  }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VyperSettingsOptions {
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub optimize: Option<VyperOptimizationMode>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub evm_version: Option<EvmVersion>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub bytecode_metadata: Option<bool>,
+  #[serde(
+    rename = "outputSelection",
+    alias = "output_selection",
+    skip_serializing_if = "Option::is_none"
+  )]
+  pub output_selection: Option<BTreeMap<String, BTreeMap<String, Vec<String>>>>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub search_paths: Option<Vec<PathBuf>>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub experimental_codegen: Option<bool>,
+}
+
+impl VyperSettingsOptions {
+  pub(crate) fn overlay(self, base: &VyperSettings) -> Result<VyperSettings> {
+    let mut base_value = map_napi_error(
+      serde_json::to_value(base),
+      "Failed to serialise base Vyper settings",
+    )?;
+    let overrides = map_napi_error(
+      serde_json::to_value(self),
+      "Failed to serialise Vyper settings",
+    )?;
+
+    merge_settings_json(&mut base_value, overrides);
+
+    map_napi_error(
+      serde_json::from_value(base_value),
+      "Failed to parse Vyper settings",
     )
   }
 }

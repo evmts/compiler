@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -7,18 +7,22 @@ use foundry_compilers::artifacts::ast::SourceUnit;
 use foundry_compilers::artifacts::{
   CompilerOutput, SolcInput, SolcLanguage as FoundrySolcLanguage, Source, Sources,
 };
+use foundry_compilers::compilers::vyper::VyperInput;
+use foundry_compilers::compilers::CompilerOutput as FoundryCompilerOutput;
 use serde_json::{json, Value};
 
 use super::input::CompilationInput;
-use super::output::{from_standard_json, CompileOutput};
+use super::output::{build_compile_output, from_standard_json, vyper_error_to_core, CompileOutput};
 use super::project_runner::ProjectRunner;
 use crate::ast::utils;
-use crate::internal::config::{CompilerConfig, CompilerConfigOptions, SolcConfig};
+use crate::internal::config::{
+  CompilerConfig, CompilerConfigOptions, CompilerLanguage, SolcConfig,
+};
 use crate::internal::errors::{map_err_with_context, Error, Result};
 use crate::internal::project::{
   create_synthetic_context, FoundryAdapter, HardhatAdapter, ProjectContext, ProjectLayout,
 };
-use crate::internal::solc;
+use crate::internal::{solc, vyper};
 
 #[derive(Clone)]
 pub struct State {
@@ -43,7 +47,9 @@ pub fn init(config: CompilerConfig, project: Option<ProjectContext>) -> Result<S
     Some(context) => Some(context),
     None => ProjectRunner::prepare_synthetic_context(&config)?,
   };
-  solc::ensure_installed(&config.solc_version)?;
+  if config.language.is_solc_language() {
+    solc::ensure_installed(&config.solc_version)?;
+  }
   Ok(State { config, project })
 }
 
@@ -104,7 +110,7 @@ pub fn compile_sources(
 pub fn compile_files(
   config: &CompilerConfig,
   paths: Vec<PathBuf>,
-  language_override: Option<FoundrySolcLanguage>,
+  language_override: Option<CompilerLanguage>,
 ) -> Result<CompileOutput> {
   compile_file_paths(config, paths, language_override)
 }
@@ -147,10 +153,16 @@ pub fn compile_contract(
 
 fn compile_pure(config: &CompilerConfig, input: CompilationInput) -> Result<CompileOutput> {
   match input {
-    CompilationInput::InlineSource { source } => compile_inline_source(config, source),
-    CompilationInput::SourceMap { sources } => {
+    CompilationInput::InlineSource { source } => {
+      compile_inline_source(config, source, config.language)
+    }
+    CompilationInput::SourceMap {
+      sources,
+      language_override,
+    } => {
+      let resolved_language = language_override.unwrap_or(config.language);
       let solc_sources = sources_from_map(sources);
-      compile_standard_sources(config, solc_sources, config.solc_language)
+      compile_standard_sources(config, solc_sources, resolved_language)
     }
     CompilationInput::AstUnits { units } => compile_ast_sources(config, units),
     CompilationInput::FilePaths {
@@ -160,34 +172,85 @@ fn compile_pure(config: &CompilerConfig, input: CompilationInput) -> Result<Comp
   }
 }
 
-fn compile_inline_source(config: &CompilerConfig, source: String) -> Result<CompileOutput> {
+fn compile_inline_source(
+  config: &CompilerConfig,
+  source: String,
+  language: CompilerLanguage,
+) -> Result<CompileOutput> {
   let mut sources = Sources::new();
-  sources.insert(PathBuf::from("__VIRTUAL__.sol"), Source::new(source));
-  compile_standard_sources(config, sources, config.solc_language)
+  let virtual_name = match language {
+    CompilerLanguage::Solidity => "__VIRTUAL__.sol",
+    CompilerLanguage::Yul => "__VIRTUAL__.yul",
+    CompilerLanguage::Vyper => "__VIRTUAL__.vy",
+  };
+  sources.insert(PathBuf::from(virtual_name), Source::new(source));
+  compile_standard_sources(config, sources, language)
 }
 
 fn compile_standard_sources(
   config: &CompilerConfig,
   sources: Sources,
-  language: FoundrySolcLanguage,
+  language: CompilerLanguage,
 ) -> Result<CompileOutput> {
-  let solc_config = SolcConfig {
-    version: config.solc_version.clone(),
-    settings: config.solc_settings.clone(),
-    language,
-  };
-  let solc = solc::ensure_installed(&solc_config.version)?;
-  let mut input = SolcInput::new(language, sources, solc_config.settings.clone());
-  input.sanitize(&solc.version);
-  let output: CompilerOutput =
-    map_err_with_context(solc.compile_as(&input), "Solc compilation failed")?;
-  Ok(from_standard_json(output))
+  match language {
+    CompilerLanguage::Solidity | CompilerLanguage::Yul => {
+      let solc_language = to_solc_language(language)?;
+      let solc_config = SolcConfig {
+        version: config.solc_version.clone(),
+        settings: config.solc_settings.clone(),
+        language: solc_language,
+      };
+      let solc = solc::ensure_installed(&solc_config.version)?;
+      let mut input = SolcInput::new(solc_language, sources, solc_config.settings.clone());
+      input.sanitize(&solc.version);
+      let output: CompilerOutput =
+        map_err_with_context(solc.compile_as(&input), "Solc compilation failed")?;
+      Ok(from_standard_json(output))
+    }
+    CompilerLanguage::Vyper => {
+      let vyper_compiler = vyper::ensure_installed(config.vyper_settings.path.clone())?;
+      let search_paths = combined_vyper_search_paths(config);
+      let mut settings = config
+        .vyper_settings
+        .to_vyper_settings(search_paths)
+        .map_err(Error::from)?;
+      settings.sanitize(&vyper_compiler.version);
+      let mut input = VyperInput::new(sources, settings, &vyper_compiler.version);
+      input.sanitize(&vyper_compiler.version);
+      let output = map_err_with_context(
+        vyper_compiler.compile_exact(&input),
+        "Vyper compilation failed",
+      )?;
+      let compiler_output = FoundryCompilerOutput::from(output);
+      let artifacts_json = map_err_with_context(
+        serde_json::to_value(&compiler_output),
+        "Failed to serialise Vyper compiler output",
+      )?;
+      let errors = compiler_output
+        .errors
+        .iter()
+        .map(vyper_error_to_core)
+        .collect();
+      Ok(build_compile_output(
+        &compiler_output.contracts,
+        &compiler_output.sources,
+        artifacts_json,
+        errors,
+      ))
+    }
+  }
 }
 
 fn compile_ast_sources(
   config: &CompilerConfig,
   ast_sources: BTreeMap<String, SourceUnit>,
 ) -> Result<CompileOutput> {
+  if !matches!(config.language, CompilerLanguage::Solidity) {
+    // TODO: support once merged https://github.com/foundry-rs/compilers/pull/291
+    return Err(Error::new(
+      "AST compilation is only supported for Solidity sources.",
+    ));
+  }
   let solc_config = SolcConfig {
     version: config.solc_version.clone(),
     settings: config.solc_settings.clone(),
@@ -221,7 +284,7 @@ fn compile_ast_sources(
 fn compile_file_paths(
   config: &CompilerConfig,
   paths: Vec<PathBuf>,
-  language_override: Option<FoundrySolcLanguage>,
+  language_override: Option<CompilerLanguage>,
 ) -> Result<CompileOutput> {
   if paths.is_empty() {
     return Err(Error::new("compileFiles requires at least one path."));
@@ -229,7 +292,7 @@ fn compile_file_paths(
 
   let mut string_entries: BTreeMap<String, String> = BTreeMap::new();
   let mut ast_entries: BTreeMap<String, SourceUnit> = BTreeMap::new();
-  let mut detected_language: Option<FoundrySolcLanguage> = None;
+  let mut detected_language: Option<CompilerLanguage> = None;
 
   for original in paths {
     let content =
@@ -241,12 +304,12 @@ fn compile_file_paths(
       continue;
     }
 
-    let inferred = infer_language(&canonical_path, &content, language_override)?;
+    let inferred = infer_compiler_language(&canonical_path, &content, language_override)?;
     if language_override.is_none() {
       if let Some(existing) = detected_language {
         if existing != inferred {
           return Err(Error::new(
-            "compileFiles requires all non-AST sources to share the same solc language. Provide solcLanguage explicitly to disambiguate.",
+            "compileFiles requires all non-AST sources to share the same language. Provide language explicitly to disambiguate.",
           ));
         }
       } else {
@@ -265,15 +328,15 @@ fn compile_file_paths(
 
   if !ast_entries.is_empty() {
     let mut updated = config.clone();
-    updated.solc_language = FoundrySolcLanguage::Solidity;
+    updated.language = CompilerLanguage::Solidity;
     return compile_ast_sources(&updated, ast_entries);
   }
 
   let final_language = language_override
     .or(detected_language)
-    .unwrap_or(config.solc_language);
+    .unwrap_or(config.language);
   let mut updated = config.clone();
-  updated.solc_language = final_language;
+  updated.language = final_language;
   let sources = sources_from_map(string_entries);
   compile_standard_sources(&updated, sources, final_language)
 }
@@ -323,24 +386,25 @@ fn try_parse_ast_from_file(
   Ok(false)
 }
 
-fn infer_language(
+fn infer_compiler_language(
   path: &Path,
   _content: &str,
-  override_language: Option<FoundrySolcLanguage>,
-) -> Result<FoundrySolcLanguage> {
+  override_language: Option<CompilerLanguage>,
+) -> Result<CompilerLanguage> {
   if let Some(language) = override_language {
     return Ok(language);
   }
 
   let extension = path.extension().and_then(|ext| ext.to_str());
   match extension.map(|ext| ext.to_ascii_lowercase()) {
-    Some(ext) if ext == "yul" => Ok(FoundrySolcLanguage::Yul),
-    Some(ext) if ext == "sol" || ext.is_empty() => Ok(FoundrySolcLanguage::Solidity),
+    Some(ext) if ext == "yul" => Ok(CompilerLanguage::Yul),
+    Some(ext) if ext == "vy" || ext == "vyi" => Ok(CompilerLanguage::Vyper),
+    Some(ext) if ext == "sol" || ext.is_empty() => Ok(CompilerLanguage::Solidity),
     Some(_) => Err(Error::new(format!(
-      "Unable to infer solc language for \"{}\". Provide solcLanguage explicitly.",
+      "Unable to infer compiler language for \"{}\". Provide language explicitly.",
       path.display()
     ))),
-    None => Ok(FoundrySolcLanguage::Solidity),
+    None => Ok(CompilerLanguage::Solidity),
   }
 }
 
@@ -371,8 +435,24 @@ fn compilation_input_from_values(
     return Ok(CompilationInput::AstUnits { units: ast_entries });
   }
 
+  let mut inferred_language: Option<CompilerLanguage> = None;
+  for path in string_entries.keys() {
+    let path_buf = Path::new(path);
+    let candidate = infer_compiler_language(path_buf, "", None)?;
+    if let Some(existing) = inferred_language {
+      if existing != candidate {
+        return Err(Error::new(
+          "compileSources requires all entries to share the same language. Provide language explicitly to disambiguate.",
+        ));
+      }
+    } else {
+      inferred_language = Some(candidate);
+    }
+  }
+
   Ok(CompilationInput::SourceMap {
     sources: string_entries,
+    language_override: inferred_language,
   })
 }
 
@@ -390,4 +470,105 @@ fn project_runner(state: &State) -> Result<ProjectRunner<'_>> {
     .as_ref()
     .ok_or_else(|| Error::new("This compiler instance is not bound to a project root."))?;
   Ok(ProjectRunner::new(context))
+}
+
+fn to_solc_language(language: CompilerLanguage) -> Result<FoundrySolcLanguage> {
+  match language {
+    CompilerLanguage::Solidity => Ok(FoundrySolcLanguage::Solidity),
+    CompilerLanguage::Yul => Ok(FoundrySolcLanguage::Yul),
+    CompilerLanguage::Vyper => Err(Error::new(
+      "Vyper sources must be compiled with the Vyper compiler.",
+    )),
+  }
+}
+
+fn combined_vyper_search_paths(config: &CompilerConfig) -> Option<Vec<PathBuf>> {
+  let mut paths = BTreeSet::new();
+  if let Some(custom) = &config.vyper_settings.search_paths {
+    for path in custom {
+      paths.insert(path.clone());
+    }
+  }
+  for library in &config.library_paths {
+    paths.insert(library.clone());
+  }
+  if paths.is_empty() {
+    None
+  } else {
+    Some(paths.into_iter().collect())
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::collections::BTreeMap;
+  use std::path::PathBuf;
+
+  #[test]
+  fn infer_compiler_language_handles_vyper_extensions() {
+    let path = Path::new("contracts/Counter.vy");
+    let language = infer_compiler_language(path, "", None).expect("language");
+    assert_eq!(language, CompilerLanguage::Vyper);
+  }
+
+  #[test]
+  fn compilation_input_from_values_rejects_mixed_languages() {
+    let mut sources = BTreeMap::new();
+    sources.insert(
+      "A.sol".to_string(),
+      SourceValue::Text("contract A {}".into()),
+    );
+    sources.insert(
+      "B.vy".to_string(),
+      SourceValue::Text("@external\ndef foo():\n  pass".into()),
+    );
+
+    let error = compilation_input_from_values(sources).unwrap_err();
+    assert!(error
+      .to_string()
+      .contains("compileSources requires all entries to share the same language"));
+  }
+
+  #[test]
+  fn compile_vyper_source() {
+    let mut config = CompilerConfig::default();
+    config.language = CompilerLanguage::Vyper;
+
+    let state = init(config.clone(), None).expect("state");
+
+    let mut sources = BTreeMap::new();
+    sources.insert(
+      "Counter.vy".to_string(),
+      SourceValue::Text(
+        "@external\ndef increment(value: uint256) -> uint256:\n  return value + 1".to_string(),
+      ),
+    );
+
+    let result = compile_sources(&state, &state.config, sources).expect("compile");
+    assert!(result.artifacts_json.is_object());
+  }
+
+  #[test]
+  fn compile_vyper_source_errors_with_missing_binary() {
+    let mut config = CompilerConfig::default();
+    config.language = CompilerLanguage::Vyper;
+    config.vyper_settings.path = Some(PathBuf::from("/definitely/missing/vyper"));
+
+    let state = init(config.clone(), None).expect("state");
+
+    let mut sources = BTreeMap::new();
+    sources.insert(
+      "Counter.vy".to_string(),
+      SourceValue::Text("@external\ndef foo():\n  pass".to_string()),
+    );
+
+    let err = compile_sources(&state, &state.config, sources).unwrap_err();
+    assert!(
+      err
+        .to_string()
+        .contains("Failed to initialise Vyper compiler"),
+      "unexpected error: {err}"
+    );
+  }
 }

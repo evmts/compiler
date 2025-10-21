@@ -13,12 +13,12 @@ import {
   Ast,
   BytecodeHash,
   Compiler,
+  CompilerLanguage,
   CompilerSettings,
   EvmVersion,
   ModelCheckerEngine,
   RevertStrings,
   SeverityLevel,
-  SolcLanguage,
 } from "../build/index.js";
 import type { OutputSelection } from "../build/solc-settings.js";
 
@@ -29,6 +29,7 @@ const CONTRACTS_DIR = join(FIXTURES_DIR, "contracts");
 const FRAGMENTS_DIR = join(FIXTURES_DIR, "fragments");
 const AST_DIR = join(FIXTURES_DIR, "ast");
 const YUL_DIR = join(FIXTURES_DIR, "yul");
+const VYPER_DIR = join(FIXTURES_DIR, "vyper");
 const HARDHAT_PROJECT = join(FIXTURES_DIR, "hardhat-project");
 const SIMPLE_STORAGE_PATH = join(
   HARDHAT_PROJECT,
@@ -63,6 +64,8 @@ const FRAGMENT_WITHOUT_TARGET = JSON.parse(
 );
 const YUL_PATH = join(YUL_DIR, "Echo.yul");
 const YUL_SOURCE = readFileSync(YUL_PATH, "utf8");
+const VYPER_COUNTER_PATH = join(VYPER_DIR, "Counter.vy");
+const VYPER_COUNTER_SOURCE = readFileSync(VYPER_COUNTER_PATH, "utf8");
 
 const createAst = () => new Ast({ solcVersion: DEFAULT_SOLC_VERSION });
 
@@ -165,8 +168,7 @@ const flattenContracts = (output: ArtifactCarrier) => {
 const contractNames = (output: ArtifactCarrier) =>
   flattenContracts(output).map((contract) => contract.name);
 
-const firstContract = (output: ArtifactCarrier) =>
-  flattenContracts(output)[0];
+const firstContract = (output: ArtifactCarrier) => flattenContracts(output)[0];
 
 let altVersionInstalled = false;
 
@@ -430,7 +432,9 @@ describe("Compiler.compileSource with Solidity strings", () => {
     expect(parsingOnlyCorrect.hasCompilerErrors()).toBe(false);
     expect(parsingOnlyCorrect.artifact?.ast).toBeDefined();
     expect(parsingOnlyCorrect.artifact?.contracts).toBeDefined();
-    expect(Object.keys(parsingOnlyCorrect.artifact?.contracts ?? {})).toHaveLength(0);
+    expect(
+      Object.keys(parsingOnlyCorrect.artifact?.contracts ?? {})
+    ).toHaveLength(0);
   });
 
   test("accepts complete solcSettings payload", () => {
@@ -557,24 +561,39 @@ describe("Compiler.compileSource with AST and Yul inputs", () => {
     expect(firstContract(output).name).toBe("InlineExample");
   });
 
-  test("ignores unsupported solc languages for AST sources", () => {
+  test("rejects unsupported languages for AST sources", () => {
     const ast = createAst().fromSource(INLINE_SOURCE).ast();
     const compiler = new Compiler();
-    const output = compiler.compileSource(ast, {
-      solcLanguage: SolcLanguage.Yul,
-    });
-    expect(output.hasCompilerErrors()).toBe(false);
+    expect(() =>
+      compiler.compileSource(ast, {
+        language: CompilerLanguage.Yul,
+      })
+    ).toThrow(/AST compilation is only supported for Solidity sources/i);
+    expect(() =>
+      compiler.compileSource(ast, {
+        language: CompilerLanguage.Vyper,
+      })
+    ).toThrow(/AST compilation is only supported for Solidity sources/i);
   });
 
   test("compiles Yul sources when requested", () => {
     const compiler = new Compiler();
     const output = compiler.compileSource(YUL_SOURCE, {
-      solcLanguage: SolcLanguage.Yul,
+      language: CompilerLanguage.Yul,
     });
     expect(output.hasCompilerErrors()).toBe(false);
     expect(flattenContracts(output)).toHaveLength(1);
     const compiled = firstContract(output);
     expectBytecodeShape(compiled.creationBytecode ?? compiled.bytecode);
+  });
+
+  test("compiles Vyper sources when requested", () => {
+    const compiler = new Compiler({ language: CompilerLanguage.Vyper });
+    const output = compiler.compileSource(VYPER_COUNTER_SOURCE, {
+      language: CompilerLanguage.Vyper,
+    });
+    expect(output.hasCompilerErrors()).toBe(false);
+    expect(flattenContracts(output)).toHaveLength(1);
   });
 });
 
@@ -598,9 +617,18 @@ describe("Compiler.compileSources", () => {
       {
         "Echo.yul": YUL_SOURCE,
       },
-      { solcLanguage: SolcLanguage.Yul }
+      { language: CompilerLanguage.Yul }
     );
 
+    expect(output.hasCompilerErrors()).toBe(false);
+    expect(flattenContracts(output)).toHaveLength(1);
+  });
+
+  test("compiles Vyper sources when supplied as a map", () => {
+    const compiler = new Compiler({ language: CompilerLanguage.Vyper });
+    const output = compiler.compileSources({
+      "Counter.vy": VYPER_COUNTER_SOURCE,
+    });
     expect(output.hasCompilerErrors()).toBe(false);
     expect(flattenContracts(output)).toHaveLength(1);
   });
@@ -644,9 +672,18 @@ describe("Compiler.compileFiles", () => {
   test("compiles yul files when language override is provided", () => {
     const compiler = createCompiler();
     const output = compiler.compileFiles([YUL_PATH], {
-      solcLanguage: SolcLanguage.Yul,
+      language: CompilerLanguage.Yul,
     });
 
+    expect(output.hasCompilerErrors()).toBe(false);
+    expect(flattenContracts(output)).toHaveLength(1);
+  });
+
+  test("compiles vyper files when language override is provided", () => {
+    const compiler = new Compiler({ language: CompilerLanguage.Vyper });
+    const output = compiler.compileFiles([VYPER_COUNTER_PATH], {
+      language: CompilerLanguage.Vyper,
+    });
     expect(output.hasCompilerErrors()).toBe(false);
     expect(flattenContracts(output)).toHaveLength(1);
   });
@@ -706,7 +743,7 @@ describe("Compiler.compileFiles", () => {
     const compiler = createCompiler();
 
     expect(() => compiler.compileFiles([unknownPath])).toThrow(
-      /Unable to infer solc language/i
+      /Unable to infer compiler language/i
     );
   });
 
@@ -715,14 +752,14 @@ describe("Compiler.compileFiles", () => {
     expect(() =>
       compiler.compileFiles([INLINE_PATH, YUL_PATH])
     ).toThrowErrorMatchingInlineSnapshot(
-      `"compileFiles requires all non-AST sources to share the same solc language. Provide solcLanguage explicitly to disambiguate."`
+      `"compileFiles requires all non-AST sources to share the same language. Provide language explicitly to disambiguate."`
     );
   });
 
   test("ignores constructor language preference", () => {
     const compiler = new Compiler({
       solcVersion: DEFAULT_SOLC_VERSION,
-      solcLanguage: SolcLanguage.Yul,
+      language: CompilerLanguage.Yul,
     });
     const output = compiler.compileFiles([INLINE_PATH]);
 

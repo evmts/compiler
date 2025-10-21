@@ -2,13 +2,14 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use foundry_compilers::artifacts::ast::SourceUnit;
-use foundry_compilers::artifacts::SolcLanguage as FoundrySolcLanguage;
 use napi::bindgen_prelude::*;
 use napi::{Env, JsObject, JsUnknown};
 use serde_json::Value;
 
 use crate::ast::utils::from_js_value;
-use crate::internal::config::{parse_js_compiler_config, CompilerConfig, CompilerConfigOptions};
+use crate::internal::config::{
+  parse_js_compiler_config, CompilerConfig, CompilerConfigOptions, CompilerLanguage,
+};
 use crate::internal::errors::{map_napi_error, napi_error, to_napi_result, Error, Result};
 use crate::internal::path::ProjectPaths;
 use crate::internal::project::{default_cache_dir, synthetic_project_paths, ProjectContext};
@@ -408,7 +409,7 @@ impl JsCompiler {
         }
         _ => {
           return Err(napi_error(
-            "compileSources expects each entry to be a Solidity/Yul source string or a Solidity AST object.",
+            "compileSources expects each entry to be a Solidity, Yul, or Vyper source string, or a Solidity AST object.",
           ));
         }
       }
@@ -428,6 +429,10 @@ fn parse_source_target(env: &Env, target: Either<String, JsObject>) -> napi::Res
   }
 }
 
-fn language_override(overrides: Option<&CompilerConfigOptions>) -> Option<FoundrySolcLanguage> {
-  overrides.and_then(|opts| opts.solc.language)
+fn language_override(overrides: Option<&CompilerConfigOptions>) -> Option<CompilerLanguage> {
+  overrides.and_then(|opts| {
+    opts
+      .compiler
+      .or_else(|| opts.solc.language.map(CompilerLanguage::from))
+  })
 }

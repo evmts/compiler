@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use super::input::CompilationInput;
 use super::output::{into_core_compile_output, CompileOutput};
+use crate::internal::config::CompilerLanguage;
+use crate::internal::vyper;
 use crate::internal::{
   config::CompilerConfig,
   errors::{map_err_with_context, Error, Result},
@@ -11,8 +13,7 @@ use crate::internal::{
   solc,
 };
 use foundry_compilers::artifacts::sources::Source as FoundrySource;
-use foundry_compilers::artifacts::SolcLanguage as FoundrySolcLanguage;
-use foundry_compilers::solc::SolcCompiler;
+use foundry_compilers::compilers::multi::MultiCompiler;
 use foundry_compilers::{Project, ProjectCompileOutput};
 
 pub struct ProjectRunner<'a> {
@@ -80,16 +81,20 @@ impl<'a> ProjectRunner<'a> {
     config: &CompilerConfig,
     label: &str,
     compile_fn: F,
-  ) -> Result<ProjectCompileOutput<SolcCompiler>>
+  ) -> Result<ProjectCompileOutput<MultiCompiler>>
   where
     F: FnOnce(
-      &Project<SolcCompiler>,
+      &Project<MultiCompiler>,
     ) -> std::result::Result<
-      ProjectCompileOutput<SolcCompiler>,
+      ProjectCompileOutput<MultiCompiler>,
       foundry_compilers::error::SolcError,
     >,
   {
-    solc::ensure_installed(&config.solc_version)?;
+    if config.language.is_solc_language() {
+      solc::ensure_installed(&config.solc_version)?;
+    } else if config.language == CompilerLanguage::Vyper {
+      vyper::ensure_installed(config.vyper_settings.path.clone())?;
+    }
     let project = map_err_with_context(
       build_project(config, self.context),
       "Failed to configure Solidity project",
@@ -98,10 +103,10 @@ impl<'a> ProjectRunner<'a> {
   }
 
   fn write_virtual_source(&self, config: &CompilerConfig, contents: &str) -> Result<PathBuf> {
-    let extension = match config.solc_language {
-      FoundrySolcLanguage::Solidity => "sol",
-      FoundrySolcLanguage::Yul => "yul",
-      _ => "sol",
+    let extension = match config.language {
+      crate::internal::config::CompilerLanguage::Solidity => "sol",
+      crate::internal::config::CompilerLanguage::Yul => "yul",
+      crate::internal::config::CompilerLanguage::Vyper => "vy",
     };
 
     let source_hash = FoundrySource::content_hash_of(contents);
@@ -131,8 +136,8 @@ impl<'a> ProjectRunner<'a> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::internal::config::CompilerLanguage;
   use crate::internal::project::create_synthetic_context;
-  use foundry_compilers::artifacts::SolcLanguage as FoundrySolcLanguage;
   use tempfile::tempdir;
 
   #[test]
@@ -142,7 +147,7 @@ mod tests {
     let runner = ProjectRunner::new(&context);
 
     let mut config = CompilerConfig::default();
-    config.solc_language = FoundrySolcLanguage::Solidity;
+    config.language = CompilerLanguage::Solidity;
     let sol_path = runner
       .write_virtual_source(&config, "contract A { function f() external {} }")
       .expect("sol path");
@@ -157,7 +162,7 @@ mod tests {
       "contract A { function f() external {} }"
     );
 
-    config.solc_language = FoundrySolcLanguage::Yul;
+    config.language = CompilerLanguage::Yul;
     let yul_path = runner
       .write_virtual_source(&config, "object \"Y\" { code { mstore(0, 0) } }")
       .expect("yul path");

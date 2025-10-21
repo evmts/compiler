@@ -28,6 +28,17 @@ Rust + N-API bridge used by the Shadow toolchain to expose Foundry's Solidity co
 
 The `Compiler` N-API class threads this flow into four primary entry points (`compileSource`, `compileSources`, `compileFiles`, `compileProject`) plus helpers for installing `solc` versions and instantiating from known project roots.
 
+## Vyper Support
+
+The compiler facade now exposes a language-agnostic surface via the `CompilerLanguage` enum. Solidity remains the default, but Yul and Vyper workflows are now first-class citizens:
+
+- Language overrides can be provided explicitly (`{ language: CompilerLanguage.Vyper }`) or inferred from file extensions (`.vy`, `.vyi`, `.yul`).
+- Inline Vyper sources and on-disk projects transparently resolve the `vyper` binary via `PATH`. If the executable is not present we return a helpful error explaining how to install it.
+- Advanced consumers can configure Vyper via `compiler.vyper`—override the binary path, optimisation mode, EVM target, search paths, or output selection without touching Foundry defaults.
+- AST compilation remains Solidity-only. Requests that attempt to compile AST inputs in non-Solidity modes now surface a clear error instead of silently falling back.
+
+Foundry and Hardhat project adapters use the `MultiCompiler` backend so mixed-language repositories are supported. When running tests locally or in CI ensure that a compatible `vyper` binary is available on the `PATH` for these project-based entry points.
+
 ## Type Generation Workflow
 
 The AST helpers expose richer data than the automatic N-API generator currently understands. To keep the published package ergonomic we hand-author a small set of TypeScript declaration files in `src/types/`. The `copy-types` script intentionally:

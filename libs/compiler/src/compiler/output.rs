@@ -1,15 +1,19 @@
 use std::collections::{BTreeMap, HashMap};
+use std::convert::TryFrom;
+use std::path::PathBuf;
 
+use foundry_compilers::artifacts::contract::Contract as FoundryContract;
 use foundry_compilers::artifacts::{
   ast::SourceUnit,
   error::{
     Error as FoundryCompilerError, SecondarySourceLocation as FoundrySecondarySourceLocation,
     Severity,
   },
-  CompilerOutput, SourceFile,
+  vyper::VyperCompilationError,
+  CompilerOutput, FileToContractsMap, SourceFile,
 };
+use foundry_compilers::compilers::multi::{MultiCompiler, MultiCompilerError};
 use foundry_compilers::compilers::Compiler as FoundryCompiler;
-use foundry_compilers::solc::SolcCompiler;
 use foundry_compilers::ProjectCompileOutput;
 use napi::{Env, JsUnknown};
 use semver::Version;
@@ -53,6 +57,14 @@ pub struct SecondarySourceLocation {
 
 #[napi(object)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct VyperSourceLocation {
+  pub file: String,
+  pub line: Option<i32>,
+  pub column: Option<i32>,
+}
+
+#[napi(object)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompilerError {
   pub message: String,
@@ -63,6 +75,7 @@ pub struct CompilerError {
   pub error_code: Option<i64>,
   pub source_location: Option<SourceLocation>,
   pub secondary_source_locations: Option<Vec<SecondarySourceLocation>>,
+  pub vyper_source_location: Option<VyperSourceLocation>,
 }
 
 // -----------------------------------------------------------------------------
@@ -104,7 +117,7 @@ impl CompileOutput {
   }
 }
 
-pub fn into_core_compile_output(output: ProjectCompileOutput<SolcCompiler>) -> CompileOutput {
+pub fn into_core_compile_output(output: ProjectCompileOutput<MultiCompiler>) -> CompileOutput {
   let artifacts = collate_project_artifacts(&output);
   let artifact = artifacts
     .values()
@@ -117,7 +130,7 @@ pub fn into_core_compile_output(output: ProjectCompileOutput<SolcCompiler>) -> C
       .output()
       .errors
       .iter()
-      .map(to_core_compiler_error)
+      .map(|error: &MultiCompilerError| multi_error_to_core(error))
       .collect(),
     artifact,
     artifacts,
@@ -126,43 +139,12 @@ pub fn into_core_compile_output(output: ProjectCompileOutput<SolcCompiler>) -> C
 
 pub fn from_standard_json(output: CompilerOutput) -> CompileOutput {
   let artifacts_json = serde_json::to_value(&output).unwrap_or(Value::Null);
-
-  let mut artifacts: BTreeMap<String, SourceArtifacts> = BTreeMap::new();
-
-  for (path, contracts) in &output.contracts {
-    let key = path.to_string_lossy().to_string();
-    let entry = artifacts
-      .entry(key.clone())
-      .or_insert_with(|| SourceArtifacts::new(Some(key.clone())));
-
-    for (name, contract) in contracts {
-      let mut core = Contract::from_foundry_standard_json(name.clone(), contract);
-      core.state_mut().source_path = Some(key.clone());
-      entry.contracts.insert(name.clone(), core);
-    }
-  }
-
-  for (path, source) in &output.sources {
-    let key = path.to_string_lossy().to_string();
-    let entry = artifacts
-      .entry(key.clone())
-      .or_insert_with(|| SourceArtifacts::new(Some(key.clone())));
-    entry.source_id = Some(source.id);
-    entry.ast = convert_source_ast(source);
-  }
-
-  let artifact = artifacts
-    .values()
-    .next()
-    .cloned()
-    .filter(|_| artifacts.len() == 1);
-
-  CompileOutput {
-    artifacts_json,
-    artifacts,
-    artifact,
-    errors: output.errors.iter().map(to_core_compiler_error).collect(),
-  }
+  let errors = output
+    .errors
+    .iter()
+    .map(|error: &FoundryCompilerError| solc_error_to_core(error))
+    .collect();
+  build_compile_output(&output.contracts, &output.sources, artifacts_json, errors)
 }
 
 fn convert_source_ast(source: &SourceFile) -> Option<SourceUnit> {
@@ -172,7 +154,7 @@ fn convert_source_ast(source: &SourceFile) -> Option<SourceUnit> {
   serde_json::from_value(value).ok()
 }
 
-fn to_core_compiler_error(error: &FoundryCompilerError) -> CompilerError {
+fn solc_error_to_core(error: &FoundryCompilerError) -> CompilerError {
   let severity = match error.severity {
     Severity::Error => SeverityLevel::Error,
     Severity::Warning => SeverityLevel::Warning,
@@ -203,6 +185,84 @@ fn to_core_compiler_error(error: &FoundryCompilerError) -> CompilerError {
       end: loc.end,
     }),
     secondary_source_locations: secondary,
+    vyper_source_location: None,
+  }
+}
+
+pub(crate) fn vyper_error_to_core(error: &VyperCompilationError) -> CompilerError {
+  let severity = match error.severity {
+    Severity::Error => SeverityLevel::Error,
+    Severity::Warning => SeverityLevel::Warning,
+    Severity::Info => SeverityLevel::Info,
+  };
+
+  let vyper_source_location = error
+    .source_location
+    .as_ref()
+    .and_then(|loc| serde_json::to_value(loc).ok())
+    .and_then(convert_vyper_source_location);
+
+  CompilerError {
+    message: error.message.clone(),
+    formatted_message: error.formatted_message.clone(),
+    component: "vyper".to_string(),
+    severity,
+    error_type: "Vyper".to_string(),
+    error_code: None,
+    source_location: None,
+    secondary_source_locations: None,
+    vyper_source_location,
+  }
+}
+
+fn multi_error_to_core(error: &MultiCompilerError) -> CompilerError {
+  match error {
+    MultiCompilerError::Solc(error) => solc_error_to_core(error),
+    MultiCompilerError::Vyper(error) => vyper_error_to_core(error),
+  }
+}
+
+pub(crate) fn build_compile_output(
+  contracts: &FileToContractsMap<FoundryContract>,
+  sources: &BTreeMap<PathBuf, SourceFile>,
+  artifacts_json: Value,
+  errors: Vec<CompilerError>,
+) -> CompileOutput {
+  let mut artifacts: BTreeMap<String, SourceArtifacts> = BTreeMap::new();
+
+  for (path, contract_map) in contracts {
+    let key = path.to_string_lossy().to_string();
+    let entry = artifacts
+      .entry(key.clone())
+      .or_insert_with(|| SourceArtifacts::new(Some(key.clone())));
+
+    for (name, foundry_contract) in contract_map {
+      let mut core = Contract::from_foundry_standard_json(name.clone(), foundry_contract);
+      core.state_mut().source_path = Some(key.clone());
+      entry.contracts.insert(name.clone(), core);
+    }
+  }
+
+  for (path, source) in sources {
+    let key = path.to_string_lossy().to_string();
+    let entry = artifacts
+      .entry(key.clone())
+      .or_insert_with(|| SourceArtifacts::new(Some(key.clone())));
+    entry.source_id = Some(source.id);
+    entry.ast = convert_source_ast(source);
+  }
+
+  let artifact = artifacts
+    .values()
+    .next()
+    .cloned()
+    .filter(|_| artifacts.len() == 1);
+
+  CompileOutput {
+    artifacts_json,
+    artifacts,
+    artifact,
+    errors,
   }
 }
 
@@ -217,8 +277,26 @@ fn to_core_secondary_location(
   }
 }
 
+// TODO: this won't be necessary once merged https://github.com/foundry-rs/compilers/pull/333
+fn convert_vyper_source_location(value: Value) -> Option<VyperSourceLocation> {
+  let file = value.get("file")?.as_str()?.to_string();
+  let line = value
+    .get("lineno")
+    .and_then(|entry| entry.as_u64())
+    .map(clamp_u64_to_i32);
+  let column = value
+    .get("col_offset")
+    .and_then(|entry| entry.as_u64())
+    .map(clamp_u64_to_i32);
+  Some(VyperSourceLocation { file, line, column })
+}
+
+fn clamp_u64_to_i32(value: u64) -> i32 {
+  i32::try_from(value).unwrap_or(i32::MAX)
+}
+
 fn collate_project_artifacts(
-  output: &ProjectCompileOutput<SolcCompiler>,
+  output: &ProjectCompileOutput<MultiCompiler>,
 ) -> BTreeMap<String, SourceArtifacts> {
   let mut artifacts: BTreeMap<String, SourceArtifacts> = BTreeMap::new();
 
@@ -662,6 +740,7 @@ mod tests {
           end: Some(6),
           message: Some("secondary".into()),
         }]),
+        vyper_source_location: None,
       }],
     };
 

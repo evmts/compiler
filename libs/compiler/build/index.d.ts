@@ -165,7 +165,7 @@ export declare const enum BytecodeHash {
 /** JavaScript-facing configuration captured through N-API bindings. */
 export interface CompilerConfigOptions {
   solcVersion?: string | undefined
-  solcLanguage?: SolcLanguage
+  language?: CompilerLanguage | undefined
   solcSettings?: CompilerSettings | undefined
   cacheEnabled?: boolean | undefined
   offlineMode?: boolean | undefined
@@ -181,6 +181,7 @@ export interface CompilerConfigOptions {
   ignoredErrorCodes?: number[] | undefined
   ignoredPaths?: string[] | undefined
   compilerSeverity?: string | undefined
+  vyper?: VyperCompilerConfig | undefined
 }
 
 export interface CompilerError {
@@ -192,6 +193,13 @@ export interface CompilerError {
   errorCode?: number
   sourceLocation?: SourceLocation
   secondarySourceLocations?: Array<SecondarySourceLocation>
+  vyperSourceLocation?: VyperSourceLocation
+}
+
+export declare const enum CompilerLanguage {
+  Solidity = 'Solidity',
+  Yul = 'Yul',
+  Vyper = 'Vyper'
 }
 
 /** JavaScript-facing wrappers mirroring the option structs. */
@@ -394,6 +402,28 @@ export interface SourceLocation {
   file: string
   start: number
   end: number
+}
+
+export interface VyperCompilerConfig {
+  path?: string | undefined
+  optimize?: VyperOptimizationMode | undefined
+  evmVersion?: EvmVersion | undefined
+  bytecodeMetadata?: boolean | undefined
+  searchPaths?: string[] | undefined
+  outputSelection?: import('./solc-settings').OutputSelection | undefined
+  experimentalCodegen?: boolean | undefined
+}
+
+export declare const enum VyperOptimizationMode {
+  Gas = 'Gas',
+  Codesize = 'Codesize',
+  None = 'None'
+}
+
+export interface VyperSourceLocation {
+  file: string
+  line?: number
+  column?: number
 }
 
 export interface YulDetails {

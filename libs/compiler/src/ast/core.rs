@@ -389,7 +389,7 @@ fn inject_fragment_ast(
 mod tests {
   use super::*;
   use crate::ast::utils;
-  use crate::internal::config::{AstConfigOptions, SolcConfig};
+  use crate::internal::config::{AstConfigOptions, CompilerLanguage, SolcConfig};
   use crate::internal::settings::{CompilerSettingsOptions, OptimizerSettingsOptions};
   use crate::internal::solc;
   use foundry_compilers::artifacts::CompilerOutput;
@@ -423,7 +423,7 @@ contract Target {
       AstOrchestrator::sanitize_settings(None).expect("sanitize default settings");
     let default_language = solc::default_language();
     let mut config = SolcConfig::new(
-      &default_language,
+      CompilerLanguage::from(default_language),
       &default_settings,
       Option::<&AstConfigOptions>::None,
     )
@@ -503,7 +503,7 @@ contract Target {
       AstOrchestrator::sanitize_settings(None).expect("sanitize default settings");
     let default_language = solc::default_language();
     let mut config = SolcConfig::new(
-      &default_language,
+      CompilerLanguage::from(default_language),
       &default_settings,
       Option::<&AstConfigOptions>::None,
     )
@@ -628,7 +628,7 @@ contract Target {
       AstOrchestrator::sanitize_settings(None).expect("sanitize default settings");
     let default_language = solc::default_language();
     let mut config = SolcConfig::new(
-      &default_language,
+      CompilerLanguage::from(default_language),
       &default_settings,
       Option::<&AstConfigOptions>::None,
     )

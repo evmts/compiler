@@ -4,3 +4,4 @@ pub(crate) mod path;
 pub(crate) mod project;
 pub(crate) mod settings;
 pub(crate) mod solc;
+pub(crate) mod vyper;

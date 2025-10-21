@@ -9,7 +9,10 @@ use foundry_compilers::artifacts::{
   error::Severity, remappings::Remapping, CompilerOutput, Settings,
 };
 use foundry_compilers::buildinfo::BuildInfo;
-use foundry_compilers::solc::{SolcLanguage as FoundrySolcLanguage, SolcVersionedInput};
+use foundry_compilers::compilers::multi::{
+  MultiCompiler, MultiCompilerLanguage, MultiCompilerSettings,
+};
+use foundry_compilers::solc::SolcVersionedInput;
 use foundry_compilers::{
   cache::SOLIDITY_FILES_CACHE_FILENAME,
   solc::{CliSettings, SolcCompiler, SolcSettings},
@@ -21,6 +24,7 @@ use crate::internal::config::{CompilerConfig, CompilerConfigOptions, SolcConfig}
 use crate::internal::errors::{map_err_with_context, Error, Result};
 use crate::internal::path::{canonicalize_path, canonicalize_with_base, ProjectPaths};
 use crate::internal::settings::CompilerSettingsOptions;
+use crate::internal::vyper;
 
 #[derive(Clone)]
 pub enum ProjectLayout {
@@ -33,7 +37,7 @@ pub enum ProjectLayout {
 pub struct ProjectContext {
   pub layout: ProjectLayout,
   pub root: PathBuf,
-  pub paths: ProjectPathsConfig<FoundrySolcLanguage>,
+  pub paths: ProjectPathsConfig<MultiCompilerLanguage>,
   pub virtual_sources_dir: Option<PathBuf>,
 }
 
@@ -88,7 +92,7 @@ impl ProjectContext {
 pub fn build_project(
   config: &CompilerConfig,
   context: &ProjectContext,
-) -> Result<Project<SolcCompiler>> {
+) -> Result<Project<MultiCompiler>> {
   let mut paths = context.paths.clone();
   extend_paths_with_config(&mut paths, config);
 
@@ -126,12 +130,30 @@ pub fn build_project(
     cli_settings,
   };
 
-  builder = builder.settings(solc_settings);
+  let vyper_search_paths = collect_vyper_search_paths(config, context);
+  let vyper_settings = config
+    .vyper_settings
+    .to_vyper_settings(vyper_search_paths)
+    .map_err(Error::from)?;
 
-  map_err_with_context(
-    builder.build(SolcCompiler::default()),
-    "Failed to configure Solidity project",
-  )
+  let multi_settings = MultiCompilerSettings {
+    solc: solc_settings,
+    vyper: vyper_settings,
+  };
+
+  builder = builder.settings(multi_settings);
+
+  let vyper_path = config
+    .vyper_settings
+    .path
+    .clone()
+    .or_else(|| Some(vyper::default_path()));
+  let multi_compiler = map_err_with_context(
+    MultiCompiler::new(Some(SolcCompiler::default()), vyper_path),
+    "Failed to initialise compilers",
+  )?;
+
+  map_err_with_context(builder.build(multi_compiler), "Failed to configure project")
 }
 
 pub fn create_synthetic_context(base_dir: &Path) -> Result<ProjectContext> {
@@ -159,7 +181,7 @@ pub fn synthetic_project_paths(base_dir: &Path) -> Result<ProjectPaths> {
 fn build_synthetic_paths(
   root: &Path,
 ) -> Result<(
-  ProjectPathsConfig<FoundrySolcLanguage>,
+  ProjectPathsConfig<MultiCompilerLanguage>,
   Vec<PathBuf>,
   PathBuf,
 )> {
@@ -192,7 +214,7 @@ fn build_synthetic_paths(
     .tests(&tests_dir)
     .scripts(&scripts_dir)
     .no_libs()
-    .build_with_root::<FoundrySolcLanguage>(root);
+    .build_with_root::<MultiCompilerLanguage>(root);
 
   Ok((paths, directories, virtual_sources_dir))
 }
@@ -209,7 +231,7 @@ pub fn default_cache_dir() -> PathBuf {
 }
 
 fn extend_paths_with_config(
-  paths: &mut ProjectPathsConfig<FoundrySolcLanguage>,
+  paths: &mut ProjectPathsConfig<MultiCompilerLanguage>,
   config: &CompilerConfig,
 ) {
   if !config.library_paths.is_empty() {
@@ -226,6 +248,29 @@ fn extend_paths_with_config(
 
   for path in &config.allow_paths {
     paths.allowed_paths.insert(path.clone());
+  }
+}
+
+fn collect_vyper_search_paths(
+  config: &CompilerConfig,
+  context: &ProjectContext,
+) -> Option<Vec<PathBuf>> {
+  let mut paths = BTreeSet::new();
+  if let Some(custom) = &config.vyper_settings.search_paths {
+    for path in custom {
+      paths.insert(path.clone());
+    }
+  }
+  for library in &config.library_paths {
+    paths.insert(library.clone());
+  }
+  for library in &context.paths.libraries {
+    paths.insert(canonicalize_with_base(&context.root, library));
+  }
+  if paths.is_empty() {
+    None
+  } else {
+    Some(paths.into_iter().collect())
   }
 }
 
@@ -336,7 +381,7 @@ impl FoundryAdapter {
           .filter_map(|remapping| Remapping::from_str(&remapping.to_string()).ok())
           .collect::<Vec<_>>(),
       )
-      .build_with_root::<FoundrySolcLanguage>(&config_paths.root);
+      .build_with_root::<MultiCompilerLanguage>(&config_paths.root);
     paths.slash_paths();
     let context = ProjectContext {
       layout: ProjectLayout::Foundry,
@@ -414,7 +459,7 @@ impl HardhatAdapter {
 }
 
 fn infer_hardhat_build_info(
-  paths: &ProjectPathsConfig<FoundrySolcLanguage>,
+  paths: &ProjectPathsConfig<MultiCompilerLanguage>,
 ) -> Option<(SolcConfig, CliSettingsData)> {
   let entries = fs::read_dir(&paths.build_infos).ok()?;
   let mut latest: Option<(SystemTime, PathBuf)> = None;
