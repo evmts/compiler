@@ -1,3 +1,5 @@
+use crate::Compiler;
+
 #[cfg(test)]
 mod tests {
   use crate::compiler::{SourceTarget, SourceValue};
@@ -94,4 +96,45 @@ contract Sample {
     let output = compiler.compile_project(None).expect("compile project");
     assert!(!output.artifacts.is_empty());
   }
+}
+
+#[test]
+fn inline_sources_populate_artifacts_in_synthetic_context() {
+  let temp_dir = tempfile::tempdir().expect("tempdir");
+  let compiler = Compiler::from_root(temp_dir.path(), None).expect("compiler");
+
+  let output = compiler
+    .compile_source(
+      crate::compiler::SourceTarget::Text(
+        "pragma solidity ^0.8.0; contract InlineExample { function f() external {} }".into(),
+      ),
+      None,
+    )
+    .expect("compile");
+
+  assert!(
+    !output.artifacts.is_empty() || output.artifact.is_some(),
+    "expected artifacts, got none"
+  );
+}
+
+#[test]
+fn sources_populate_artifacts_in_synthetic_context() {
+  let temp_dir = tempfile::tempdir().expect("tempdir");
+  let compiler = Compiler::from_root(temp_dir.path(), None).expect("compiler");
+
+  let mut sources = std::collections::BTreeMap::new();
+  sources.insert(
+    "Sample.sol".to_string(),
+    crate::compiler::SourceValue::Text("contract Sample { function id() public {} }".into()),
+  );
+  let output = compiler.compile_sources(sources, None).expect("compile");
+  assert!(!output.artifacts.is_empty());
+  assert!(output.artifact.is_some());
+  assert!(output
+    .artifact
+    .as_ref()
+    .unwrap()
+    .contracts
+    .contains_key("Sample"));
 }

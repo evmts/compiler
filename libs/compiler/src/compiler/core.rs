@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -20,7 +19,7 @@ use crate::internal::config::{
 };
 use crate::internal::errors::{map_err_with_context, Error, Result};
 use crate::internal::project::{
-  create_synthetic_context, FoundryAdapter, HardhatAdapter, ProjectContext, ProjectLayout,
+  create_synthetic_context, FoundryAdapter, HardhatAdapter, ProjectContext,
 };
 use crate::internal::{solc, vyper};
 
@@ -121,15 +120,8 @@ pub fn compile_as(
   input: CompilationInput,
 ) -> Result<CompileOutput> {
   if let Some(context) = &state.project {
-    let config_cow = if matches!(context.layout, ProjectLayout::Synthetic) {
-      let mut clone = config.clone();
-      clone.cache_enabled = false;
-      Cow::Owned(clone)
-    } else {
-      Cow::Borrowed(config)
-    };
     let runner = ProjectRunner::new(context);
-    if let Some(result) = runner.compile(config_cow.as_ref(), &input)? {
+    if let Some(result) = runner.compile(config, &input)? {
       return Ok(result);
     }
   }

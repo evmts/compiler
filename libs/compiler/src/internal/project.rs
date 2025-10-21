@@ -2,7 +2,6 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::OnceLock;
 use std::time::SystemTime;
 
 use foundry_compilers::artifacts::{
@@ -220,14 +219,7 @@ fn build_synthetic_paths(
 }
 
 pub fn default_cache_dir() -> PathBuf {
-  static CACHE_PATH: OnceLock<PathBuf> = OnceLock::new();
-  CACHE_PATH
-    .get_or_init(|| {
-      let root = std::env::temp_dir().join(".tevm/cache");
-      let _ = fs::create_dir_all(&root);
-      root
-    })
-    .clone()
+  canonicalize_path(Path::new("."))
 }
 
 fn extend_paths_with_config(
