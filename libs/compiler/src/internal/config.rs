@@ -430,7 +430,7 @@ impl TryFrom<&JsCompilerConfigOptions> for CompilerConfigOptions {
       overrides.compiler_severity_filter = Some(parse_severity(severity)?);
     }
 
-    if let Some(vyper) = options.vyper.as_ref() {
+    if let Some(vyper) = options.vyper_settings.as_ref() {
       overrides.vyper = VyperConfigOptions::try_from(vyper)?;
     }
 
@@ -539,6 +539,9 @@ pub struct JsCompilerConfigOptions {
   /// runs, metadata output, or per-path remappings without rebuilding the Rust crate.
   #[napi(ts_type = "CompilerSettings | undefined")]
   pub solc_settings: Option<JsCompilerSettingsOptions>,
+  /// Nested Vyper-specific configuration. Falls back to environment defaults when omitted.
+  #[napi(ts_type = "VyperCompilerConfig | undefined")]
+  pub vyper_settings: Option<JsVyperCompilerConfig>,
   /// Enables the synthetic workspace cache used for inline sources. When `true` (default) we cache
   /// sources under `~/.tevm/virtual-sources`; `false` keeps everything in-memory for ephemeral runs.
   #[napi(ts_type = "boolean | undefined")]
@@ -590,9 +593,6 @@ pub struct JsCompilerConfigOptions {
   /// `"Error"` which hides warnings.
   #[napi(ts_type = "string | undefined")]
   pub compiler_severity: Option<String>,
-  /// Nested Vyper-specific configuration. Falls back to environment defaults when omitted.
-  #[napi(ts_type = "VyperCompilerConfig | undefined")]
-  pub vyper: Option<JsVyperCompilerConfig>,
 }
 
 /// Selects which frontend pipeline the compiler should use.
