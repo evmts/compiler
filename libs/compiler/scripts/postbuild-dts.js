@@ -78,6 +78,11 @@ function collectExtendDefinitions(sourceText) {
 	const definitions = []
 
 	const visit = (node) => {
+		if (ts.isVariableStatement(node)) {
+			collectVariableDefinitions(definitions, sourceFile, sourceText, node)
+			return
+		}
+
 		const kind = getDeclarationKind(node)
 
 		if (kind && node.name) {
@@ -116,6 +121,11 @@ function collectBuildDefinitions(sourceText) {
 	const map = new Map()
 
 	const visit = (node) => {
+		if (ts.isVariableStatement(node)) {
+			collectVariableDefinitions(list, sourceFile, sourceText, node)
+			return
+		}
+
 		const kind = getDeclarationKind(node)
 
 		if (kind && node.name) {
@@ -169,6 +179,32 @@ function getDeclarationKind(node) {
 	}
 
 	return null
+}
+
+function collectVariableDefinitions(bucket, sourceFile, sourceText, statement) {
+	for (const declaration of statement.declarationList.declarations) {
+		if (!ts.isIdentifier(declaration.name)) {
+			continue
+		}
+
+		const commentInfo = extractCommentInfo(sourceText, statement)
+		const leadingEnd = commentInfo ? commentInfo.start : statement.getStart(sourceFile)
+		const leadingText = sourceText.slice(statement.getFullStart(), leadingEnd)
+		const { indent: commentIndent } = splitLeading(leadingText)
+		const declarationIndent = getIndentForPosition(sourceText, statement.getStart(sourceFile))
+		const declarationText = sourceText.slice(statement.getStart(sourceFile), statement.getEnd())
+
+		bucket.push({
+			name: declaration.name.text,
+			kind: 'const',
+			comment: commentInfo ? { text: commentInfo.text, indent: commentIndent } : null,
+			declaration: {
+				text: declarationText,
+				indent: declarationIndent,
+				members: [],
+			},
+		})
+	}
 }
 
 function takeBuildDefinition(map, name, kind) {

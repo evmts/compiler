@@ -127,7 +127,7 @@ export type JsCompiler = Compiler
 /** Chainable JavaScript wrapper around a compiler-emitted contract state snapshot. */
 export interface Contract<
   Name extends string = string,
-  Map extends ContractStateMap = {}
+  Map extends ContractStateMap = ContractStateMap
 > {
   readonly __state: ContractSnapshot<Name, Map>;
   readonly name: Name;
@@ -912,9 +912,12 @@ export interface ContractConstructor {
     StateInput["name"],
     StateMapFromInput<StateInput>
   >;
+  /** Build a wrapper directly from Solc contract JSON (stringified or plain object). */
   fromSolcContractOutput(
     name: string,
     contract: object | string
   ): Contract<string, FullyDefinedMap>;
   readonly prototype: Contract;
 }
+
+export declare const Contract: ContractConstructor;

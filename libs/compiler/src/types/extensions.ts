@@ -165,7 +165,7 @@ type ContractStateAllDefined = ContractSnapshot<string, FullyDefinedMap>;
 
 export interface Contract<
   Name extends string = string,
-  Map extends ContractStateMap = {}
+  Map extends ContractStateMap = ContractStateMap
 > {
   readonly __state: ContractSnapshot<Name, Map>;
   readonly name: Name;
@@ -236,6 +236,7 @@ export interface ContractConstructor {
     StateInput["name"],
     StateMapFromInput<StateInput>
   >;
+  /** Build a wrapper directly from Solc contract JSON (stringified or plain object). */
   fromSolcContractOutput(
     name: string,
     contract: object | string
