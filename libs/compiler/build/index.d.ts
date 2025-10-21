@@ -36,39 +36,95 @@ export declare class Ast {
   ast(): import('./solc-ast').SourceUnit
 }
 export type JsAst = Ast
+
+/**
+ * JavaScript-facing mirror of `CompileOutput` with ergonomic getters for downstream tooling. This
+ * is what the TypeScript layer surfaces as `CompileOutput<THasErrors, TPaths>`.
+ */
 export declare class CompileOutput<
   THasErrors extends boolean = boolean,
   TSourcePaths extends readonly string[] | undefined = string[] | undefined
 > {
   constructor();
+  /** Raw standard JSON artifact object returned by the underlying compiler. */
   get artifactsJson(): Record<string, unknown>;
+  /** Mapping of source paths to compiled artifacts. */
   get artifacts(): ArtifactMap<THasErrors, TSourcePaths>;
+  /** Convenience accessor when only a single source produced output. */
   get artifact(): ArtifactValue<THasErrors, TSourcePaths>;
+  /** Compiler diagnostics promoted to `Error` severity. */
   get errors(): THasErrors extends true
     ? ReadonlyArray<CompilerError>
     : undefined;
+  /** Full diagnostic list regardless of severity. Useful for editor integrations. */
   get diagnostics(): Array<CompilerError>;
+  /** Return whether the compile output contains any errors. */
   hasCompilerErrors(): this is CompileOutput<true, TSourcePaths>;
+  /** Serialise the compile output as JSON for transport or persistence. */
   toJson(): CompileOutputJson;
 }
-
 export type JsCompileOutput = CompileOutput
 
 export declare class Compiler {
+  /**
+   * Download and install a `solc` binary that matches the requested semantic
+   * version. The promise resolves once the binary has been persisted locally.
+   */
   static installSolcVersion(version: string): Promise<unknown>
+  /** Check whether a `solc` binary for the provided version is already available. */
   static isSolcVersionInstalled(version: string): boolean
+  /**
+   * Create a compiler that automatically discovers nearby project configuration.
+   * Pass `CompilerConfigOptions` to override defaults such as the solc version or
+   * remappings used for inline compilation.
+   */
   constructor(options?: CompilerConfigOptions | undefined)
+  /**
+   * Construct a compiler that loads configuration from an existing Foundry project.
+   * The returned instance is already bound to the project for subsequent calls.
+   */
   static fromFoundryRoot(root: string, options?: CompilerConfigOptions | undefined): JsCompiler
+  /**
+   * Construct a compiler that understands a Hardhat project layout rooted at `root`.
+   * Hardhat configuration is normalised before being merged with the supplied options.
+   */
   static fromHardhatRoot(root: string, options?: CompilerConfigOptions | undefined): JsCompiler
+  /**
+   * Construct a compiler bound to an arbitrary project root that follows the Foundry
+   * directory layout. Useful when working with generated or temporary repositories.
+   */
   static fromRoot(root: string, options?: CompilerConfigOptions | undefined): JsCompiler
+  /**
+   * Compile inline Solidity, Yul, or Vyper source text or an in-memory Solidity AST.
+   * Returns a rich `CompileOutput` snapshot describing contracts, sources, and errors.
+   */
   compileSource(target: string | object, options?: CompilerConfigOptions | undefined): CompileOutput<true, undefined> | CompileOutput<false, undefined>
+  /**
+   * Compile a keyed map of sources or AST entries. Entries must share a language
+   * unless overridden via the provided compiler options.
+   */
   compileSources<TSources extends Record<string, string | object> = Record<string, string | object>>(sources: TSources, options?: CompilerConfigOptions | undefined): CompileOutput<true, Extract<keyof TSources, string>[]> | CompileOutput<false, Extract<keyof TSources, string>[]>
+  /**
+   * Compile concrete files on disk. Language is inferred from extensions unless the
+   * overrides provide an explicit compiler language.
+   */
   compileFiles<TFilePaths extends readonly string[] = readonly string[]>(paths: TFilePaths, options?: CompilerConfigOptions | undefined): CompileOutput<true, TFilePaths> | CompileOutput<false, TFilePaths>
+  /**
+   * Compile the project associated with this compiler instance, returning a snapshot
+   * covering every source file that emitted artifacts.
+   */
   compileProject(options?: CompilerConfigOptions | undefined): CompileOutput<true, string[]> | CompileOutput<false, string[]>
+  /** Compile a single contract from the attached project by its canonical name. */
   compileContract(contractName: string, options?: CompilerConfigOptions | undefined): CompileOutput<true, undefined> | CompileOutput<false, undefined>
+  /**
+   * Return the canonicalised project paths used for artifacts, cache directories,
+   * and virtual source storage.
+   */
   getPaths(): ProjectPaths
 }
 export type JsCompiler = Compiler
+
+/** Chainable JavaScript wrapper around a compiler-emitted contract state snapshot. */
 export interface Contract<
   Name extends string = string,
   Map extends ContractStateMap = {}
@@ -94,6 +150,7 @@ export interface Contract<
   readonly irOptimized: FieldValue<Map, "irOptimized">;
   readonly ewasm: FieldValue<Map, "ewasm">;
   readonly creationSourceMap: FieldValue<Map, "creationSourceMap">;
+  /** Return a new wrapper with the address field updated. */
   withAddress<
     NextAddress extends `0x${string}` | null | undefined =
       | `0x${string}`
@@ -102,6 +159,10 @@ export interface Contract<
   >(
     address?: NextAddress
   ): Contract<Name, UpdateMap<Map, "address", NextAddress>>;
+  /**
+  * Return a new wrapper with the creation bytecode replaced. Accepts either a Buffer
+  * or a hex-encoded string and normalises the value internally.
+  */
   withCreationBytecode(): Contract<
     Name,
     UpdateMap<Map, "creationBytecode", undefined>
@@ -118,6 +179,10 @@ export interface Contract<
     Name,
     UpdateMap<Map, "creationBytecode", BytecodeMapValue<typeof bytecode>>
   >;
+  /**
+  * Return a new wrapper with the deployed bytecode replaced. Accepts either a Buffer
+  * or a hex-encoded string and normalises the value internally.
+  */
   withDeployedBytecode(): Contract<
     Name,
     UpdateMap<Map, "deployedBytecode", undefined>
@@ -134,26 +199,42 @@ export interface Contract<
     Name,
     UpdateMap<Map, "deployedBytecode", BytecodeMapValue<typeof bytecode>>
   >;
+  /** Serialise the wrapper back into a plain `ContractState` snapshot. */
   toJson(): ContractSnapshot<Name, Map>;
 }
-
 export type JsContract = Contract
+
+/**
+ * Wrapper sent over N-API describing the artifacts emitted for a single source file. Provides
+ * ergonomic getters (and lazily constructs `Ast` helpers) without forcing consumers to inspect raw
+ * JSON blobs.
+ */
 export declare class SourceArtifacts<TPath extends string = string> {
   constructor();
+  /** Absolute or synthetic path to the source that produced these artifacts. */
   get sourcePath(): TPath | null;
+  /** Solc source identifier when available. */
   get sourceId(): number | null;
+  /** Solc version string that emitted these artifacts, if recorded. */
   get solcVersion(): string | null;
+  /** Lazily materialise the Solidity AST as a reusable `Ast` helper instance. */
   get ast(): Ast | undefined;
+  /** Contracts produced for this source keyed by contract name. */
   get contracts(): Record<string, Contract>;
+  /** Snapshot this artifact bundle as a serialisable JSON structure. */
   toJson(): SourceArtifactsJson;
 }
-
 export type JsSourceArtifacts = SourceArtifacts
 
+/** AST helper configuration allowing overrides for the solc version and target contract. */
 export interface AstConfigOptions {
+  /** Semantic version of `solc` used for AST parsing. Defaults to `0.8.30`. */
   solcVersion?: string | undefined
+  /** Solc language mode. Only `Solidity` is supported and used by default. */
   solcLanguage?: SolcLanguage
+  /** Partial solc settings merged with the AST orchestrator defaults. */
   solcSettings?: CompilerSettings | undefined
+  /** Contract name to target when mutating the AST. Applies to every contract when omitted. */
   instrumentedContract?: string | undefined
 }
 
@@ -163,99 +244,225 @@ export declare const enum BytecodeHash {
   Bzzr1 = 'Bzzr1'
 }
 
+/** Serializable projection of `CompileOutput` exposed to JS callers. */
 export interface CompileOutputJson {
+  /** Snapshot for the sole source artifact when only one file produced output. */
   artifact?: SourceArtifactsJson | undefined
+  /** Map of every source artifact keyed by canonical path. */
   artifacts?: Record<string, SourceArtifactsJson> | undefined
+  /** Compiler diagnostics across all severity levels. */
   errors?: ReadonlyArray<CompilerError> | undefined
+  /** Raw artifact payload mirroring the underlying compiler output. */
   rawArtifacts?: Record<string, unknown> | undefined
 }
 
-/** JavaScript-facing configuration captured through N-API bindings. */
+/** Compiler configuration merged on top of the defaults for each call. */
 export interface CompilerConfigOptions {
+  /**
+   * Semantic version of `solc` to run (e.g. `"0.8.30"`). Defaults to the bundled `0.8.30`
+   * release when omitted.
+   */
   solcVersion?: string | undefined
+  /**
+   * Override the compiler front-end (`Solidity`, `Yul`, or `Vyper`). Falls back to
+   * `CompilerLanguage::Solidity` unless project metadata specifies otherwise.
+   */
   language?: CompilerLanguage | undefined
+  /**
+   * Partial `solc` settings merged on top of Foundry's defaults. Useful for tweaking optimiser
+   * runs, metadata output, or per-path remappings without rebuilding the Rust crate.
+   */
   solcSettings?: CompilerSettings | undefined
+  /**
+   * Enables the synthetic workspace cache used for inline sources. When `true` (default) we cache
+   * sources under `~/.tevm/virtual-sources`; `false` keeps everything in-memory for ephemeral runs.
+   */
   cacheEnabled?: boolean | undefined
+  /**
+   * Prevents network access during compilation. Defaults to `false` so Foundry can download
+   * missing remappings when necessary.
+   */
   offlineMode?: boolean | undefined
+  /** Skips writing artifacts to disk when `true`. Defaults to `false`. */
   noArtifacts?: boolean | undefined
+  /** Emits Foundry build-info files when `true`. Defaults to `false`. */
   buildInfoEnabled?: boolean | undefined
+  /**
+   * Normalises emitted paths to use forward slashes. Defaults to `true` for cross-platform
+   * stability.
+   */
   slashPaths?: boolean | undefined
+  /**
+   * Explicit solc job count. Defaults to letting Foundry auto-detect; set this when you want a
+   * deterministic concurrency level inside CI.
+   */
   solcJobs?: number | undefined
+  /** Emits minimal artifact output when `true` (Foundry's sparse output mode). Defaults to `false`. */
   sparseOutput?: boolean | undefined
+  /**
+   * Additional filesystem roots forwarded to solc's `--allow-paths`. Provide absolute paths or
+   * paths relative to the invoking process. Defaults to an empty list.
+   */
   allowPaths?: string[] | undefined
+  /**
+   * Extra include directories resolved before compilation. Entries are canonicalised relative to
+   * the compiler's working directory before use.
+   */
   includePaths?: string[] | undefined
+  /**
+   * Library directories appended to the search path. Particularly useful when mirroring Hardhat's
+   * `libraries` behaviour.
+   */
   libraryPaths?: string[] | undefined
+  /** Solidity remappings applied to the compilation (`prefix=path` format). Empty by default. */
   remappings?: string[] | undefined
+  /** Error codes that should be ignored (e.g. `1878`). Defaults to an empty list. */
   ignoredErrorCodes?: number[] | undefined
+  /**
+   * Files or directories excluded from compilation. Paths are canonicalised before being
+   * forwarded to Foundry.
+   */
   ignoredPaths?: string[] | undefined
+  /**
+   * Lowest severity level to surface (`"error"`, `"warning"`, or `"info"`). Defaults to
+   * `"Error"` which hides warnings.
+   */
   compilerSeverity?: string | undefined
+  /** Nested Vyper-specific configuration. Falls back to environment defaults when omitted. */
   vyper?: VyperCompilerConfig | undefined
 }
 
+/** Normalised compiler diagnostic exposed through the TypeScript bindings. */
 export interface CompilerError {
+  /** Primary diagnostic message as emitted by the compiler. */
   message: string
+  /** Optional pre-formatted diagnostic string containing context. */
   formattedMessage?: string
+  /** Component or subsystem that produced the diagnostic (e.g. `general`, `parser`). */
   component: string
+  /** Severity category for the diagnostic. */
   severity: SeverityLevel
+  /** Diagnostic type string provided by the compiler. */
   errorType: string
+  /** Numeric error code when supplied. */
   errorCode?: number
+  /** Primary source span for the diagnostic. */
   sourceLocation?: SourceLocation
+  /**
+   * Additional spans that refine or contextualise the error. These map directly to Solc's
+   * `secondarySourceLocations` array.
+   */
   secondarySourceLocations?: Array<SecondarySourceLocation>
+  /** Vyper-specific source metadata when the diagnostic originated from Vyper. */
   vyperSourceLocation?: VyperSourceLocation
 }
 
+/** Selects which frontend pipeline the compiler should use. */
 export declare const enum CompilerLanguage {
   Solidity = 'Solidity',
   Yul = 'Yul',
   Vyper = 'Vyper'
 }
 
-/** JavaScript-facing wrappers mirroring the option structs. */
+/**
+ * JavaScript-facing wrapper around `solc` compiler settings. Everything is optional—unset values
+ * inherit Foundry's defaults for the resolved compiler version before being sanitised.
+ */
 export interface CompilerSettings {
+  /**
+   * Stop the compiler after the specified phase (e.g. `'parsing'`). Handy when you only need
+   * ASTs or syntax validation.
+   */
   stopAfter?: 'parsing' | undefined
+  /** Additional remappings appended to the existing configuration (`prefix=path`). */
   remappings?: `${string}=${string}`[] | undefined
+  /** Optimiser configuration merged with the defaults (Solc's optimiser is disabled by default). */
   optimizer?: OptimizerSettings | undefined
+  /**
+   * Model checker configuration applied in addition to the defaults. Leave unset to avoid the
+   * extra analysis cost.
+   */
   modelChecker?: ModelCheckerSettings | undefined
+  /** Metadata configuration; defaults to Solc's auto-generated metadata when unset. */
   metadata?: SettingsMetadata | undefined
+  /** Output selection override; defaults to Foundry's rich output map (ABI + bytecode + metadata). */
   outputSelection?: import('./solc-settings').OutputSelection | undefined
+  /**
+   * Target EVM version for the compilation (e.g. `"paris"`). Defaults to the latest supported
+   * version for the chosen solc release.
+   */
   evmVersion?: EvmVersion
+  /** Enables Solc's via-IR pipeline when `Some(true)`. */
   viaIr?: boolean
+  /** Debugging configuration merged with defaults; useful for enabling extra revert information. */
   debug?: DebuggingSettings | undefined
+  /**
+   * Library address remappings appended to the compilation settings. Provide an object keyed by
+   * library namespace, mirroring Solc's JSON input format (e.g. `{ "contracts/Library.sol": { "Library": "0x..." } }`).
+   */
   libraries?: Record<string, Record<string, string>> | undefined
 }
 
+/** Hex and byte representations of compiled contract bytecode. */
 export interface ContractBytecode {
+  /** Hex-encoded bytecode (prefixed with `0x`). */
   hex: `0x${string}`
+  /** Raw byte array equivalent of `hex`. */
   bytes: Uint8Array
 }
 
+/** Immutable snapshot of contract metadata surfaced to JavaScript consumers. */
 export interface ContractState {
+  /** Name of the contract as emitted by the compiler. */
   name: string
+  /** Deployed address associated with this artifact, if known. */
   address?: `0x${string}` | null | undefined
+  /** ABI definition exactly as produced by the compiler (either an array or legacy object form). */
   abi?: unknown | null | undefined
+  /** Original source path for the contract, relative to the project root when available. */
   sourcePath?: string
+  /** Numeric source identifier assigned by solc (used to correlate diagnostics back to sources). */
   sourceId?: number
+  /** Raw creation bytecode snapshot (`bytecode.object` / constructor bytecode). */
   creationBytecode?: ContractBytecode | null | undefined
+  /** Raw deployed bytecode snapshot (`deployedBytecode.object`). */
   deployedBytecode?: ContractBytecode | null | undefined
+  /** Compiler metadata payload describing the build (stringified JSON in recent solc versions). */
   metadata?: string | Record<string, unknown> | null | undefined
+  /** User-facing documentation section (`userdoc`), if the contract emits NatSpec comments. */
   userdoc?: Record<string, unknown> | null | undefined
+  /** Developer-facing documentation section (`devdoc`). */
   devdoc?: Record<string, unknown> | null | undefined
+  /** Storage layout description when available (`storageLayout`). Helpful for upgrade analysis. */
   storageLayout?: import('./solc-storage-layout').StorageLayout | null | undefined
+  /** Immutable slot offsets keyed by identifier (`immutableReferences`). */
   immutableReferences?: Record<string, { start: number; length: number }[]> | null | undefined
+  /** Map of function signatures to their 4-byte selectors (`abi.encode...` selectors). */
   methodIdentifiers?: Record<string, `0x${string}`> | null | undefined
+  /** Debug metadata emitted per function entry (`evm.bytecode.functionDebugData`). */
   functionDebugData?: Record<string, FunctionDebugDataEntry> | null | undefined
+  /** Gas estimates for constructor and external/internal functions (stringified numbers). */
   gasEstimates?: GasEstimates | null | undefined
+  /** Human-readable assembly output (`evm.legacyAssembly` rendered as text). */
   assembly?: string
+  /** Legacy assembly structure from solc (same data as `assembly` but as raw JSON). */
   legacyAssembly?: Record<string, unknown> | null | undefined
+  /** Opcode listing produced by the compiler (space-separated opcodes). */
   opcodes?: string
+  /** Intermediate representation (IR) when requested. */
   ir?: string
+  /** Optimised intermediate representation (IR) variant. */
   irOptimized?: string
+  /** Ewasm output payload (if the target EVM version supports eWASM emission). */
   ewasm?: EwasmOutput | null | undefined
+  /** Source map for the creation bytecode (`evm.bytecode.sourceMap`). */
   creationSourceMap?: string | null | undefined
 }
 
 export interface DebuggingSettings {
+  /** Controls how revert strings are emitted (`Default`, `Strip`, `Debug`, `VerboseDebug`). */
   revertStrings?: RevertStrings
+  /** Additional debug information tags. Defaults to Solc's list (currently `"location"`) when empty. */
   debugInfo: Array<string>
 }
 
@@ -273,31 +480,46 @@ export declare const enum EvmVersion {
 }
 
 export interface EwasmOutput {
+  /** Optional textual WAST representation emitted by Solc. */
   wast?: string | null | undefined
+  /** Base64-encoded WASM module (the `ewasm.wasm` field from Solc's standard JSON output). */
   wasm: string
 }
 
 export interface FunctionDebugDataEntry {
+  /** Program counter offset for the function entry, when emitted. */
   entryPoint?: number | null | undefined
+  /** Stable identifier assigned by Solc. */
   id?: number | null | undefined
+  /** Number of stack slots reserved for parameters. */
   parameterSlots?: number | null | undefined
+  /** Number of stack slots reserved for return values. */
   returnSlots?: number | null | undefined
 }
 
 export interface GasEstimates {
+  /** Gas estimates related to contract deployment. */
   creation: GasEstimatesCreation
+  /** Gas estimates for external/public functions keyed by signature (stringified decimals). */
   external: Record<string, string>
+  /** Gas estimates for internal functions keyed by signature (stringified decimals). */
   internal: Record<string, string>
 }
 
 export interface GasEstimatesCreation {
+  /** Estimated gas required to deposit contract code on-chain (stringified decimal). */
   codeDepositCost: string
+  /** Estimated execution cost for the deployment transaction (stringified decimal). */
   executionCost: string
+  /** Sum of deposit and execution costs (stringified decimal). */
   totalCost: string
 }
 
+/** Immutable storage slot metadata emitted by Solc. */
 export interface ImmutableSlot {
+  /** Zero-based byte offset (within the deployed bytecode) where the immutable value begins. */
   start: number
+  /** Byte length occupied by the immutable value. */
   length: number
 }
 
@@ -317,15 +539,28 @@ export declare const enum ModelCheckerInvariantKind {
 }
 
 export interface ModelCheckerSettings {
+  /**
+   * Contracts and properties to target during model checking (map of contract filename =>
+   * contract list).
+   */
   contracts: Record<string, string[]> | undefined
+  /** Model checker engine to use (`None` disables the feature, `Bmc` runs bounded model checking). */
   engine?: ModelCheckerEngine
+  /** Timeout in seconds for model checking. */
   timeout?: number
+  /** Specific target categories to analyse (asserts or require statements). */
   targets?: Array<ModelCheckerTarget>
+  /** Invariants that should hold across execution traces (e.g. `Reentrancy`). */
   invariants?: Array<ModelCheckerInvariant>
+  /** Emits counterexamples for unproved properties when `true`. */
   showUnproved?: boolean
+  /** Enables relaxed division/modulo handling via slack variables. */
   divModWithSlacks?: boolean
+  /** Solvers to run during model checking (`Chc`, `Eld`, `Bmc`, `AllZ3`, `Cvc4`). */
   solvers?: Array<ModelCheckerSolver>
+  /** Displays unsupported properties discovered during analysis. */
   showUnsupported?: boolean
+  /** Displays properties proved to be safe. */
   showProvedSafe?: boolean
 }
 
@@ -343,35 +578,66 @@ export declare const enum ModelCheckerTarget {
 }
 
 export interface OptimizerDetails {
+  /** Enables peephole optimiser passes. */
   peephole?: boolean
+  /** Enables function inlining. */
   inliner?: boolean
+  /** Removes unreachable `JUMPDEST`s when enabled. */
   jumpdestRemover?: boolean
+  /** Controls literal ordering optimisations. */
   orderLiterals?: boolean
+  /** Enables duplicate code elimination. */
   deduplicate?: boolean
+  /** Enables common sub-expression elimination. */
   cse?: boolean
+  /** Enables constant propagation optimisations. */
   constantOptimizer?: boolean
+  /** Enables Yul optimiser passes when generating Yul output. */
   yul?: boolean
+  /** Nested Yul optimiser configuration. */
   yulDetails?: YulDetails | undefined
+  /** Optimises simple counter `for` loops for unchecked increments. */
   simpleCounterForLoopUncheckedIncrement?: boolean
 }
 
 export interface OptimizerSettings {
+  /** Enables or disables the Solc optimiser; inherits defaults when unset (disabled by default). */
   enabled?: boolean
+  /** Optimisation runs count; defaults to Solc's global value of `200` when not provided. */
   runs?: number
+  /** Advanced optimisation toggles for individual optimiser passes. */
   details?: OptimizerDetails | undefined
 }
 
+/** Canonicalised project directory layout surfaced to JavaScript consumers. */
 export interface ProjectPaths {
+  /**
+   * Absolute workspace root resolved by the compiler—this is the directory `foundry.toml` or
+   * `hardhat.config` was discovered in (or the synthetic project root for inline sources).
+   */
   root: string
+  /** Path to the cache directory/file managed by Foundry (typically `cache/solidity-files-cache.json`). */
   cache: string
+  /** Directory where compiled artifacts are written (e.g. `out/` for Foundry projects). */
   artifacts: string
+  /** Directory containing Foundry build-info JSON metadata (`out/build-info`). */
   buildInfos: string
+  /** Canonical directory for contract sources (usually `src/`). */
   sources: string
+  /** Directory containing contract tests (Foundry's `test/` folder). */
   tests: string
+  /** Directory containing project scripts (`script/` or `scripts/`, depending on the toolchain). */
   scripts: string
+  /** Additional library directories configured for the project (e.g. `lib/`, `node_modules/`). */
   libraries: Array<string>
+  /** Additional include paths forwarded to the compiler. These are canonicalised absolute paths. */
   includePaths: Array<string>
+  /** Extra paths permitted by solc's `--allow-paths` flag. */
   allowedPaths: Array<string>
+  /**
+   * The path to the virtual sources directory used for caching inline inputs (for synthetic
+   * projects this lives under `~/.tevm/virtual-sources`).
+   */
   virtualSources?: string
 }
 
@@ -382,19 +648,31 @@ export declare const enum RevertStrings {
   VerboseDebug = 'VerboseDebug'
 }
 
+/**
+ * Additional spans that provide extra context for a diagnostic (Solc's "secondary locations").
+ * Offsets share the same units as [`SourceLocation`] (byte offsets within the source file).
+ */
 export interface SecondarySourceLocation {
+  /** Optional file path providing additional context. */
   file?: string
+  /** Optional starting byte offset for the secondary span. */
   start?: number
+  /** Optional ending byte offset for the secondary span. */
   end?: number
+  /** Supplemental message supplied by the compiler. */
   message?: string
 }
 
 export interface SettingsMetadata {
+  /** Emit literal source content in the metadata output. */
   useLiteralContent?: boolean
+  /** Metadata hash strategy (defaults to Solc's own setting when `None`). */
   bytecodeHash?: BytecodeHash
+  /** Enables or disables CBOR metadata embedding. */
   cborMetadata?: boolean
 }
 
+/** Severity level attached to a compiler diagnostic emitted by Solc or Vyper. */
 export declare const enum SeverityLevel {
   Error = 'Error',
   Warning = 'Warning',
@@ -406,44 +684,85 @@ export declare const enum SolcLanguage {
   Yul = 'Yul'
 }
 
+/**
+ * Serializable mirror of `SourceArtifacts` returned by `SourceArtifacts::to_json`. This is written
+ * directly into the compiled TypeScript declarations so that consumers can persist the snapshot
+ * without holding a native handle.
+ */
 export interface SourceArtifactsJson {
+  /** Source path string or `undefined` when not available. */
   sourcePath?: string | undefined
+  /** Numeric source identifier emitted by solc. */
   sourceId?: number | undefined
+  /** Solc version recorded for the source. */
   solcVersion?: string | undefined
+  /**
+   * Sanitised AST value ready for JSON serialisation. Hash and source content fields are stripped
+   * so the value is stable across compiler invocations.
+   */
   ast?: import('./solc-ast').SourceUnit | undefined
+  /** Contracts emitted for the source keyed by contract name. */
   contracts?: Record<string, ContractState> | undefined
 }
 
+/**
+ * Byte offsets (0-based, measured against the UTF-8 source) pointing at the primary diagnostic span
+ * reported by the compiler.
+ */
 export interface SourceLocation {
+  /** Canonical file path associated with the diagnostic span. */
   file: string
+  /** Byte offset at which the span starts. */
   start: number
+  /** Byte offset immediately after the span ends. */
   end: number
 }
 
+/** Vyper-specific configuration surfaced alongside the general compiler settings. */
 export interface VyperCompilerConfig {
+  /** Absolute path to a `vyper` executable. Defaults to resolving `vyper` from the `PATH`. */
   path?: string | undefined
+  /** Optimisation strategy forwarded to the Vyper compiler. Uses Vyper defaults when unset. */
   optimize?: VyperOptimizationMode | undefined
+  /** Target EVM version. Defaults to Vyper's bundled target when omitted. */
   evmVersion?: EvmVersion | undefined
+  /** Whether to embed bytecode metadata. Falls back to Vyper defaults when unspecified. */
   bytecodeMetadata?: boolean | undefined
+  /** Additional import search paths for Vyper. Relative entries are resolved from the project root. */
   searchPaths?: string[] | undefined
+  /**
+   * Fine-grained Vyper output selection map. Defaults to Foundry's aggregate selection (`abi`,
+   * `evm.bytecode`, `metadata`).
+   */
   outputSelection?: import('./solc-settings').OutputSelection | undefined
+  /** Enables experimental Vyper codegen features. Disabled by default. */
   experimentalCodegen?: boolean | undefined
 }
 
+/** Optimisation goals exposed by the Vyper compiler. */
 export declare const enum VyperOptimizationMode {
   Gas = 'Gas',
   Codesize = 'Codesize',
   None = 'None'
 }
 
+/**
+ * Line and column information reported by Vyper diagnostics. Vyper reports human-readable values
+ * rather than byte offsets, so we surface them directly.
+ */
 export interface VyperSourceLocation {
+  /** Source path reported by the Vyper compiler. */
   file: string
+  /** 1-based line number within the file. */
   line?: number
+  /** 0-based column offset within the line. */
   column?: number
 }
 
 export interface YulDetails {
+  /** Enables stack allocation optimisations for Yul. */
   stackAllocation?: boolean
+  /** Custom optimiser step string for the Yul pipeline. */
   optimizerSteps?: string
 }
 
@@ -476,11 +795,6 @@ type ArtifactValue<
     ? SourceArtifacts
     : SourceArtifacts | undefined
   : never;
-
-/**
- * Place custom type/interface overrides here. The postbuild-dts script will
- * replace matching declarations in build/index.d.ts after every build.
- */
 
 type ContractStateInput = { name: string } & Partial<
   Omit<ContractState, "name">
@@ -604,5 +918,3 @@ export interface ContractConstructor {
   ): Contract<string, FullyDefinedMap>;
   readonly prototype: Contract;
 }
-
-export declare const Contract: ContractConstructor;

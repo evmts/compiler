@@ -24,7 +24,7 @@
 			"executor": "nx:run-commands",
 			"dependsOn": ["build"],
 			"options": {
-				"command": "pnpm run build:copy-types && pnpm run build:dts && pnpm run build:typecheck",
+				"command": "pnpm run build:copy-types && pnpm run build:dts && pnpm run build:typecheck && pnpm run build:docs",
 				"cwd": "libs/compiler"
 			}
 		},
