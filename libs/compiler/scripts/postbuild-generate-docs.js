@@ -16,6 +16,11 @@ const sections = [
 		format: 'markdown',
 	},
 	{
+		tag: 'readme',
+		path: path.join(rootDir, 'README.md'),
+		format: 'markdown',
+	},
+	{
 		tag: 'type-declarations',
 		path: path.join(buildDir, 'index.d.ts'),
 		format: 'typescript',

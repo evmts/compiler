@@ -273,6 +273,8 @@ export interface CompilerConfigOptions {
    * runs, metadata output, or per-path remappings without rebuilding the Rust crate.
    */
   solcSettings?: CompilerSettings | undefined
+  /** Nested Vyper-specific configuration. Falls back to environment defaults when omitted. */
+  vyperSettings?: VyperCompilerConfig | undefined
   /**
    * Enables the synthetic workspace cache used for inline sources. When `true` (default) we cache
    * sources under `~/.tevm/virtual-sources`; `false` keeps everything in-memory for ephemeral runs.
@@ -328,8 +330,6 @@ export interface CompilerConfigOptions {
    * `"Error"` which hides warnings.
    */
   compilerSeverity?: string | undefined
-  /** Nested Vyper-specific configuration. Falls back to environment defaults when omitted. */
-  vyper?: VyperCompilerConfig | undefined
 }
 
 /** Normalised compiler diagnostic exposed through the TypeScript bindings. */

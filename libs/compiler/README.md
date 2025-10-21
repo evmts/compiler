@@ -1,16 +1,155 @@
 # @tevm/compiler
 
-Rust + N-API bindings that expose Foundry's multi-compiler to JavaScript, Bun, and WASI runtimes. The crate powers TEVM's compiler pipeline and ships with first-class helpers for AST instrumentation and contract state hydration.
+Rust + N-API bindings that expose Foundry's multi-language compiler (Solidity, Yul, Vyper) to JavaScript and Bun runtimes. The package ships with helpers for AST instrumentation, contract state objects with convenient types, and project-aware builds (Foundry, Hardhat, or from a custom root). This allows any project to benefit from Foundry's compiler stack and caching capabilities in a custom structure. This includes caching inline sources.
 
-## What Lives Here
+## Quick Start
 
-- `src/ast` – Solidity-only AST orchestration (`Ast` class) for stitching fragments, promoting visibility, and validating stitched trees.
-- `src/compiler` – Project-aware compilation core (`Compiler`) that understands Foundry, Hardhat, inline sources, and language overrides (Solidity, Yul, Vyper).
-- `src/contract` – Ergonomic wrappers around standard JSON artifacts (`Contract`, `JsContract`) with mutation helpers for downstream tooling.
-- `src/internal` – Shared config parsing, solc/vyper orchestration, filesystem discovery, and error translation surfaced through N-API.
-- `src/types` – Hand-authored `.d.ts` extensions copied into `build/` after every release.
+1. **Install toolchains**
+   - Node.js 18+ with `pnpm` 9+
+   - Bun 1.1+ (required for the test suite)
+   - Rust stable toolchain
+   - Relevant compiler binaries:
+     - Install `solc` releases via `Compiler.installSolcVersion(version)` or Foundry's `svm`
+     - Optional: `vyper` executable on your `PATH` for Vyper projects
+2. **Install dependencies**
+   ```bash
+   pnpm install
+   ```
+3. **Build native bindings**
+   ```bash
+   pnpm nx run compiler:build
+   pnpm nx run compiler:post-build   # copies curated .d.ts files, type-checks, regenerates build/llms.md
+   ```
+4. **Run the full test matrix**
+   ```bash
+   pnpm nx run compiler:test         # cargo tests + Bun specs + TS type assertions
+   ```
 
-## Build & Test
+## Usage
+
+- Feed `libs/compiler/build/llms.md` to your favourite LLM and ask how to adapt the compiler for your workflow—the bundle includes the public API surface, curated `.d.ts`, and executable specs.
+- The sections below show direct JavaScript usage patterns; all examples run in Node.js or Bun.
+
+### Compile inline sources
+
+```ts
+import { Compiler, CompilerLanguage } from '@tevm/compiler'
+
+await Compiler.installSolcVersion('0.8.30')
+
+const compiler = new Compiler({
+  language: CompilerLanguage.Solidity, // Solidity, Yul, Vyper
+  solcVersion: '0.8.30',
+  solcSettings: {
+    // any solc settings, see index.d.ts:CompilerSettings
+  }
+
+  // or
+  language: CompilerLanguage.Vyper,
+  vyperSettings: {
+    // any vyper settings, see index.d.ts:VyperCompilerSettings
+  }
+})
+
+// This will be cached by default in ~/.tevm/virtual-sources
+const output = compiler.compileSources({
+  'Example.sol': `
+    // SPDX-License-Identifier: MIT
+    pragma solidity ^0.8.20;
+
+    contract Example {
+      ...
+    }
+  `,
+}, {
+    // override any constructor settings; this is true for every compile method
+})
+
+if (output.hasCompilerErrors()) {
+  console.error(output.diagnostics)
+} else {
+  // The artifacts paths are fully typed
+  const artifact = output.artifacts["Example.sol"].contracts.Example
+  console.log(artifact?.toJson())
+}
+```
+
+### Target existing projects
+
+```ts
+import { Compiler } from "@tevm/compiler";
+import { join } from "node:path";
+
+// Reuse foundry.toml configuration, remappings, and cache directories.
+const foundryRoot = join(process.cwd(), "projects", "foundry-sample");
+const foundryCompiler = Compiler.fromFoundryRoot(foundryRoot, {
+  solcVersion: "0.8.30",
+});
+
+// Compile everything the project declares in its remappings/sources
+const projectSnapshot = foundryCompiler.compileProject();
+// Narrow to a single contract that will be resolved with the project graph
+const counterSnapshot = foundryCompiler.compileContract("Counter");
+
+// Hardhat projects automatically normalise cache + build-info placement
+const hardhatRoot = join(process.cwd(), "projects", "hardhat-sample");
+const hardhatCompiler = Compiler.fromHardhatRoot(hardhatRoot);
+const compiledHardhat = hardhatCompiler.compileSources({
+  "Inline.sol": "contract Inline { function value() public {} }",
+});
+
+// Work inside an arbitrary directory while still persisting .tevm artifacts.
+const syntheticRoot = join(process.cwd(), "tmp", "inline-only");
+const syntheticCompiler = Compiler.fromRoot(syntheticRoot);
+// or `new Compiler()` which will use the current workspace as root
+const inlineSnapshot = syntheticCompiler.compileSource("contract Foo { }");
+```
+
+### Manipulate ASTs for shadowing contracts
+
+```ts
+import { Ast, Compiler } from "@tevm/compiler";
+
+await Compiler.installSolcVersion("0.8.30");
+
+const astHelper = new Ast({
+  solcVersion: "0.8.30",
+  instrumentedContract: "Example",
+})
+  .fromSource(contractSource)
+  .injectShadow(fragmentSource) // any inline Solidity (contract body)
+  .exposeInternalFunctions() // promote private/internal functions
+  .exposeInternalVariables() // promote private/internal variables
+  .validate(); // optional: recompiles to ensure the AST is sound
+
+const stitched = astHelper.ast(); // SourceUnit ready for compilation
+
+const compiler = new Compiler({ solcVersion: "0.8.30" });
+const output = compiler.compileSources({ "Example.sol": stitched });
+// The compilation output returns ast classes as well
+const ast = output.artifacts["Example.sol"].ast;
+```
+
+AST helpers only support Solidity targets; requests for other languages throw with actionable guidance. Node IDs remain unique after fragment injection, making the resulting tree safe to feed back into the compiler.
+
+### Contract snapshots
+
+```ts
+import { Contract } from "@tevm/compiler";
+
+const counter = Contract.fromSolcContractOutput("Counter", artifact)
+  .withAddress("0xabc...")
+  .withCreationBytecode("0x6000...");
+
+// address and creationBytecode are typed
+console.log(counter.address);
+console.log(counter.creationBytecode.hex);
+console.log(counter.toJson()); // normalised contract state
+```
+
+`CompileOutput` instances expose `.artifacts`, `.artifact`, `.errors`, `.diagnostics`, `.hasCompilerErrors()`, and `.toJson()` so downstream tools can safely persist or transport build metadata.
+
+## Build & Test Commands
 
 ```bash
 # Build native bindings and emit build/index.{js,d.ts}
@@ -23,17 +162,21 @@ pnpm nx run compiler:post-build
 pnpm nx run compiler:test
 ```
 
-## Usage
-
-- Feed `libs/compiler/build/llms.md` to your favorite LLM and ask how to wire the compiler into your workflow—the bundle contains the public surface, curated types, and executable specs.
-- Prefer inspecting `libs/compiler/test/**/*.spec.ts` for live examples of inline compilation, project-bound builds, and AST instrumentation when wiring the library manually.
-
 Useful sub-targets:
 
 - `pnpm nx run compiler:test:rust` – Rust unit tests (`cargo test`).
 - `pnpm nx run compiler:test:js` – Bun specs in `test/**/*.spec.ts`.
 - `pnpm nx run compiler:test:typecheck` – Validates the published `.d.ts` surface.
 - `pnpm nx run compiler:lint` / `:format` – Biome for JS + `cargo fmt` for Rust sources.
+
+## What Lives Here
+
+- `src/ast` – Solidity-only AST orchestration (`Ast` class) for stitching fragments, promoting visibility, and validating stitched trees.
+- `src/compiler` – Project-aware compilation core (`Compiler`) that understands Foundry, Hardhat, inline sources, and language overrides.
+- `src/contract` – Ergonomic wrappers around standard JSON artifacts (`Contract`, `JsContract`) with mutation helpers for downstream tooling.
+- `src/internal` – Shared config parsing, compiler orchestration, filesystem discovery, and error translation surfaced through N-API.
+- `src/types` – Hand-authored `.d.ts` extensions copied into `build/` after every release.
+- `test/` – Bun-powered specs and TypeScript assertion suites describing expected behaviour.
 
 ## API Highlights
 
