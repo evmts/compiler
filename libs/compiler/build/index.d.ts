@@ -71,35 +71,33 @@ export type JsCompiler = Compiler
 
 export declare class Contract {
   constructor(state: ContractState)
-static fromSolcContractOutput(name: string, contract: object | string): Contract & { readonly __state?: ContractState }
-get name(): string
-get address(): `0x${string}` | null | undefined
-get creationBytecode(): ContractBytecode | null
-get runtimeBytecode(): ContractBytecode | null
-get deployedBytecode(): ContractBytecode | null
-get abi(): ContractState['abi']
-get metadata(): ContractState['metadata']
-get userdoc(): ContractState['userdoc']
-get devdoc(): ContractState['devdoc']
-get storageLayout(): ContractState['storageLayout']
-get immutableReferences(): ContractState['immutableReferences']
-get methodIdentifiers(): ContractState['methodIdentifiers']
-get functionDebugData(): ContractState['functionDebugData']
-get gasEstimates(): ContractState['gasEstimates']
-get assembly(): string | null
-get legacyAssembly(): ContractState['legacyAssembly']
-get opcodes(): string | null
-get ir(): string | null
-get irOptimized(): string | null
-get ewasm(): ContractState['ewasm']
-get creationSourceMap(): string | null
-get extras(): Record<string, unknown>
-withAddress<State extends ContractState, NextAddress extends `0x${string}` | null | undefined = `0x${string}` | null | undefined>(this: Contract & { readonly __state?: State }, address?: NextAddress): Contract & { readonly __state?: (State extends ContractState ? (NextAddress extends undefined ? Omit<State, 'address'> & { address?: State['address'] } : Omit<State, 'address'> & { address: Exclude<NextAddress, undefined> }) : never) }
-withCreationBytecode<State extends ContractState, NextBytecode extends Buffer | null | undefined = Buffer | null | undefined>(this: Contract & { readonly __state?: State }, bytecode?: NextBytecode): Contract & { readonly __state?: (State extends ContractState ? (NextBytecode extends undefined ? Omit<State, 'creationBytecode'> & { creationBytecode?: State['creationBytecode'] } : NextBytecode extends null ? Omit<State, 'creationBytecode'> & { creationBytecode: null } : Omit<State, 'creationBytecode'> & { creationBytecode: ContractBytecode }) : never) }
-withRuntimeBytecode<State extends ContractState, NextBytecode extends Buffer | null | undefined = Buffer | null | undefined>(this: Contract & { readonly __state?: State }, bytecode?: NextBytecode): Contract & { readonly __state?: (State extends ContractState ? (NextBytecode extends undefined ? Omit<State, 'runtimeBytecode'> & { runtimeBytecode?: State['runtimeBytecode'] } : NextBytecode extends null ? Omit<State, 'runtimeBytecode'> & { runtimeBytecode: null } : Omit<State, 'runtimeBytecode'> & { runtimeBytecode: ContractBytecode }) : never) }
-withDeployedBytecode<State extends ContractState, NextBytecode extends Buffer | null | undefined = Buffer | null | undefined>(this: Contract & { readonly __state?: State }, bytecode?: NextBytecode): Contract & { readonly __state?: (State extends ContractState ? (NextBytecode extends undefined ? Omit<State, 'deployedBytecode'> & { deployedBytecode?: State['deployedBytecode'] } : NextBytecode extends null ? Omit<State, 'deployedBytecode'> & { deployedBytecode: null } : Omit<State, 'deployedBytecode'> & { deployedBytecode: ContractBytecode }) : never) }
-withExtra<State extends ContractState, Key extends string, Value = unknown>(this: Contract & { readonly __state?: State }, key: Key, value: Value): Contract & { readonly __state?: (State extends ContractState ? Omit<State, 'extras'> & { extras: (State['extras'] extends Record<string, unknown> ? State['extras'] : {}) & Record<Key, Value> } : never) }
-toJson<State extends ContractState>(this: Contract & { readonly __state?: State }): State
+  static fromSolcContractOutput(name: string, contract: object | string): JsContract
+  get name(): string
+  get address(): `0x${string}` | null | undefined
+  get creationBytecode(): ContractBytecode | null
+  get deployedBytecode(): ContractBytecode | null
+  get abi(): ContractState['abi']
+  get metadata(): ContractState['metadata']
+  get userdoc(): ContractState['userdoc']
+  get devdoc(): ContractState['devdoc']
+  get storageLayout(): ContractState['storageLayout']
+  get immutableReferences(): ContractState['immutableReferences']
+  get methodIdentifiers(): ContractState['methodIdentifiers']
+  get functionDebugData(): ContractState['functionDebugData']
+  get gasEstimates(): ContractState['gasEstimates']
+  get assembly(): string | null
+  get legacyAssembly(): ContractState['legacyAssembly']
+  get opcodes(): string | null
+  get ir(): string | null
+  get irOptimized(): string | null
+  get ewasm(): ContractState['ewasm']
+  get creationSourceMap(): string | null
+  get extras(): Record<string, unknown>
+  withAddress(address?: string | undefined | null): Contract
+  withCreationBytecode(bytecode?: Buffer | undefined | null): Contract
+  withDeployedBytecode(bytecode?: Buffer | undefined | null): Contract
+  withExtra(key: string, value: any): Contract
+  toJson(): ContractState
 }
 export type JsContract = Contract
 export declare class SourceArtifacts<TPath extends string = string> {
@@ -185,7 +183,6 @@ export interface ContractState {
   sourcePath?: string
   sourceId?: number
   creationBytecode?: ContractBytecode | null | undefined
-  runtimeBytecode?: ContractBytecode | null | undefined
   deployedBytecode?: ContractBytecode | null | undefined
   metadata?: string | Record<string, unknown> | null | undefined
   userdoc?: Record<string, unknown> | null | undefined

@@ -367,7 +367,7 @@ describe("Compiler.compileSource with Solidity strings", () => {
     const [artifact] = flattenContracts(output);
     expect(artifact.name).toBe("InlineExample");
     expectBytecodeShape(artifact.creationBytecode);
-    expectBytecodeShape(artifact.runtimeBytecode ?? artifact.deployedBytecode);
+    expectBytecodeShape(artifact.deployedBytecode);
     expectAbiShape(artifact.abi);
     if (artifact.methodIdentifiers) {
       expect(typeof artifact.methodIdentifiers).toBe("object");

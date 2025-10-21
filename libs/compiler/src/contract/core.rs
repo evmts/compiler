@@ -172,7 +172,6 @@ pub struct ContractState {
   pub address: Option<String>,
   pub abi: Option<Value>,
   pub creation_bytecode: Option<ContractBytecode>,
-  pub runtime_bytecode: Option<ContractBytecode>,
   pub deployed_bytecode: Option<ContractBytecode>,
   pub source_path: Option<String>,
   pub source_id: Option<u32>,
@@ -226,11 +225,6 @@ impl ContractBuilder {
 
   fn set_creation_bytecode(mut self, bytecode: Option<ContractBytecode>) -> Self {
     self.state.creation_bytecode = bytecode;
-    self
-  }
-
-  fn set_runtime_bytecode(mut self, bytecode: Option<ContractBytecode>) -> Self {
-    self.state.runtime_bytecode = bytecode;
     self
   }
 
@@ -406,10 +400,9 @@ fn build_from_project_artifact(name: &str, artifact: &impl Artifact) -> Contract
 
   if let Some(deployed) = bytecode_cow.deployed_bytecode.as_ref() {
     let immutable_refs = deserialize_immutable_refs(&deployed.as_ref().immutable_references);
-    let runtime = ContractBytecode::from_compact_deployed_bytecode(deployed.as_ref());
+    let bytecode = ContractBytecode::from_compact_deployed_bytecode(deployed.as_ref());
     builder = builder
-      .set_runtime_bytecode(runtime.clone())
-      .set_deployed_bytecode(runtime)
+      .set_deployed_bytecode(bytecode)
       .set_immutable_references(optional_map(immutable_refs));
   }
 
@@ -519,11 +512,10 @@ fn apply_standard_json_evm(
   }
 
   if let Some(deployed) = deployed {
-    let runtime = ContractBytecode::from_deployed_bytecode(deployed);
+    let bytecode = ContractBytecode::from_deployed_bytecode(deployed);
     let immutable_refs = deserialize_immutable_refs(&deployed.immutable_references);
     builder = builder
-      .set_runtime_bytecode(runtime.clone())
-      .set_deployed_bytecode(runtime)
+      .set_deployed_bytecode(bytecode)
       .set_immutable_references(optional_map(immutable_refs));
   }
 
@@ -543,11 +535,10 @@ fn apply_compact_evm_artifacts(
   }
 
   if let Some(deployed) = deployed {
-    let runtime = ContractBytecode::from_compact_deployed_bytecode(deployed);
+    let bytecode = ContractBytecode::from_compact_deployed_bytecode(deployed);
     let immutable_refs = deserialize_immutable_refs(&deployed.immutable_references);
     builder = builder
-      .set_runtime_bytecode(runtime.clone())
-      .set_deployed_bytecode(runtime)
+      .set_deployed_bytecode(bytecode)
       .set_immutable_references(optional_map(immutable_refs));
   }
 
@@ -600,7 +591,6 @@ mod tests {
     let mut state = ContractState::new("Fixture");
     state.address = Some("0xabc".into());
     state.creation_bytecode = Some(ContractBytecode::from_bytes(vec![0xde, 0xad]));
-    state.runtime_bytecode = Some(ContractBytecode::from_bytes(vec![0xbe, 0xef]));
     state.deployed_bytecode = Some(ContractBytecode::from_bytes(vec![0xca, 0xfe]));
     state.metadata = Some(json!({ "metadata": true }));
     state.userdoc = Some(json!({ "notice": "hi" }));
@@ -804,7 +794,6 @@ mod tests {
 
     assert_eq!(state.name, "Minimal");
     assert!(state.creation_bytecode.is_some());
-    assert!(state.runtime_bytecode.is_none());
     assert!(state.metadata.is_none());
     assert!(state.method_identifiers.is_none());
     assert!(state.gas_estimates.is_none());

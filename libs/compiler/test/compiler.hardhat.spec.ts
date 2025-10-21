@@ -66,7 +66,6 @@ const firstContract = (output: ArtifactCarrier) =>
 
 const contractBytecodeHex = (contract: any) =>
   contract?.creationBytecode?.hex ??
-  contract?.runtimeBytecode?.hex ??
   contract?.deployedBytecode?.hex ??
   null;
 

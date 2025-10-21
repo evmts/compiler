@@ -82,10 +82,6 @@ impl Contract {
     self.state.creation_bytecode.as_ref()
   }
 
-  pub fn runtime_bytecode(&self) -> Option<&ContractBytecode> {
-    self.state.runtime_bytecode.as_ref()
-  }
-
   pub fn deployed_bytecode(&self) -> Option<&ContractBytecode> {
     self.state.deployed_bytecode.as_ref()
   }
@@ -100,10 +96,6 @@ impl Contract {
 
   pub fn with_creation_bytecode(&mut self, bytecode: Option<ContractBytecode>) {
     self.state.creation_bytecode = bytecode;
-  }
-
-  pub fn with_runtime_bytecode(&mut self, bytecode: Option<ContractBytecode>) {
-    self.state.runtime_bytecode = bytecode;
   }
 
   pub fn with_deployed_bytecode(&mut self, bytecode: Option<ContractBytecode>) {
@@ -162,8 +154,6 @@ pub struct JsContractState {
   #[napi(ts_type = "ContractBytecode | null | undefined")]
   pub creation_bytecode: Option<JsContractBytecode>,
   #[napi(ts_type = "ContractBytecode | null | undefined")]
-  pub runtime_bytecode: Option<JsContractBytecode>,
-  #[napi(ts_type = "ContractBytecode | null | undefined")]
   pub deployed_bytecode: Option<JsContractBytecode>,
   #[napi(ts_type = "string | Record<string, unknown> | null | undefined")]
   pub metadata: Option<Value>,
@@ -212,10 +202,6 @@ pub fn contract_state_to_js(state: &ContractState) -> JsContractState {
     source_id: state.source_id,
     creation_bytecode: state
       .creation_bytecode
-      .as_ref()
-      .map(JsContractBytecode::from),
-    runtime_bytecode: state
-      .runtime_bytecode
       .as_ref()
       .map(JsContractBytecode::from),
     deployed_bytecode: state
@@ -275,7 +261,6 @@ fn contract_state_from_json_value(value: &Value) -> napi::Result<ContractState> 
     .and_then(Value::as_u64)
     .map(|value| value as u32);
   state.creation_bytecode = json_to_bytecode(obj.get("creationBytecode"))?;
-  state.runtime_bytecode = json_to_bytecode(obj.get("runtimeBytecode"))?;
   state.deployed_bytecode = json_to_bytecode(obj.get("deployedBytecode"))?;
   state.metadata = clone_non_null(obj.get("metadata"));
   state.userdoc = clone_non_null(obj.get("userdoc"));
@@ -426,11 +411,7 @@ impl JsContract {
     Ok(Self::from_state(state))
   }
 
-  #[napi(
-    factory,
-    ts_args_type = "name: string, contract: object | string",
-    ts_return_type = "Contract & { readonly __state?: ContractState }"
-  )]
+  #[napi(factory, ts_args_type = "name: string, contract: object | string")]
   pub fn from_solc_contract_output(
     env: Env,
     name: String,
@@ -466,11 +447,6 @@ impl JsContract {
   #[napi(getter)]
   pub fn creation_bytecode(&self) -> Option<JsContractBytecode> {
     self.inner.creation_bytecode().map(JsContractBytecode::from)
-  }
-
-  #[napi(getter)]
-  pub fn runtime_bytecode(&self) -> Option<JsContractBytecode> {
-    self.inner.runtime_bytecode().map(JsContractBytecode::from)
   }
 
   #[napi(getter)]
@@ -570,21 +546,13 @@ impl JsContract {
     )
   }
 
-  #[napi(
-    ts_generic_types = "State extends ContractState, NextAddress extends `0x${string}` | null | undefined = `0x${string}` | null | undefined",
-    ts_args_type = "this: Contract & { readonly __state?: State }, address?: NextAddress",
-    ts_return_type = "Contract & { readonly __state?: (State extends ContractState ? (NextAddress extends undefined ? Omit<State, 'address'> & { address?: State['address'] } : Omit<State, 'address'> & { address: Exclude<NextAddress, undefined> }) : never) }"
-  )]
+  #[napi]
   pub fn with_address(&mut self, address: Option<String>) -> napi::Result<Self> {
     self.inner.with_address(address);
     Ok(self.clone())
   }
 
-  #[napi(
-    ts_generic_types = "State extends ContractState, NextBytecode extends Buffer | null | undefined = Buffer | null | undefined",
-    ts_args_type = "this: Contract & { readonly __state?: State }, bytecode?: NextBytecode",
-    ts_return_type = "Contract & { readonly __state?: (State extends ContractState ? (NextBytecode extends undefined ? Omit<State, 'creationBytecode'> & { creationBytecode?: State['creationBytecode'] } : NextBytecode extends null ? Omit<State, 'creationBytecode'> & { creationBytecode: null } : Omit<State, 'creationBytecode'> & { creationBytecode: ContractBytecode }) : never) }"
-  )]
+  #[napi]
   pub fn with_creation_bytecode(&mut self, bytecode: Option<Buffer>) -> napi::Result<Self> {
     self
       .inner
@@ -592,23 +560,7 @@ impl JsContract {
     Ok(self.clone())
   }
 
-  #[napi(
-    ts_generic_types = "State extends ContractState, NextBytecode extends Buffer | null | undefined = Buffer | null | undefined",
-    ts_args_type = "this: Contract & { readonly __state?: State }, bytecode?: NextBytecode",
-    ts_return_type = "Contract & { readonly __state?: (State extends ContractState ? (NextBytecode extends undefined ? Omit<State, 'runtimeBytecode'> & { runtimeBytecode?: State['runtimeBytecode'] } : NextBytecode extends null ? Omit<State, 'runtimeBytecode'> & { runtimeBytecode: null } : Omit<State, 'runtimeBytecode'> & { runtimeBytecode: ContractBytecode }) : never) }"
-  )]
-  pub fn with_runtime_bytecode(&mut self, bytecode: Option<Buffer>) -> napi::Result<Self> {
-    self
-      .inner
-      .with_runtime_bytecode(bytecode.map(|buffer| ContractBytecode::from_bytes(buffer.to_vec())));
-    Ok(self.clone())
-  }
-
-  #[napi(
-    ts_generic_types = "State extends ContractState, NextBytecode extends Buffer | null | undefined = Buffer | null | undefined",
-    ts_args_type = "this: Contract & { readonly __state?: State }, bytecode?: NextBytecode",
-    ts_return_type = "Contract & { readonly __state?: (State extends ContractState ? (NextBytecode extends undefined ? Omit<State, 'deployedBytecode'> & { deployedBytecode?: State['deployedBytecode'] } : NextBytecode extends null ? Omit<State, 'deployedBytecode'> & { deployedBytecode: null } : Omit<State, 'deployedBytecode'> & { deployedBytecode: ContractBytecode }) : never) }"
-  )]
+  #[napi]
   pub fn with_deployed_bytecode(&mut self, bytecode: Option<Buffer>) -> napi::Result<Self> {
     self
       .inner
@@ -616,21 +568,13 @@ impl JsContract {
     Ok(self.clone())
   }
 
-  #[napi(
-    ts_generic_types = "State extends ContractState, Key extends string, Value = unknown",
-    ts_args_type = "this: Contract & { readonly __state?: State }, key: Key, value: Value",
-    ts_return_type = "Contract & { readonly __state?: (State extends ContractState ? Omit<State, 'extras'> & { extras: (State['extras'] extends Record<string, unknown> ? State['extras'] : {}) & Record<Key, Value> } : never) }"
-  )]
+  #[napi]
   pub fn with_extra(&mut self, key: String, value: Value) -> napi::Result<Self> {
     self.inner.with_extra(key, value);
     Ok(self.clone())
   }
 
-  #[napi(
-    ts_generic_types = "State extends ContractState",
-    ts_args_type = "this: Contract & { readonly __state?: State }",
-    ts_return_type = "State"
-  )]
+  #[napi]
   pub fn to_json(&self) -> JsContractState {
     self.into_json()
   }

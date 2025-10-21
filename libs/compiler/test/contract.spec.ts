@@ -95,14 +95,12 @@ const contract = Contract.fromSolcContractOutput(
     const contract = new Contract({ name: "Tweaks" })
       .withAddress("0x1234")
       .withCreationBytecode(Buffer.from([0xde, 0xad]))
-      .withRuntimeBytecode(Buffer.from([0xbe, 0xef]))
       .withDeployedBytecode(Buffer.from([0xca, 0xfe]))
       .withExtra("custom", { value: 1 });
 
     const snapshot = contract.toJson();
     expect(snapshot.address).toBe("0x1234");
     expect(snapshot.creationBytecode?.hex).toBe("0xdead");
-    expect(snapshot.runtimeBytecode?.hex).toBe("0xbeef");
     expect(snapshot.deployedBytecode?.hex).toBe("0xcafe");
     expect(snapshot.extras).toEqual({ custom: { value: 1 } });
   });
