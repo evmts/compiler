@@ -4,24 +4,39 @@ use std::path::{Path, PathBuf};
 
 use foundry_compilers::ProjectPathsConfig;
 
+/// Canonicalised project directory layout surfaced to JavaScript consumers.
 #[napi(object)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectPaths {
+  /// Absolute workspace root resolved by the compiler—this is the directory `foundry.toml` or
+  /// `hardhat.config` was discovered in (or the synthetic project root for inline sources).
   pub root: String,
+  /// Path to the cache directory/file managed by Foundry (typically `cache/solidity-files-cache.json`).
   pub cache: String,
+  /// Directory where compiled artifacts are written (e.g. `out/` for Foundry projects).
   pub artifacts: String,
+  /// Directory containing Foundry build-info JSON metadata (`out/build-info`).
   pub build_infos: String,
+  /// Canonical directory for contract sources (usually `src/`).
   pub sources: String,
+  /// Directory containing contract tests (Foundry's `test/` folder).
   pub tests: String,
+  /// Directory containing project scripts (`script/` or `scripts/`, depending on the toolchain).
   pub scripts: String,
+  /// Additional library directories configured for the project (e.g. `lib/`, `node_modules/`).
   pub libraries: Vec<String>,
+  /// Additional include paths forwarded to the compiler. These are canonicalised absolute paths.
   pub include_paths: Vec<String>,
+  /// Extra paths permitted by solc's `--allow-paths` flag.
   pub allowed_paths: Vec<String>,
+  /// The path to the virtual sources directory used for caching inline inputs (for synthetic
+  /// projects this lives under `~/.tevm/virtual-sources`).
   pub virtual_sources: Option<String>,
 }
 
 impl ProjectPaths {
+  /// Build a JavaScript-facing snapshot from a Foundry project configuration.
   pub fn from_config<L>(config: &ProjectPathsConfig<L>) -> Self {
     ProjectPaths {
       root: config.root.to_string_lossy().to_string(),
@@ -50,6 +65,7 @@ impl ProjectPaths {
     }
   }
 
+  /// Attach the virtual sources directory used for caching inline inputs.
   pub fn with_virtual_sources(mut self, dir: Option<&Path>) -> Self {
     self.virtual_sources = dir.map(|path| path.to_string_lossy().to_string());
     self
@@ -64,9 +80,8 @@ impl<L> From<&ProjectPathsConfig<L>> for ProjectPaths {
 
 /// Canonicalises a path while falling back to an absolute join if canonicalisation fails.
 ///
-/// This mirrors the previous behaviour where missing paths defaulted to the current working
-/// directory, ensuring the compiler maintains predictable path resolution even for yet-to-be
-/// written files.
+/// This ensures missing paths are resolved to the current working directory, so the compiler
+/// maintains predictable path resolution even for yet-to-be written files.
 pub fn canonicalize_path(path: &Path) -> PathBuf {
   match std::fs::canonicalize(path) {
     Ok(canonical) => canonical,

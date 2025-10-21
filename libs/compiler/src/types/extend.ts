@@ -37,10 +37,6 @@ type ArtifactValue<
     : SourceArtifacts | undefined
   : never;
 
-/**
- * Place custom type/interface overrides here. The postbuild-dts script will
- * replace matching declarations in build/index.d.ts after every build.
- */
 export declare class CompileOutput<
   THasErrors extends boolean = boolean,
   TSourcePaths extends readonly string[] | undefined = string[] | undefined

@@ -212,36 +212,51 @@ pub struct ModelCheckerSettingsOptions {
   pub show_proved_safe: Option<bool>,
 }
 
-/// JavaScript-facing wrappers mirroring the option structs.
+/// JavaScript-facing wrapper around `solc` compiler settings. Everything is optional—unset values
+/// inherit Foundry's defaults for the resolved compiler version before being sanitised.
 #[napi(object, js_name = "CompilerSettings")]
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsCompilerSettingsOptions {
+  /// Stop the compiler after the specified phase (e.g. `'parsing'`). Handy when you only need
+  /// ASTs or syntax validation.
   #[serde(skip_serializing_if = "Option::is_none")]
   #[napi(ts_type = "'parsing' | undefined")]
   pub stop_after: Option<String>,
+  /// Additional remappings appended to the existing configuration (`prefix=path`).
   #[serde(skip_serializing_if = "Option::is_none")]
   #[napi(ts_type = "`${string}=${string}`[] | undefined")]
   pub remappings: Option<Vec<String>>,
+  /// Optimiser configuration merged with the defaults (Solc's optimiser is disabled by default).
   #[serde(skip_serializing_if = "Option::is_none")]
   #[napi(ts_type = "OptimizerSettings | undefined")]
   pub optimizer: Option<JsOptimizerSettingsOptions>,
+  /// Model checker configuration applied in addition to the defaults. Leave unset to avoid the
+  /// extra analysis cost.
   #[serde(rename = "modelChecker", skip_serializing_if = "Option::is_none")]
   #[napi(ts_type = "ModelCheckerSettings | undefined")]
   pub model_checker: Option<JsModelCheckerSettingsOptions>,
+  /// Metadata configuration; defaults to Solc's auto-generated metadata when unset.
   #[serde(skip_serializing_if = "Option::is_none")]
   #[napi(ts_type = "SettingsMetadata | undefined")]
   pub metadata: Option<JsSettingsMetadataOptions>,
+  /// Output selection override; defaults to Foundry's rich output map (ABI + bytecode + metadata).
   #[serde(rename = "outputSelection", skip_serializing_if = "Option::is_none")]
   #[napi(ts_type = "import('./solc-settings').OutputSelection | undefined")]
   pub output_selection: Option<BTreeMap<String, BTreeMap<String, Vec<String>>>>,
+  /// Target EVM version for the compilation (e.g. `"paris"`). Defaults to the latest supported
+  /// version for the chosen solc release.
   #[serde(rename = "evmVersion", skip_serializing_if = "Option::is_none")]
   pub evm_version: Option<EvmVersion>,
+  /// Enables Solc's via-IR pipeline when `Some(true)`.
   #[serde(rename = "viaIR", skip_serializing_if = "Option::is_none")]
   pub via_ir: Option<bool>,
+  /// Debugging configuration merged with defaults; useful for enabling extra revert information.
   #[serde(skip_serializing_if = "Option::is_none")]
   #[napi(ts_type = "DebuggingSettings | undefined")]
   pub debug: Option<JsDebuggingSettingsOptions>,
+  /// Library address remappings appended to the compilation settings. Provide an object keyed by
+  /// library namespace, mirroring Solc's JSON input format (e.g. `{ "contracts/Library.sol": { "Library": "0x..." } }`).
   #[serde(skip_serializing_if = "Option::is_none")]
   #[napi(ts_type = "Record<string, Record<string, string>> | undefined")]
   pub libraries: Option<BTreeMap<String, BTreeMap<String, String>>>,
@@ -251,10 +266,13 @@ pub struct JsCompilerSettingsOptions {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsOptimizerSettingsOptions {
+  /// Enables or disables the Solc optimiser; inherits defaults when unset (disabled by default).
   #[serde(skip_serializing_if = "Option::is_none")]
   pub enabled: Option<bool>,
+  /// Optimisation runs count; defaults to Solc's global value of `200` when not provided.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub runs: Option<u32>,
+  /// Advanced optimisation toggles for individual optimiser passes.
   #[serde(skip_serializing_if = "Option::is_none")]
   #[napi(ts_type = "OptimizerDetails | undefined")]
   pub details: Option<JsOptimizerDetailsOptions>,
@@ -264,25 +282,35 @@ pub struct JsOptimizerSettingsOptions {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsOptimizerDetailsOptions {
+  /// Enables peephole optimiser passes.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub peephole: Option<bool>,
+  /// Enables function inlining.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub inliner: Option<bool>,
+  /// Removes unreachable `JUMPDEST`s when enabled.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub jumpdest_remover: Option<bool>,
+  /// Controls literal ordering optimisations.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub order_literals: Option<bool>,
+  /// Enables duplicate code elimination.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub deduplicate: Option<bool>,
+  /// Enables common sub-expression elimination.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub cse: Option<bool>,
+  /// Enables constant propagation optimisations.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub constant_optimizer: Option<bool>,
+  /// Enables Yul optimiser passes when generating Yul output.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub yul: Option<bool>,
+  /// Nested Yul optimiser configuration.
   #[serde(skip_serializing_if = "Option::is_none")]
   #[napi(ts_type = "YulDetails | undefined")]
   pub yul_details: Option<JsYulDetailsOptions>,
+  /// Optimises simple counter `for` loops for unchecked increments.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub simple_counter_for_loop_unchecked_increment: Option<bool>,
 }
@@ -291,8 +319,10 @@ pub struct JsOptimizerDetailsOptions {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsYulDetailsOptions {
+  /// Enables stack allocation optimisations for Yul.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub stack_allocation: Option<bool>,
+  /// Custom optimiser step string for the Yul pipeline.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub optimizer_steps: Option<String>,
 }
@@ -301,8 +331,10 @@ pub struct JsYulDetailsOptions {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsDebuggingSettingsOptions {
+  /// Controls how revert strings are emitted (`Default`, `Strip`, `Debug`, `VerboseDebug`).
   #[serde(skip_serializing_if = "Option::is_none")]
   pub revert_strings: Option<RevertStrings>,
+  /// Additional debug information tags. Defaults to Solc's list (currently `"location"`) when empty.
   #[serde(
     default,
     skip_serializing_if = "Vec::is_empty",
@@ -315,10 +347,13 @@ pub struct JsDebuggingSettingsOptions {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsSettingsMetadataOptions {
+  /// Emit literal source content in the metadata output.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub use_literal_content: Option<bool>,
+  /// Metadata hash strategy (defaults to Solc's own setting when `None`).
   #[serde(skip_serializing_if = "Option::is_none")]
   pub bytecode_hash: Option<BytecodeHash>,
+  /// Enables or disables CBOR metadata embedding.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub cbor_metadata: Option<bool>,
 }
@@ -327,25 +362,36 @@ pub struct JsSettingsMetadataOptions {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsModelCheckerSettingsOptions {
+  /// Contracts and properties to target during model checking (map of contract filename =>
+  /// contract list).
   #[serde(skip_serializing_if = "BTreeMap::is_empty")]
   #[napi(ts_type = "Record<string, string[]> | undefined")]
   pub contracts: BTreeMap<String, Vec<String>>,
+  /// Model checker engine to use (`None` disables the feature, `Bmc` runs bounded model checking).
   #[serde(skip_serializing_if = "Option::is_none")]
   pub engine: Option<ModelCheckerEngine>,
+  /// Timeout in seconds for model checking.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub timeout: Option<u32>,
+  /// Specific target categories to analyse (asserts or require statements).
   #[serde(skip_serializing_if = "Option::is_none")]
   pub targets: Option<Vec<ModelCheckerTarget>>,
+  /// Invariants that should hold across execution traces (e.g. `Reentrancy`).
   #[serde(skip_serializing_if = "Option::is_none")]
   pub invariants: Option<Vec<ModelCheckerInvariant>>,
+  /// Emits counterexamples for unproved properties when `true`.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub show_unproved: Option<bool>,
+  /// Enables relaxed division/modulo handling via slack variables.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub div_mod_with_slacks: Option<bool>,
+  /// Solvers to run during model checking (`Chc`, `Eld`, `Bmc`, `AllZ3`, `Cvc4`).
   #[serde(skip_serializing_if = "Option::is_none")]
   pub solvers: Option<Vec<ModelCheckerSolver>>,
+  /// Displays unsupported properties discovered during analysis.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub show_unsupported: Option<bool>,
+  /// Displays properties proved to be safe.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub show_proved_safe: Option<bool>,
 }

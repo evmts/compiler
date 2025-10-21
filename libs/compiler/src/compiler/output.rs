@@ -30,6 +30,7 @@ use crate::internal::errors::napi_error;
 // Shared error and location types
 // -----------------------------------------------------------------------------
 
+/// Severity level attached to a compiler diagnostic emitted by Solc or Vyper.
 #[napi(string_enum)]
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SeverityLevel {
@@ -38,43 +39,70 @@ pub enum SeverityLevel {
   Info,
 }
 
+/// Byte offsets (0-based, measured against the UTF-8 source) pointing at the primary diagnostic span
+/// reported by the compiler.
 #[napi(object)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SourceLocation {
+  /// Canonical file path associated with the diagnostic span.
   pub file: String,
+  /// Byte offset at which the span starts.
   pub start: i32,
+  /// Byte offset immediately after the span ends.
   pub end: i32,
 }
 
+/// Additional spans that provide extra context for a diagnostic (Solc's "secondary locations").
+/// Offsets share the same units as [`SourceLocation`] (byte offsets within the source file).
 #[napi(object)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SecondarySourceLocation {
+  /// Optional file path providing additional context.
   pub file: Option<String>,
+  /// Optional starting byte offset for the secondary span.
   pub start: Option<i32>,
+  /// Optional ending byte offset for the secondary span.
   pub end: Option<i32>,
+  /// Supplemental message supplied by the compiler.
   pub message: Option<String>,
 }
 
+/// Line and column information reported by Vyper diagnostics. Vyper reports human-readable values
+/// rather than byte offsets, so we surface them directly.
 #[napi(object)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VyperSourceLocation {
+  /// Source path reported by the Vyper compiler.
   pub file: String,
+  /// 1-based line number within the file.
   pub line: Option<i32>,
+  /// 0-based column offset within the line.
   pub column: Option<i32>,
 }
 
+/// Normalised compiler diagnostic exposed through the TypeScript bindings.
 #[napi(object)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompilerError {
+  /// Primary diagnostic message as emitted by the compiler.
   pub message: String,
+  /// Optional pre-formatted diagnostic string containing context.
   pub formatted_message: Option<String>,
+  /// Component or subsystem that produced the diagnostic (e.g. `general`, `parser`).
   pub component: String,
+  /// Severity category for the diagnostic.
   pub severity: SeverityLevel,
+  /// Diagnostic type string provided by the compiler.
   pub error_type: String,
+  /// Numeric error code when supplied.
   pub error_code: Option<i64>,
+  /// Primary source span for the diagnostic.
   pub source_location: Option<SourceLocation>,
+  /// Additional spans that refine or contextualise the error. These map directly to Solc's
+  /// `secondarySourceLocations` array.
   pub secondary_source_locations: Option<Vec<SecondarySourceLocation>>,
+  /// Vyper-specific source metadata when the diagnostic originated from Vyper.
   pub vyper_source_location: Option<VyperSourceLocation>,
 }
 
@@ -82,16 +110,26 @@ pub struct CompilerError {
 // Core domain types (Rust-facing)
 // -----------------------------------------------------------------------------
 
+/// Contracts and metadata emitted for a single source file. This struct is the Rust counterpart of
+/// `SourceArtifactsJson` and feeds both the JSON snapshot and the N-API bindings. Consumers can
+/// inspect the resolved AST, solc version, and the per-contract wrappers associated with the file.
 #[derive(Clone, Debug, Default)]
 pub struct SourceArtifacts {
+  /// Canonicalised path associated with this source, when known.
   pub source_path: Option<String>,
+  /// Numeric source identifier assigned by solc.
   pub source_id: Option<u32>,
+  /// Solc version that produced these artifacts.
   pub solc_version: Option<Version>,
+  /// Sanitised Solidity AST for the source file.
   pub ast: Option<SourceUnit>,
+  /// Contracts emitted for this source keyed by contract name. Each entry is the rich wrapper used
+  /// elsewhere in the bindings (ABI, bytecode, metadata, etc.).
   pub contracts: BTreeMap<String, Contract>,
 }
 
 impl SourceArtifacts {
+  /// Create a new artifacts bundle keyed by an optional source path.
   fn new(source_path: Option<String>) -> Self {
     Self {
       source_path,
@@ -99,23 +137,33 @@ impl SourceArtifacts {
     }
   }
 
+  /// Convert this bundle into the serialisable TypeScript-friendly snapshot.
   pub fn to_json(&self) -> SourceArtifactsJson {
     SourceArtifactsJson::from_source_artifacts(self)
   }
 }
 
+/// Serializable mirror of `SourceArtifacts` returned by `SourceArtifacts::to_json`. This is written
+/// directly into the compiled TypeScript declarations so that consumers can persist the snapshot
+/// without holding a native handle.
 #[napi(object, js_name = "SourceArtifactsJson")]
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceArtifactsJson {
+  /// Source path string or `undefined` when not available.
   #[napi(ts_type = "string | undefined")]
   pub source_path: Option<String>,
+  /// Numeric source identifier emitted by solc.
   #[napi(ts_type = "number | undefined")]
   pub source_id: Option<u32>,
+  /// Solc version recorded for the source.
   #[napi(ts_type = "string | undefined")]
   pub solc_version: Option<String>,
+  /// Sanitised AST value ready for JSON serialisation. Hash and source content fields are stripped
+  /// so the value is stable across compiler invocations.
   #[napi(ts_type = "import('./solc-ast').SourceUnit | undefined")]
   pub ast: Option<Value>,
+  /// Contracts emitted for the source keyed by contract name.
   #[napi(ts_type = "Record<string, ContractState> | undefined")]
   pub contracts: Option<BTreeMap<String, JsContractState>>,
 }
@@ -156,15 +204,24 @@ impl SourceArtifactsJson {
   }
 }
 
+/// Aggregate result returned by compilation requests. This mirrors Foundry's aggregated output but
+/// collapses the multi-version map into a simpler one-to-one mapping keyed by canonical source path.
 #[derive(Clone, Debug)]
 pub struct CompileOutput {
+  /// Raw aggregated artifact tree mirroring Foundry's standard JSON output (`contracts`, `sources`,
+  /// `errors`). Useful when you need to feed the data back into a tool that expects the canonical
+  /// Foundry JSON schema.
   pub raw_artifacts: Value,
+  /// Artifacts grouped by canonical source path.
   pub artifacts: BTreeMap<String, SourceArtifacts>,
+  /// Convenience handle to the sole artifact when only one source produced output.
   pub artifact: Option<SourceArtifacts>,
+  /// All diagnostics produced during compilation across every severity level.
   pub errors: Vec<CompilerError>,
 }
 
 impl CompileOutput {
+  /// Returns `true` when any diagnostic is reported at error severity.
   pub fn has_compiler_errors(&self) -> bool {
     self
       .errors
@@ -172,21 +229,27 @@ impl CompileOutput {
       .any(|error| error.severity == SeverityLevel::Error)
   }
 
+  /// Convert the output into the struct consumed by the JavaScript bindings.
   pub fn to_json(&self) -> CompileOutputJson {
     CompileOutputJson::from_compile_output(self)
   }
 }
 
+/// Serializable projection of `CompileOutput` exposed to JS callers.
 #[napi(object, js_name = "CompileOutputJson")]
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompileOutputJson {
+  /// Snapshot for the sole source artifact when only one file produced output.
   #[napi(ts_type = "SourceArtifactsJson | undefined")]
   pub artifact: Option<SourceArtifactsJson>,
+  /// Map of every source artifact keyed by canonical path.
   #[napi(ts_type = "Record<string, SourceArtifactsJson> | undefined")]
   pub artifacts: Option<BTreeMap<String, SourceArtifactsJson>>,
+  /// Compiler diagnostics across all severity levels.
   #[napi(ts_type = "ReadonlyArray<CompilerError> | undefined")]
   pub errors: Option<Vec<CompilerError>>,
+  /// Raw artifact payload mirroring the underlying compiler output.
   #[napi(ts_type = "Record<string, unknown> | undefined")]
   pub raw_artifacts: Option<Value>,
 }
@@ -496,14 +559,23 @@ where
 // JS-facing compile output wrappers
 // -----------------------------------------------------------------------------
 
+/// Wrapper sent over N-API describing the artifacts emitted for a single source file. Provides
+/// ergonomic getters (and lazily constructs `Ast` helpers) without forcing consumers to inspect raw
+/// JSON blobs.
 #[napi(js_name = "SourceArtifacts")]
 #[derive(Clone, Debug)]
 pub struct JsSourceArtifacts {
+  /// Canonicalised source path for this artifact bundle.
   source_path: Option<String>,
+  /// Numeric source identifier assigned by solc (mirrors `sources[<path>].id`).
   source_id: Option<u32>,
+  /// Solc version recorded for this source.
   solc_version: Option<Version>,
+  /// Sanitised AST captured for the source when emitted by the compiler.
   ast_unit: Option<SourceUnit>,
+  /// JSON snapshot retained for cheap serialization via `to_json()`.
   json: SourceArtifactsJson,
+  /// Contracts emitted for the source keyed by name (rich `Contract` wrappers, not plain JSON).
   contracts: HashMap<String, Contract>,
 }
 
@@ -548,6 +620,7 @@ impl JsSourceArtifacts {
 
 #[napi]
 impl JsSourceArtifacts {
+  /// Construct an empty artifact bundle. Mainly used in tests when stubbing return values.
   #[napi(constructor)]
   pub fn new() -> Self {
     Self {
@@ -560,16 +633,19 @@ impl JsSourceArtifacts {
     }
   }
 
+  /// Absolute or synthetic path to the source that produced these artifacts.
   #[napi(getter)]
   pub fn source_path(&self) -> Option<String> {
     self.source_path.clone()
   }
 
+  /// Solc source identifier when available.
   #[napi(getter)]
   pub fn source_id(&self) -> Option<u32> {
     self.source_id
   }
 
+  /// Solc version string that emitted these artifacts, if recorded.
   #[napi(getter)]
   pub fn solc_version(&self) -> Option<String> {
     self
@@ -578,6 +654,7 @@ impl JsSourceArtifacts {
       .map(|version| version.to_string())
   }
 
+  /// Lazily materialise the Solidity AST as a reusable `Ast` helper instance.
   #[napi(getter, ts_return_type = "Ast | undefined")]
   pub fn ast(&self) -> napi::Result<Option<JsAst>> {
     let unit = match &self.ast_unit {
@@ -594,6 +671,7 @@ impl JsSourceArtifacts {
     Ok(Some(JsAst::from_ast(ast)))
   }
 
+  /// Contracts produced for this source keyed by contract name.
   #[napi(getter, ts_return_type = "Record<string, Contract>")]
   pub fn contracts(&self) -> HashMap<String, JsContract> {
     self
@@ -603,20 +681,30 @@ impl JsSourceArtifacts {
       .collect()
   }
 
+  /// Snapshot this artifact bundle as a serialisable JSON structure.
   #[napi(js_name = "toJson", ts_return_type = "SourceArtifactsJson")]
   pub fn to_json(&self) -> SourceArtifactsJson {
     self.json.clone()
   }
 }
 
+/// JavaScript-facing mirror of `CompileOutput` with ergonomic getters for downstream tooling. This
+/// is what the TypeScript layer surfaces as `CompileOutput<THasErrors, TPaths>`.
 #[napi(js_name = "CompileOutput")]
 #[derive(Clone, Debug)]
 pub struct JsCompileOutput {
+  /// Eagerly prepared JSON snapshot for this compile output.
   json: CompileOutputJson,
+  /// Raw artifact tree mirroring the underlying compiler response (equivalent to
+  /// `compileOutput.rawArtifacts`).
   raw_artifacts: Value,
+  /// Map of source paths to their compiled artifacts.
   artifacts: HashMap<String, JsSourceArtifacts>,
+  /// Convenience handle when only a single source produced artifacts.
   artifact: Option<JsSourceArtifacts>,
+  /// Diagnostics produced during compilation.
   errors: Vec<CompilerError>,
+  /// Cached flag indicating whether any diagnostic has error severity.
   has_compiler_errors: bool,
 }
 
@@ -650,6 +738,7 @@ impl JsCompileOutput {
 
 #[napi]
 impl JsCompileOutput {
+  /// Create an empty compile output handle. Primarily reserved for tests.
   #[napi(constructor)]
   pub fn new() -> Self {
     Self {
@@ -662,6 +751,7 @@ impl JsCompileOutput {
     }
   }
 
+  /// Raw standard JSON artifact object returned by the underlying compiler.
   #[napi(
     getter,
     js_name = "artifactsJson",
@@ -671,16 +761,19 @@ impl JsCompileOutput {
     self.raw_artifacts.clone()
   }
 
+  /// Mapping of source paths to compiled artifacts.
   #[napi(getter, ts_return_type = "Record<string, SourceArtifacts>")]
   pub fn artifacts(&self) -> HashMap<String, JsSourceArtifacts> {
     self.artifacts.clone()
   }
 
+  /// Convenience accessor when only a single source produced output.
   #[napi(getter, ts_return_type = "SourceArtifacts | undefined")]
   pub fn artifact(&self) -> Option<JsSourceArtifacts> {
     self.artifact.clone()
   }
 
+  /// Compiler diagnostics promoted to `Error` severity.
   #[napi(getter, ts_return_type = "ReadonlyArray<CompilerError> | undefined")]
   pub fn errors(&self, env: Env) -> napi::Result<JsUnknown> {
     if self.has_compiler_errors() {
@@ -693,16 +786,19 @@ impl JsCompileOutput {
     }
   }
 
+  /// Full diagnostic list regardless of severity. Useful for editor integrations.
   #[napi(getter)]
   pub fn diagnostics(&self) -> Vec<CompilerError> {
     self.errors.clone()
   }
 
+  /// Return whether the compile output contains any errors.
   #[napi]
   pub fn has_compiler_errors(&self) -> bool {
     self.has_compiler_errors
   }
 
+  /// Serialise the compile output as JSON for transport or persistence.
   #[napi(js_name = "toJson", ts_return_type = "CompileOutputJson")]
   pub fn to_json(&self) -> CompileOutputJson {
     self.json.clone()

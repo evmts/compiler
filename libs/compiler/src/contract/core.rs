@@ -88,10 +88,13 @@ impl From<Vec<u8>> for ContractBytecode {
   }
 }
 
+/// Immutable storage slot metadata emitted by Solc.
 #[napi(object)]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ImmutableSlot {
+  /// Zero-based byte offset (within the deployed bytecode) where the immutable value begins.
   pub start: u32,
+  /// Byte length occupied by the immutable value.
   pub length: u32,
 }
 
@@ -99,12 +102,16 @@ pub struct ImmutableSlot {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsFunctionDebugDataEntry {
+  /// Program counter offset for the function entry, when emitted.
   #[napi(ts_type = "number | null | undefined")]
   pub entry_point: Option<u32>,
+  /// Stable identifier assigned by Solc.
   #[napi(ts_type = "number | null | undefined")]
   pub id: Option<u32>,
+  /// Number of stack slots reserved for parameters.
   #[napi(ts_type = "number | null | undefined")]
   pub parameter_slots: Option<u32>,
+  /// Number of stack slots reserved for return values.
   #[napi(ts_type = "number | null | undefined")]
   pub return_slots: Option<u32>,
 }
@@ -124,8 +131,11 @@ impl From<&FunctionDebugData> for JsFunctionDebugDataEntry {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsGasEstimatesCreation {
+  /// Estimated gas required to deposit contract code on-chain (stringified decimal).
   pub code_deposit_cost: String,
+  /// Estimated execution cost for the deployment transaction (stringified decimal).
   pub execution_cost: String,
+  /// Sum of deposit and execution costs (stringified decimal).
   pub total_cost: String,
 }
 
@@ -142,8 +152,11 @@ impl From<&Creation> for JsGasEstimatesCreation {
 #[napi(object, js_name = "GasEstimates")]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JsGasEstimates {
+  /// Gas estimates related to contract deployment.
   pub creation: JsGasEstimatesCreation,
+  /// Gas estimates for external/public functions keyed by signature (stringified decimals).
   pub external: HashMap<String, String>,
+  /// Gas estimates for internal functions keyed by signature (stringified decimals).
   pub internal: HashMap<String, String>,
 }
 
@@ -160,8 +173,10 @@ impl From<&GasEstimates> for JsGasEstimates {
 #[napi(object, js_name = "EwasmOutput")]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JsEwasm {
+  /// Optional textual WAST representation emitted by Solc.
   #[napi(ts_type = "string | null | undefined")]
   pub wast: Option<String>,
+  /// Base64-encoded WASM module (the `ewasm.wasm` field from Solc's standard JSON output).
   pub wasm: String,
 }
 
@@ -174,29 +189,52 @@ impl From<&Ewasm> for JsEwasm {
   }
 }
 
+/// Complete contract snapshot shared between Rust and JavaScript callers. Mirrors the artefact
+/// shape exported from Foundry's standard JSON output.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContractState {
+  /// Name of the contract as reported by the compiler.
   pub name: String,
+  /// Deployed address associated with this artifact, if tracked.
   pub address: Option<String>,
+  /// ABI description emitted by the compiler (array or object form depending on compiler version).
   pub abi: Option<Value>,
+  /// Creation bytecode wrapper when available (`bytecode.object`).
   pub creation_bytecode: Option<ContractBytecode>,
+  /// Deployed bytecode wrapper when available (`deployedBytecode.object`).
   pub deployed_bytecode: Option<ContractBytecode>,
+  /// Source file path that emitted the contract, relative to the project root when available.
   pub source_path: Option<String>,
+  /// Numeric source identifier assigned by solc.
   pub source_id: Option<u32>,
+  /// Compiler metadata payload (string or JSON value depending on version).
   pub metadata: Option<Value>,
+  /// User documentation section (`userdoc`).
   pub userdoc: Option<Value>,
+  /// Developer documentation section (`devdoc`).
   pub devdoc: Option<Value>,
+  /// Storage layout information when requested from the compiler.
   pub storage_layout: Option<Value>,
+  /// Offsets for immutable variables keyed by label (`immutableReferences`).
   pub immutable_references: Option<BTreeMap<String, Vec<ImmutableSlot>>>,
+  /// Map of function signatures to selectors (`methodIdentifiers`).
   pub method_identifiers: Option<BTreeMap<String, String>>,
+  /// Function debug metadata keyed by signature.
   pub function_debug_data: Option<BTreeMap<String, FunctionDebugData>>,
+  /// Gas estimates for deployment and function execution.
   pub gas_estimates: Option<GasEstimates>,
+  /// Assembly listing when requested (`evm.assembly` string).
   pub assembly: Option<String>,
+  /// Legacy assembly format when emitted by older compiler modes (`evm.legacyAssembly`).
   pub legacy_assembly: Option<Value>,
+  /// Opcode listing when emitted (`evm.bytecode.opcodes`).
   pub opcodes: Option<String>,
+  /// Intermediate representation output (IR) when requested (`ir` section from solc).
   pub ir: Option<String>,
+  /// Optimised intermediate representation output when requested (`irOptimized`).
   pub ir_optimized: Option<String>,
+  /// Ewasm output payload when generated.
   pub ewasm: Option<Ewasm>,
   pub creation_source_map: Option<String>,
 }

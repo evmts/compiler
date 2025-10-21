@@ -71,14 +71,29 @@ fn solc_language_from(language: CompilerLanguage) -> Result<FoundrySolcLanguage>
   }
 }
 
+/// Fully resolved Vyper configuration mirrored from user options and the library defaults.
 #[derive(Clone, Debug)]
 pub struct VyperCompilerSettings {
+  /// Absolute path to the Vyper executable. When `None`, we fall back to resolving `vyper`
+  /// from the current `PATH` (see `vyper::default_path`).
   pub path: Option<PathBuf>,
+  /// Optimisation mode forwarded to the Vyper CLI. The default mirrors Vyper's chosen strategy
+  /// (typically `gas`).
   pub optimize: Option<VyperOptimizationMode>,
+  /// Target EVM version used when generating bytecode. Inherits Vyper's default target when
+  /// unspecified.
   pub evm_version: Option<crate::internal::settings::EvmVersion>,
+  /// Controls whether bytecode metadata (hashes, compiler info) is embedded in the output.
+  /// Leaving this unset honours Vyper's defaults.
   pub bytecode_metadata: Option<bool>,
+  /// Additional directories searched when resolving Vyper `import` statements. These are merged
+  /// with the project's library/include paths.
   pub search_paths: Option<Vec<PathBuf>>,
+  /// Fine-grained output selection that complements the Foundry defaults. When omitted we use
+  /// `OutputSelection::default_output_selection()` which exposes the common ABI/code/metadata bundle.
   pub output_selection: Option<OutputSelection>,
+  /// Enables Vyper's experimental code generation backend. We keep it disabled unless explicitly
+  /// requested because upstream still treats it as unstable.
   pub experimental_codegen: Option<bool>,
 }
 
@@ -120,27 +135,46 @@ impl Default for VyperCompilerSettings {
   }
 }
 
-/// Finalised compiler configuration consumed by the Rust compiler facade and
-/// passed downstream to Foundry.
+/// Finalised compiler configuration consumed by the Rust compiler façade and forwarded to Foundry's
+/// multi-compiler. Every field here is canonicalised and ready to be reused across calls.
 #[derive(Clone, Debug)]
 pub struct CompilerConfig {
+  /// Active language front-end. Defaults to `CompilerLanguage::Solidity` unless overridden via
+  /// options or project metadata.
   pub language: CompilerLanguage,
+  /// Semver-qualified solc release resolved after applying user overrides. Defaults to `0.8.30`.
   pub solc_version: Version,
+  /// Sanitised solc `Settings` struct emitted to the underlying compiler.
   pub solc_settings: Settings,
+  /// Resolved Vyper settings used when `language == CompilerLanguage::Vyper`.
   pub vyper_settings: VyperCompilerSettings,
+  /// Controls whether synthetic projects cache inline sources on disk (`~/.tevm/virtual-sources`).
   pub cache_enabled: bool,
+  /// Forces offline compilation when `true`. When `false`, Foundry may fetch remappings on demand.
   pub offline_mode: bool,
+  /// Skips emitting artifact files entirely when `true`.
   pub no_artifacts: bool,
+  /// Emits Foundry build-info JSON files alongside the compiled artifacts when `true`.
   pub build_info_enabled: bool,
+  /// Normalises emitted paths to forward slashes so results remain cross-platform stable.
   pub slash_paths: bool,
+  /// Explicit solc job count override. `None` signals that Foundry should choose automatically.
   pub solc_jobs: Option<usize>,
+  /// Emits a reduced artifact payload when `true`, mirroring Foundry's `sparse` output mode.
   pub sparse_output: bool,
+  /// Canonicalised paths forwarded to solc's `--allow-paths` flag.
   pub allow_paths: BTreeSet<PathBuf>,
+  /// Canonicalised directories appended to the compiler's include path.
   pub include_paths: BTreeSet<PathBuf>,
+  /// Additional library directories searched when resolving imports.
   pub library_paths: Vec<PathBuf>,
+  /// Resolved Solidity remappings applied prior to compilation (`prefix=path`).
   pub remappings: Vec<Remapping>,
+  /// Canonicalised files or directories the compiler must ignore.
   pub ignored_file_paths: BTreeSet<PathBuf>,
+  /// Numeric compiler error codes to suppress.
   pub ignored_error_codes: Vec<u64>,
+  /// Lowest diagnostic severity surfaced to consumers. Defaults to `Severity::Error` (errors only).
   pub compiler_severity_filter: Severity,
 }
 
@@ -197,48 +231,85 @@ impl CompilerConfig {
 /// Optional overrides for constructing a [`SolcConfig`].
 #[derive(Clone, Debug, Default)]
 pub struct SolcConfigOptions {
+  /// Specific solc version to use instead of the default.
   pub version: Option<Version>,
+  /// Front-end language to run (Solidity or Yul). Defaults to the caller's context.
   pub language: Option<FoundrySolcLanguage>,
+  /// Partial solc settings that will be merged with Foundry defaults.
   pub settings: Option<CompilerSettingsOptions>,
+  /// Pre-resolved solc settings that replace the defaults entirely when provided.
   pub resolved_settings: Option<Settings>,
 }
 
+/// Vyper-specific overrides captured from user input.
 #[derive(Clone, Debug, Default)]
 pub struct VyperConfigOptions {
+  /// Optional path to a Vyper binary. Defaults to discovering `vyper` on `PATH`.
   pub path: Option<PathBuf>,
+  /// Requested Vyper optimisation mode.
   pub optimize: Option<VyperOptimizationMode>,
+  /// Requested EVM version for Vyper output.
   pub evm_version: Option<crate::internal::settings::EvmVersion>,
+  /// Controls whether Vyper embeds bytecode metadata.
   pub bytecode_metadata: Option<bool>,
+  /// Additional directories searched for Vyper imports.
   pub search_paths: Option<Vec<PathBuf>>,
+  /// Fine-grained Vyper output selection overrides.
   pub output_selection: Option<OutputSelection>,
+  /// Enables Vyper's experimental code generation backend.
   pub experimental_codegen: Option<bool>,
 }
 
 /// Strongly-typed Rust overrides that can be merged into a [`CompilerConfig`].
 #[derive(Clone, Debug, Default)]
 pub struct CompilerConfigOptions {
+  /// Desired compiler language. When `None`, the current compiler configuration (or project
+  /// metadata) decides whether we compile Solidity, Yul, or Vyper.
   pub compiler: Option<CompilerLanguage>,
+  /// Solc-specific overrides such as version, optimizer configuration, and output selection.
   pub solc: SolcConfigOptions,
+  /// Vyper-specific overrides applied whenever the active language front-end is `Vyper`.
   pub vyper: VyperConfigOptions,
+  /// Overrides the cache flag. Set to `false` to avoid writing virtual sources to
+  /// `~/.tevm/virtual-sources` during inline compilations.
   pub cache_enabled: Option<bool>,
+  /// Forces offline compilation. Useful when you need deterministic builds without network access.
   pub offline_mode: Option<bool>,
+  /// Disables artifact emission when `Some(true)` to keep compilation side-effect free.
   pub no_artifacts: Option<bool>,
+  /// Enables build-info generation when `Some(true)`, mirroring Foundry's `--build-info` flag.
   pub build_info_enabled: Option<bool>,
+  /// Forces slashed path output when provided. `Some(false)` preserves platform-specific path
+  /// separators in emitted artifacts.
   pub slash_paths: Option<bool>,
+  /// Explicit solc job count override. Use `Some(Some(n))` to pin the concurrency level or
+  /// `Some(None)` to reset back to auto-detection.
   pub solc_jobs: Option<Option<usize>>,
+  /// Requests sparse artifact output (lighter JSON artifacts) when set to `true`.
   pub sparse_output: Option<bool>,
+  /// Additional paths forwarded to solc's `--allow-paths`. Entries are canonicalised before use.
   pub allow_paths: Option<BTreeSet<PathBuf>>,
+  /// Additional include directories merged with the existing configuration.
   pub include_paths: Option<BTreeSet<PathBuf>>,
+  /// Library directories appended to the search path that Foundry hands to solc.
   pub library_paths: Option<Vec<PathBuf>>,
+  /// Remappings merged into the configuration. Use the `prefix=path` format expected by solc.
   pub remappings: Option<Vec<Remapping>>,
+  /// Files or directories added to the ignore list; each entry is canonicalised.
   pub ignored_file_paths: Option<BTreeSet<PathBuf>>,
+  /// Extra compiler error codes ignored when present (e.g. `codegen::1264`).
   pub ignored_error_codes: Option<Vec<u64>>,
+  /// Overrides the severity filter applied to compiler diagnostics. Accepts `Severity::Error`,
+  /// `Severity::Warning`, or `Severity::Info`.
   pub compiler_severity_filter: Option<Severity>,
 }
 
+/// Overrides for the AST helper configuration.
 #[derive(Clone, Debug, Default)]
 pub struct AstConfigOptions {
+  /// Solc options applied during AST parsing and validation.
   pub solc: SolcConfigOptions,
+  /// Contract name targeted by helper operations. Applies to all contracts when `None`.
   pub instrumented_contract: Option<String>,
 }
 
@@ -248,9 +319,12 @@ impl AstConfigOptions {
   }
 }
 
+/// Resolved configuration driving AST operations.
 #[derive(Clone, Debug)]
 pub struct AstConfig {
+  /// Sanitised solc configuration applied to AST compilation.
   pub solc: SolcConfig,
+  /// Contract name targeted by helper operations, when provided.
   pub instrumented_contract: Option<String>,
 }
 
@@ -449,48 +523,79 @@ impl TryFrom<JsAstConfigOptions> for AstConfigOptions {
   }
 }
 
-/// JavaScript-facing configuration captured through N-API bindings.
+/// Compiler configuration merged on top of the defaults for each call.
 #[napi(object, js_name = "CompilerConfigOptions")]
 #[derive(Clone, Default)]
 pub struct JsCompilerConfigOptions {
+  /// Semantic version of `solc` to run (e.g. `"0.8.30"`). Defaults to the bundled `0.8.30`
+  /// release when omitted.
   #[napi(ts_type = "string | undefined")]
   pub solc_version: Option<String>,
+  /// Override the compiler front-end (`Solidity`, `Yul`, or `Vyper`). Falls back to
+  /// `CompilerLanguage::Solidity` unless project metadata specifies otherwise.
   #[napi(ts_type = "CompilerLanguage | undefined")]
   pub language: Option<JsCompilerLanguage>,
+  /// Partial `solc` settings merged on top of Foundry's defaults. Useful for tweaking optimiser
+  /// runs, metadata output, or per-path remappings without rebuilding the Rust crate.
   #[napi(ts_type = "CompilerSettings | undefined")]
   pub solc_settings: Option<JsCompilerSettingsOptions>,
+  /// Enables the synthetic workspace cache used for inline sources. When `true` (default) we cache
+  /// sources under `~/.tevm/virtual-sources`; `false` keeps everything in-memory for ephemeral runs.
   #[napi(ts_type = "boolean | undefined")]
   pub cache_enabled: Option<bool>,
+  /// Prevents network access during compilation. Defaults to `false` so Foundry can download
+  /// missing remappings when necessary.
   #[napi(ts_type = "boolean | undefined")]
   pub offline_mode: Option<bool>,
+  /// Skips writing artifacts to disk when `true`. Defaults to `false`.
   #[napi(ts_type = "boolean | undefined")]
   pub no_artifacts: Option<bool>,
+  /// Emits Foundry build-info files when `true`. Defaults to `false`.
   #[napi(ts_type = "boolean | undefined")]
   pub build_info_enabled: Option<bool>,
+  /// Normalises emitted paths to use forward slashes. Defaults to `true` for cross-platform
+  /// stability.
   #[napi(ts_type = "boolean | undefined")]
   pub slash_paths: Option<bool>,
+  /// Explicit solc job count. Defaults to letting Foundry auto-detect; set this when you want a
+  /// deterministic concurrency level inside CI.
   #[napi(ts_type = "number | undefined")]
   pub solc_jobs: Option<u32>,
+  /// Emits minimal artifact output when `true` (Foundry's sparse output mode). Defaults to `false`.
   #[napi(ts_type = "boolean | undefined")]
   pub sparse_output: Option<bool>,
+  /// Additional filesystem roots forwarded to solc's `--allow-paths`. Provide absolute paths or
+  /// paths relative to the invoking process. Defaults to an empty list.
   #[napi(ts_type = "string[] | undefined")]
   pub allow_paths: Option<Vec<String>>,
+  /// Extra include directories resolved before compilation. Entries are canonicalised relative to
+  /// the compiler's working directory before use.
   #[napi(ts_type = "string[] | undefined")]
   pub include_paths: Option<Vec<String>>,
+  /// Library directories appended to the search path. Particularly useful when mirroring Hardhat's
+  /// `libraries` behaviour.
   #[napi(ts_type = "string[] | undefined")]
   pub library_paths: Option<Vec<String>>,
+  /// Solidity remappings applied to the compilation (`prefix=path` format). Empty by default.
   #[napi(ts_type = "string[] | undefined")]
   pub remappings: Option<Vec<String>>,
+  /// Error codes that should be ignored (e.g. `1878`). Defaults to an empty list.
   #[napi(ts_type = "number[] | undefined")]
   pub ignored_error_codes: Option<Vec<i64>>,
+  /// Files or directories excluded from compilation. Paths are canonicalised before being
+  /// forwarded to Foundry.
   #[napi(ts_type = "string[] | undefined")]
   pub ignored_paths: Option<Vec<String>>,
+  /// Lowest severity level to surface (`"error"`, `"warning"`, or `"info"`). Defaults to
+  /// `"Error"` which hides warnings.
   #[napi(ts_type = "string | undefined")]
   pub compiler_severity: Option<String>,
+  /// Nested Vyper-specific configuration. Falls back to environment defaults when omitted.
   #[napi(ts_type = "VyperCompilerConfig | undefined")]
   pub vyper: Option<JsVyperCompilerConfig>,
 }
 
+/// Selects which frontend pipeline the compiler should use.
 #[napi(string_enum, js_name = "CompilerLanguage")]
 #[derive(Debug, Eq, PartialEq)]
 pub enum JsCompilerLanguage {
@@ -509,6 +614,7 @@ impl From<JsCompilerLanguage> for CompilerLanguage {
   }
 }
 
+/// Optimisation goals exposed by the Vyper compiler.
 #[napi(string_enum, js_name = "VyperOptimizationMode")]
 #[derive(Debug, Eq, PartialEq)]
 pub enum JsVyperOptimizationMode {
@@ -527,33 +633,47 @@ impl From<JsVyperOptimizationMode> for VyperOptimizationMode {
   }
 }
 
+/// Vyper-specific configuration surfaced alongside the general compiler settings.
 #[napi(object, js_name = "VyperCompilerConfig")]
 #[derive(Clone, Default)]
 pub struct JsVyperCompilerConfig {
+  /// Absolute path to a `vyper` executable. Defaults to resolving `vyper` from the `PATH`.
   #[napi(ts_type = "string | undefined")]
   pub path: Option<String>,
+  /// Optimisation strategy forwarded to the Vyper compiler. Uses Vyper defaults when unset.
   #[napi(ts_type = "VyperOptimizationMode | undefined")]
   pub optimize: Option<JsVyperOptimizationMode>,
+  /// Target EVM version. Defaults to Vyper's bundled target when omitted.
   #[napi(ts_type = "EvmVersion | undefined")]
   pub evm_version: Option<crate::internal::settings::EvmVersion>,
+  /// Whether to embed bytecode metadata. Falls back to Vyper defaults when unspecified.
   #[napi(ts_type = "boolean | undefined")]
   pub bytecode_metadata: Option<bool>,
+  /// Additional import search paths for Vyper. Relative entries are resolved from the project root.
   #[napi(ts_type = "string[] | undefined")]
   pub search_paths: Option<Vec<String>>,
+  /// Fine-grained Vyper output selection map. Defaults to Foundry's aggregate selection (`abi`,
+  /// `evm.bytecode`, `metadata`).
   #[napi(ts_type = "import('./solc-settings').OutputSelection | undefined")]
   pub output_selection: Option<BTreeMap<String, BTreeMap<String, Vec<String>>>>,
+  /// Enables experimental Vyper codegen features. Disabled by default.
   #[napi(ts_type = "boolean | undefined")]
   pub experimental_codegen: Option<bool>,
 }
 
+/// AST helper configuration allowing overrides for the solc version and target contract.
 #[napi(object, js_name = "AstConfigOptions")]
 #[derive(Clone, Default)]
 pub struct JsAstConfigOptions {
+  /// Semantic version of `solc` used for AST parsing. Defaults to `0.8.30`.
   #[napi(ts_type = "string | undefined")]
   pub solc_version: Option<String>,
+  /// Solc language mode. Only `Solidity` is supported and used by default.
   pub solc_language: Option<SolcLanguage>,
+  /// Partial solc settings merged with the AST orchestrator defaults.
   #[napi(ts_type = "CompilerSettings | undefined")]
   pub solc_settings: Option<JsCompilerSettingsOptions>,
+  /// Contract name to target when mutating the AST. Applies to every contract when omitted.
   #[napi(ts_type = "string | undefined")]
   pub instrumented_contract: Option<String>,
 }

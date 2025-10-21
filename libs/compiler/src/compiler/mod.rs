@@ -30,18 +30,26 @@ mod project_runner;
 #[cfg(test)]
 mod compiler_tests;
 
+/// Stateful compiler façade that merges configuration, discovers nearby Solidity/Vyper projects,
+/// and delegates compilation requests to the appropriate Foundry backend. Each instance carries a
+/// resolved [`State`] (configuration + optional project context) so repeated compilations are cheap.
 #[derive(Clone)]
 pub struct Compiler {
   state: State,
 }
 
 impl Compiler {
+  /// Create a compiler using the provided options merged on top of the defaults. When no project
+  /// root is detected we spin up a synthetic workspace rooted in `~/.tevm` so subsequent calls can
+  /// cache inline sources and emitted artifacts.
   pub fn new(options: Option<CompilerConfigOptions>) -> Result<Self> {
     let config = CompilerConfig::from_options(options).map_err(Error::from)?;
     let state = init(config, None)?;
     Ok(Self { state })
   }
 
+  /// Instantiate a compiler scoped to an existing Foundry project root. The workspace metadata is
+  /// loaded from the root (`foundry.toml`) and merged with the supplied options.
   pub fn from_foundry_root<P: AsRef<Path>>(
     root: P,
     options: Option<CompilerConfigOptions>,
@@ -51,6 +59,8 @@ impl Compiler {
     Ok(Self { state })
   }
 
+  /// Instantiate a compiler scoped to a Hardhat project root. Hardhat configuration is parsed and
+  /// normalised before being merged with the provided options.
   pub fn from_hardhat_root<P: AsRef<Path>>(
     root: P,
     options: Option<CompilerConfigOptions>,
@@ -60,6 +70,8 @@ impl Compiler {
     Ok(Self { state })
   }
 
+  /// Instantiate a compiler using an arbitrary filesystem root. Best suited for ad-hoc projects that
+  /// still expect Foundry's output directory layout (e.g. temporary repositories).
   pub fn from_root<P: AsRef<Path>>(
     root: P,
     options: Option<CompilerConfigOptions>,
@@ -69,16 +81,23 @@ impl Compiler {
     Ok(Self { state })
   }
 
+  /// Parse the supplied semantic version and ensure the matching `solc` binary is present on disk.
+  /// The download is skipped when the version already exists.
   pub fn install_solc_version(version: &str) -> Result<()> {
     let parsed = solc::parse_version(version)?;
     solc::install_version(&parsed)
   }
 
+  /// Return whether the requested `solc` version is already available locally.
   pub fn is_solc_version_installed(version: &str) -> Result<bool> {
     let parsed = solc::parse_version(version)?;
     solc::is_version_installed(&parsed)
   }
 
+  /// Compile a single inline source string or Solidity AST using the compiler's current
+  /// configuration merged with any per-call overrides. Returns a `CompileOutput` that mirrors the
+  /// TypeScript `CompileOutput<THasErrors, undefined>` shape. Passing an empty string results in a
+  /// parse error from solc.
   pub fn compile_source(
     &self,
     target: SourceTarget,
@@ -88,6 +107,9 @@ impl Compiler {
     compile_source(&self.state, &config, target)
   }
 
+  /// Compile an in-memory map of sources or AST units. All entries must share the same language
+  /// unless a language override is provided via the options. Keys should match the virtual file
+  /// names you expect to show up in diagnostics. Passing an empty map results in a validation error.
   pub fn compile_sources(
     &self,
     sources: BTreeMap<String, SourceValue>,
@@ -97,6 +119,10 @@ impl Compiler {
     compile_sources(&self.state, &config, sources)
   }
 
+  /// Compile concrete files from disk. The language is inferred from file extensions unless
+  /// disambiguated through the provided overrides. Paths are canonicalised before being passed to
+  /// Foundry, and all non-AST files must share the same language (provide an explicit override when
+  /// mixing `sol` and `vy`).
   pub fn compile_files(
     &self,
     paths: Vec<PathBuf>,
@@ -110,11 +136,15 @@ impl Compiler {
     compile_files(&config, paths, language_override)
   }
 
+  /// Compile every contract discovered in the attached project or synthetic workspace. Equivalent to
+  /// running `forge build`/`hardhat compile` with the resolved configuration.
   pub fn compile_project(&self, options: Option<CompilerConfigOptions>) -> Result<CompileOutput> {
     let config = self.resolve_call_config(options.as_ref())?;
     compile_project(&self.state, &config)
   }
 
+  /// Compile a single contract by name within the attached project or workspace. Contract names are
+  /// matched against the canonical `<File>:<Contract>` identifiers that Foundry uses internally.
   pub fn compile_contract(
     &self,
     contract_name: &str,
@@ -124,26 +154,33 @@ impl Compiler {
     compile_contract(&self.state, &config, contract_name)
   }
 
+  /// Access the resolved compiler configuration backing this instance.
   pub fn config(&self) -> &CompilerConfig {
     &self.state.config
   }
 
+  /// Mutate the underlying configuration before the next compilation call.
   pub fn config_mut(&mut self) -> &mut CompilerConfig {
     &mut self.state.config
   }
 
+  /// Inspect the bound project context, if any (Foundry project, Hardhat project, or synthetic).
   pub fn project(&self) -> Option<&ProjectContext> {
     self.state.project.as_ref()
   }
 
+  /// Mutate the bound project context, if any.
   pub fn project_mut(&mut self) -> Option<&mut ProjectContext> {
     self.state.project.as_mut()
   }
 
+  /// Resolve the filesystem layout used for caching and artifact emission (`ProjectPaths`). If no
+  /// project is attached a synthetic layout rooted in `~/.tevm` is returned.
   pub fn get_paths(&self) -> Result<ProjectPaths> {
     resolve_project_paths(&self.state)
   }
 
+  /// Consume the compiler and return the internal state for advanced workflows.
   pub fn into_state(self) -> State {
     self.state
   }
@@ -172,6 +209,7 @@ pub struct JsCompiler {
 }
 
 impl JsCompiler {
+  /// Wrap a Rust `Compiler` for consumption through the N-API bindings.
   fn from_compiler(compiler: Compiler) -> Self {
     Self { inner: compiler }
   }
@@ -179,18 +217,24 @@ impl JsCompiler {
 
 #[napi]
 impl JsCompiler {
+  /// Download and install a `solc` binary that matches the requested semantic
+  /// version. The promise resolves once the binary has been persisted locally.
   #[napi]
   pub fn install_solc_version(version: String) -> napi::Result<AsyncTask<solc::InstallSolcTask>> {
     let parsed = to_napi_result(solc::parse_version(&version))?;
     Ok(solc::install_async(parsed))
   }
 
+  /// Check whether a `solc` binary for the provided version is already available.
   #[napi]
   pub fn is_solc_version_installed(version: String) -> napi::Result<bool> {
     let parsed = to_napi_result(solc::parse_version(&version))?;
     to_napi_result(solc::is_version_installed(&parsed))
   }
 
+  /// Create a compiler that automatically discovers nearby project configuration.
+  /// Pass `CompilerConfigOptions` to override defaults such as the solc version or
+  /// remappings used for inline compilation.
   #[napi(
     constructor,
     ts_args_type = "options?: CompilerConfigOptions | undefined"
@@ -205,6 +249,8 @@ impl JsCompiler {
     Ok(Self::from_compiler(compiler))
   }
 
+  /// Construct a compiler that loads configuration from an existing Foundry project.
+  /// The returned instance is already bound to the project for subsequent calls.
   #[napi(
     factory,
     ts_args_type = "root: string, options?: CompilerConfigOptions | undefined"
@@ -226,6 +272,8 @@ impl JsCompiler {
     Ok(Self::from_compiler(compiler))
   }
 
+  /// Construct a compiler that understands a Hardhat project layout rooted at `root`.
+  /// Hardhat configuration is normalised before being merged with the supplied options.
   #[napi(
     factory,
     ts_args_type = "root: string, options?: CompilerConfigOptions | undefined"
@@ -247,6 +295,8 @@ impl JsCompiler {
     Ok(Self::from_compiler(compiler))
   }
 
+  /// Construct a compiler bound to an arbitrary project root that follows the Foundry
+  /// directory layout. Useful when working with generated or temporary repositories.
   #[napi(
     factory,
     ts_args_type = "root: string, options?: CompilerConfigOptions | undefined"
@@ -261,6 +311,8 @@ impl JsCompiler {
     Ok(Self::from_compiler(compiler))
   }
 
+  /// Compile inline Solidity, Yul, or Vyper source text or an in-memory Solidity AST.
+  /// Returns a rich `CompileOutput` snapshot describing contracts, sources, and errors.
   #[napi(
     ts_args_type = "target: string | object, options?: CompilerConfigOptions | undefined",
     ts_return_type = "CompileOutput<true, undefined> | CompileOutput<false, undefined>"
@@ -282,6 +334,8 @@ impl JsCompiler {
     Ok(into_js_compile_output(output))
   }
 
+  /// Compile a keyed map of sources or AST entries. Entries must share a language
+  /// unless overridden via the provided compiler options.
   #[napi(
     ts_generic_types = "TSources extends Record<string, string | object> = Record<string, string | object>",
     ts_args_type = "sources: TSources, options?: CompilerConfigOptions | undefined",
@@ -304,6 +358,8 @@ impl JsCompiler {
     Ok(into_js_compile_output(output))
   }
 
+  /// Compile concrete files on disk. Language is inferred from extensions unless the
+  /// overrides provide an explicit compiler language.
   #[napi(
     ts_generic_types = "TFilePaths extends readonly string[] = readonly string[]",
     ts_args_type = "paths: TFilePaths, options?: CompilerConfigOptions | undefined",
@@ -330,6 +386,8 @@ impl JsCompiler {
     Ok(into_js_compile_output(output))
   }
 
+  /// Compile the project associated with this compiler instance, returning a snapshot
+  /// covering every source file that emitted artifacts.
   #[napi(
     ts_args_type = "options?: CompilerConfigOptions | undefined",
     ts_return_type = "CompileOutput<true, string[]> | CompileOutput<false, string[]>"
@@ -349,6 +407,7 @@ impl JsCompiler {
     Ok(into_js_compile_output(output))
   }
 
+  /// Compile a single contract from the attached project by its canonical name.
   #[napi(
     ts_args_type = "contractName: string, options?: CompilerConfigOptions | undefined",
     ts_return_type = "CompileOutput<true, undefined> | CompileOutput<false, undefined>"
@@ -369,6 +428,8 @@ impl JsCompiler {
     Ok(into_js_compile_output(output))
   }
 
+  /// Return the canonicalised project paths used for artifacts, cache directories,
+  /// and virtual source storage.
   #[napi]
   pub fn get_paths(&self) -> napi::Result<ProjectPaths> {
     to_napi_result(self.inner.get_paths())
