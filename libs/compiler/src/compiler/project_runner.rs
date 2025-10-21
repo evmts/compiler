@@ -1,8 +1,11 @@
-use std::path::PathBuf;
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use super::input::CompilationInput;
 use super::output::{into_core_compile_output, CompileOutput};
 use crate::internal::config::CompilerLanguage;
+use crate::internal::path::canonicalize_path;
 use crate::internal::vyper;
 use crate::internal::{
   config::CompilerConfig,
@@ -16,6 +19,11 @@ use foundry_compilers::artifacts::sources::Source as FoundrySource;
 use foundry_compilers::compilers::multi::MultiCompiler;
 use foundry_compilers::{Project, ProjectCompileOutput};
 
+struct VirtualSourceEntry<'a> {
+  original_path: Option<&'a str>,
+  contents: &'a str,
+}
+
 pub struct ProjectRunner<'a> {
   context: &'a ProjectContext,
 }
@@ -25,6 +33,9 @@ impl<'a> ProjectRunner<'a> {
     Self { context }
   }
 
+  // Compiling a source map or an individual source will create a "virtual" file in the cache
+  // directory so we can delegate to compile_files and let the foundry compiler handle caching
+  // from the virtual source
   pub fn compile(
     &self,
     config: &CompilerConfig,
@@ -33,7 +44,17 @@ impl<'a> ProjectRunner<'a> {
     match input {
       CompilationInput::InlineSource { source } => {
         if matches!(self.context.layout, ProjectLayout::Synthetic) && config.cache_enabled {
-          let path = self.write_virtual_source(config, source)?;
+          let mut paths = self.write_virtual_sources(
+            config,
+            [VirtualSourceEntry {
+              original_path: None,
+              contents: source.as_str(),
+            }],
+            None,
+          )?;
+          let path = paths
+            .pop()
+            .ok_or_else(|| Error::new("Failed to prepare virtual source for inline compilation"))?;
           let output = self.compile_with_project(config, "Compilation failed", |project| {
             project.compile_file(path)
           });
@@ -43,7 +64,7 @@ impl<'a> ProjectRunner<'a> {
         }
       }
       CompilationInput::FilePaths { paths, .. } => {
-        if matches!(self.context.layout, ProjectLayout::Synthetic) {
+        if matches!(self.context.layout, ProjectLayout::Synthetic) && !config.cache_enabled {
           return Ok(None);
         }
         let normalized = self.context.normalise_paths(paths.as_slice())?;
@@ -52,7 +73,28 @@ impl<'a> ProjectRunner<'a> {
         });
         output.map(|out| Some(into_core_compile_output(out)))
       }
-      CompilationInput::SourceMap { .. } | CompilationInput::AstUnits { .. } => Ok(None),
+      CompilationInput::SourceMap {
+        sources,
+        language_override,
+      } => {
+        if matches!(self.context.layout, ProjectLayout::Synthetic) && config.cache_enabled {
+          let files = self.write_virtual_sources(
+            config,
+            sources.iter().map(|(path, contents)| VirtualSourceEntry {
+              original_path: Some(path.as_str()),
+              contents: contents.as_str(),
+            }),
+            *language_override,
+          )?;
+          let output = self.compile_with_project(config, "Compilation failed", move |project| {
+            project.compile_files(files.clone())
+          });
+          output.map(|out| Some(into_core_compile_output(out)))
+        } else {
+          Ok(None)
+        }
+      }
+      CompilationInput::AstUnits { .. } => Ok(None),
     }
   }
 
@@ -102,26 +144,6 @@ impl<'a> ProjectRunner<'a> {
     map_err_with_context(compile_fn(&project), label)
   }
 
-  fn write_virtual_source(&self, config: &CompilerConfig, contents: &str) -> Result<PathBuf> {
-    let extension = match config.language {
-      crate::internal::config::CompilerLanguage::Solidity => "sol",
-      crate::internal::config::CompilerLanguage::Yul => "yul",
-      crate::internal::config::CompilerLanguage::Vyper => "vy",
-    };
-
-    let source_hash = FoundrySource::content_hash_of(contents);
-    let path = self.context.virtual_source_path(&source_hash, extension)?;
-    if !path.exists() {
-      std::fs::write(&path, contents).map_err(|err| {
-        Error::new(format!(
-          "Failed to write virtual source {}: {err}",
-          path.display()
-        ))
-      })?;
-    }
-    Ok(path)
-  }
-
   pub fn prepare_synthetic_context(config: &CompilerConfig) -> Result<Option<ProjectContext>> {
     if !config.cache_enabled {
       return Ok(None);
@@ -130,6 +152,68 @@ impl<'a> ProjectRunner<'a> {
     let base_dir = default_cache_dir();
 
     create_synthetic_context(base_dir.as_path()).map(Some)
+  }
+
+  fn write_virtual_sources<'entries, I>(
+    &self,
+    config: &CompilerConfig,
+    entries: I,
+    language_override: Option<CompilerLanguage>,
+  ) -> Result<Vec<PathBuf>>
+  where
+    I: IntoIterator<Item = VirtualSourceEntry<'entries>>,
+  {
+    let mut paths = Vec::new();
+
+    for entry in entries {
+      let language = language_override.unwrap_or(config.language);
+      let extension = determine_extension(entry.original_path, language);
+      let contents = entry.contents;
+
+      let source_hash = FoundrySource::content_hash_of(contents);
+      let path = self.context.virtual_source_path(&source_hash, &extension)?;
+
+      fs::create_dir_all(
+        path
+          .parent()
+          .ok_or_else(|| Error::new("Virtual source path missing parent directory"))?,
+      )
+      .map_err(|err| {
+        Error::new(format!(
+          "Failed to prepare virtual source directory {}: {err}",
+          path.display()
+        ))
+      })?;
+
+      fs::write(&path, contents).map_err(|err| {
+        Error::new(format!(
+          "Failed to write virtual source {}: {err}",
+          path.display()
+        ))
+      })?;
+
+      paths.push(canonicalize_path(&path));
+    }
+
+    Ok(paths)
+  }
+}
+
+fn determine_extension(original_path: Option<&str>, language: CompilerLanguage) -> String {
+  if let Some(path) = original_path {
+    if let Some(ext) = Path::new(path)
+      .extension()
+      .and_then(|ext| ext.to_str())
+      .filter(|ext| !ext.is_empty())
+    {
+      return ext.to_string();
+    }
+  }
+
+  match language {
+    CompilerLanguage::Solidity => "sol".to_string(),
+    CompilerLanguage::Yul => "yul".to_string(),
+    CompilerLanguage::Vyper => "vy".to_string(),
   }
 }
 
@@ -149,24 +233,42 @@ mod tests {
     let mut config = CompilerConfig::default();
     config.language = CompilerLanguage::Solidity;
     let sol_path = runner
-      .write_virtual_source(&config, "contract A { function f() external {} }")
+      .write_virtual_sources(
+        &config,
+        [VirtualSourceEntry {
+          original_path: None,
+          contents: "contract A { function f() external {} }",
+        }],
+        None,
+      )
       .expect("sol path");
     assert!(sol_path
+      .last()
+      .unwrap()
       .extension()
       .unwrap()
       .to_str()
       .unwrap()
       .ends_with("sol"));
     assert_eq!(
-      std::fs::read_to_string(&sol_path).expect("read file"),
+      std::fs::read_to_string(&sol_path.last().unwrap()).expect("read file"),
       "contract A { function f() external {} }"
     );
 
     config.language = CompilerLanguage::Yul;
     let yul_path = runner
-      .write_virtual_source(&config, "object \"Y\" { code { mstore(0, 0) } }")
+      .write_virtual_sources(
+        &config,
+        [VirtualSourceEntry {
+          original_path: None,
+          contents: "object \"Y\" { code { mstore(0, 0) } }",
+        }],
+        None,
+      )
       .expect("yul path");
     assert!(yul_path
+      .last()
+      .unwrap()
       .extension()
       .unwrap()
       .to_str()

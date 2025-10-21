@@ -11,8 +11,8 @@ const testDir = path.join(rootDir, 'test')
 
 const sections = [
 	{
-		tag: 'readme',
-		path: path.join(rootDir, 'README.md'),
+		tag: 'guide',
+		path: path.join(rootDir, 'test/GUIDE.md'),
 		format: 'markdown',
 	},
 	{

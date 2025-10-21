@@ -23,6 +23,10 @@ Rust-powered, N-API backed tooling that exposes Foundry's multi-language compile
    pnpm test         # runs Rust, Bun, and TypeScript checks
    ```
 
+## Usage
+
+- Feed `libs/compiler/build/llms.md` to your favorite LLM and ask how to wire the compiler into your workflow—the bundle contains the public surface, curated types, and executable specs.
+
 ## Using the Compiler API
 
 ### Compile inline sources

@@ -23,6 +23,11 @@ pnpm nx run compiler:post-build
 pnpm nx run compiler:test
 ```
 
+## Usage
+
+- Feed `libs/compiler/build/llms.md` to your favorite LLM and ask how to wire the compiler into your workflow—the bundle contains the public surface, curated types, and executable specs.
+- Prefer inspecting `libs/compiler/test/**/*.spec.ts` for live examples of inline compilation, project-bound builds, and AST instrumentation when wiring the library manually.
+
 Useful sub-targets:
 
 - `pnpm nx run compiler:test:rust` – Rust unit tests (`cargo test`).
