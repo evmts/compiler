@@ -5,111 +5,60 @@
   </intro>
 
   <readme format="markdown">
-    TODO: readme
+    # @tevm/compiler
     
-    # Compiler Library
+    Rust + N-API bindings that expose Foundry's multi-compiler to JavaScript, Bun, and WASI runtimes. The crate powers TEVM's compiler pipeline and ships with first-class helpers for AST instrumentation and contract state hydration.
     
-    Rust + N-API bridge used by the Shadow toolchain to expose Foundry's Solidity compiler workflow to Node.js, Bun, and WASI runtimes.
+    ## What Lives Here
     
-    ## Build Targets
+    - `src/ast` – Solidity-only AST orchestration (`Ast` class) for stitching fragments, promoting visibility, and validating stitched trees.
+    - `src/compiler` – Project-aware compilation core (`Compiler`) that understands Foundry, Hardhat, inline sources, and language overrides (Solidity, Yul, Vyper).
+    - `src/contract` – Ergonomic wrappers around standard JSON artifacts (`Contract`, `JsContract`) with mutation helpers for downstream tooling.
+    - `src/internal` – Shared config parsing, solc/vyper orchestration, filesystem discovery, and error translation surfaced through N-API.
+    - `src/types` – Hand-authored `.d.ts` extensions copied into `build/` after every release.
     
-    - `nx run compiler:build` produces `libs/compiler/build/` with the JS loader, TypeScript entry point, and per-platform native binaries.
-    - `nx run compiler:copy-types` validates the curated `.d.ts` files and copies them into `build/`. Run this after a successful build when publishing.
-    - Rust unit tests live behind `nx run compiler:test:rust`; JavaScript shims run with `nx run compiler:test:js`.
-    
-    > **Note:** Native `.node` binaries are generated locally and in CI. They are gitignored on purpose; consumers are expected to build or download matching artifacts during release.
-    
-    ## Module Layout
-    
-    - `ast/` – high level AST helpers that parse source, stitch fragments, and expose helper mutations. See `src/ast/README.md`.
-    - `compiler/` – compilation pipeline. `CompilerCore` resolves project layouts (Foundry, Hardhat, synthetic), drives `ProjectRunner`, and normalises output for JS.
-    - `internal/` – shared config parsing, solc orchestration, filesystem discovery, and error helpers consumed by both `ast` and `compiler`.
-    
-    ### Compilation Pipeline
-    
-    1. **Configuration** – N-API `CompilerConfig` inputs (parsed as `JsCompilerConfigOptions`) and any Rust-side `CompilerConfigOptions` are merged into the resolved `CompilerConfig`.
-    2. **Context detection** – `CompilerCore::new` optionally loads project metadata via `FoundryAdapter`/`HardhatAdapter` or synthesises an ephemeral workspace for inline sources.
-    3. **Input selection** – `CompilationInput` handles inline strings, source maps, AST units, or file paths. Mixed inputs are rejected at the binding layer for clarity.
-    4. **Execution** – `CompilerCore::compile_as` runs against an attached project via `ProjectRunner` when available, otherwise falls back to a "pure" `foundry-compilers` invocation with temporary sources.
-    5. **Result mapping** – outputs are converted into serialisable `JsCompileOutput`/`ContractArtifact` structs that align with the TypeScript bindings in `build/index.d.ts`.
-    
-    The `Compiler` N-API class threads this flow into four primary entry points (`compileSource`, `compileSources`, `compileFiles`, `compileProject`) plus helpers for installing `solc` versions and instantiating from known project roots.
-    
-    ## Vyper Support
-    
-    The compiler facade now exposes a language-agnostic surface via the `CompilerLanguage` enum. Solidity remains the default, but Yul and Vyper workflows are now first-class citizens:
-    
-    - Language overrides can be provided explicitly (`{ language: CompilerLanguage.Vyper }`) or inferred from file extensions (`.vy`, `.vyi`, `.yul`).
-    - Inline Vyper sources and on-disk projects transparently resolve the `vyper` binary via `PATH`. If the executable is not present we return a helpful error explaining how to install it.
-    - Advanced consumers can configure Vyper via `compiler.vyper`—override the binary path, optimisation mode, EVM target, search paths, or output selection without touching Foundry defaults.
-    - AST compilation remains Solidity-only. Requests that attempt to compile AST inputs in non-Solidity modes now surface a clear error instead of silently falling back.
-    
-    Foundry and Hardhat project adapters use the `MultiCompiler` backend so mixed-language repositories are supported. When running tests locally or in CI ensure that a compatible `vyper` binary is available on the `PATH` for these project-based entry points.
-    
-    ## Type Generation Workflow
-    
-    The AST helpers expose richer data than the automatic N-API generator currently understands. To keep the published package ergonomic we hand-author a small set of TypeScript declaration files in `src/types/`. The `copy-types` script intentionally:
-    
-    1. Type-checks the `.d.ts` files with `tsc` to catch syntax drift.
-    2. Copies the vetted files into `build/` so they ship with the package.
-    
-    We keep this script manual so future maintainers do not delete or auto-generate the declarations. Run it whenever the Rust surface changes or before cutting a release:
+    ## Build & Test
     
     ```bash
-    nx run compiler:build
-    nx run compiler:copy-types
+    # Build native bindings and emit build/index.{js,d.ts}
+    pnpm nx run compiler:build
+    
+    # Copy curated types, generate llms.md, type-check declarations
+    pnpm nx run compiler:post-build
+    
+    # Execute the full suite (cargo tests + Bun integration specs + TS type checks)
+    pnpm nx run compiler:test
     ```
     
-    ## JavaScript Integrations
+    Useful sub-targets:
     
-    ```ts
-    import { Compiler } from "@compiler/compiler";
+    - `pnpm nx run compiler:test:rust` – Rust unit tests (`cargo test`).
+    - `pnpm nx run compiler:test:js` – Bun specs in `test/**/*.spec.ts`.
+    - `pnpm nx run compiler:test:typecheck` – Validates the published `.d.ts` surface.
+    - `pnpm nx run compiler:lint` / `:format` – Biome for JS + `cargo fmt` for Rust sources.
     
-    const compiler = new Compiler({
-      solcVersion: "0.8.30",
-      remappings: ["@openzeppelin/=node_modules/@openzeppelin/"],
-    });
-    await compiler.installSolcVersion("0.8.30");
+    ## API Highlights
     
-    const output = compiler.compileSources({
-      "MyContract.sol": "contract MyContract { function x() public {} }",
-    });
+    - `Compiler.installSolcVersion(version)` downloads solc releases into the Foundry `svm` cache. `Compiler.isSolcVersionInstalled` performs fast existence checks.
+    - `new Compiler(options)` compiles inline sources or AST units. `.fromFoundryRoot`, `.fromHardhatRoot`, and `.fromRoot` bootstrap project-aware compilers.
+    - `compileSource(s)`, `compileFiles`, `compileProject`, `compileContract` return `CompileOutput` snapshots with structured diagnostics, contract wrappers, and standard JSON.
+    - `Ast` instances parse Solidity sources, inject fragment sources or AST objects (`injectShadow`), expose internal members, and emit unique-ID `SourceUnit`s ready for compilation.
+    - `Contract` wrappers (available in JS and Rust) provide `.withAddress`, `.withCreationBytecode`, `.withDeployedBytecode`, and `.toJson()` for ergonomic artifact manipulation.
     
-    console.log(output.contracts["MyContract.sol"]);
-    ```
+    ## Release Checklist
     
-    Pair AST transforms with compilation by using the `Ast` helper (`src/ast/README.md`) to stitch fragments, then feed the resulting source map or AST back through `compileSources`.
+    1. `pnpm nx run compiler:build --configuration=production`
+    2. `pnpm nx run compiler:post-build`
+    3. `pnpm nx run compiler:test`
+    4. Package platform binaries or publish as required.
     
-    ## Contract State Helpers
+    The `libs/compiler/build/llms.md` bundle is regenerated automatically during `post-build` so AI assistants stay in sync with the public surface.
     
-    Rust callers can materialise contract metadata in a single step using the new wrappers:
+    ## Troubleshooting Notes
     
-    ```rust
-    use compiler::contract::Contract;
-    use foundry_compilers::artifacts::contract::Contract as FoundryContract;
-    
-    fn hydrate(contract: &FoundryContract) -> compiler::Result<()> {
-      let mut wrapper = Contract::from_foundry_standard_json("MyContract", contract);
-      wrapper.with_address(Some("0xdeadbeef".into()));
-      let state = wrapper.into_state();
-      assert_eq!(state.name, "MyContract");
-      Ok(())
-    }
-    ```
-    
-    JavaScript bindings expose the same surface through the exported `Contract` class—no `build()` ceremony required:
-    
-    ```ts
-    import { Contract } from "@compiler/compiler";
-    
-    const contract = Contract.fromSolcContractOutput("Example", solcArtifact).withAddress("0x1234").withExtra("tag", { env: "test" });
-    
-    console.log(contract.toJson());
-    
-    const manual = new Contract({ name: "Manual" }).withAddress("0xdeadbeef").withExtra("note", "local override");
-    
-    console.log(manual.toJson());
-    ```
+    - Always call `Compiler.installSolcVersion(version)` (or ensure Foundry's `svm` cache is primed) before running tests locally. Specs assert that required solc versions exist.
+    - Vyper workflows depend on a `vyper` executable available on `PATH`. Missing binaries throw actionable N-API errors; install via `pipx install vyper`.
+    - AST helpers reject non-Solidity `solcLanguage` overrides—limit them to Solidity and feed the resulting tree back into `compiler.compileSources`.
   </readme>
 
   <type-declarations format="typescript">
@@ -1691,16 +1640,17 @@
 
     <spec-file path="test/compiler.spec.ts" format="typescript">
       import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-      import { spawnSync } from 'node:child_process'
       import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
       import { tmpdir } from 'node:os'
       import { join } from 'node:path'
       import {
       	Ast,
       	BytecodeHash,
+      	CompileOutput,
       	Compiler,
       	CompilerLanguage,
       	CompilerSettings,
+      	ContractBytecode,
       	EvmVersion,
       	ModelCheckerEngine,
       	RevertStrings,
@@ -1739,7 +1689,6 @@
       const VYPER_COUNTER_PATH = join(VYPER_DIR, 'Counter.vy')
       const VYPER_COUNTER_SOURCE = readFileSync(VYPER_COUNTER_PATH, 'utf8')
       
-      const createAst = () => new Ast({ solcVersion: DEFAULT_SOLC_VERSION })
       
       const DEFAULT_OUTPUT_SELECTION = {
       	'*': {
@@ -1758,8 +1707,6 @@
       	return dir
       }
       
-      const COMPILER_MODULE_PATH = join(__dirname, '../build/index.js')
-      
       const listJsonFiles = (directory: string): string[] => {
       	if (!existsSync(directory)) return []
       	const entries = readdirSync(directory, { withFileTypes: true })
@@ -1775,12 +1722,14 @@
       	return files
       }
       
-      type BytecodeView = {
-      	hex?: string | null
-      	bytes?: Uint8Array | null
+      const normaliseSnapshotPaths = (value: unknown, root: string) => {
+      	const escapedRoot = root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      	const matcher = new RegExp(escapedRoot, 'g')
+      	const serialised = JSON.stringify(value)
+      	return JSON.parse(serialised.replace(matcher, '<root>'))
       }
       
-      const expectBytecodeShape = (bytecode?: BytecodeView) => {
+      const expectBytecodeShape = (bytecode?: ContractBytecode | null) => {
       	expect(bytecode).toBeTruthy()
       	expect(bytecode?.hex).toMatch(/^0x[0-9a-f]+$/i)
       	if (bytecode?.bytes instanceof Uint8Array) {
@@ -1795,49 +1744,21 @@
       	expect(Array.isArray(abi)).toBe(true)
       }
       
-      type SourceArtifactsView = {
-      	sourcePath?: string | null
-      	contracts?: Record<string, { name?: string }>
-      }
-      
-      type ArtifactCarrier = {
-      	artifact?: SourceArtifactsView
-      	artifacts?: Record<string, SourceArtifactsView | undefined>
-      }
-      
-      const flattenContracts = (output: ArtifactCarrier) => {
-      	const seen = new Set<string>()
-      	const flattened: any[] = []
-      
-      	if (output.artifact) {
-      		const sourceName = output.artifact.sourcePath ?? (output.artifact as any).source_path ?? '__virtual__'
-      		for (const [contractName, contract] of Object.entries(output.artifact.contracts ?? {})) {
-      			const name = (contract as any)?.name ?? contractName
-      			const key = `${sourceName}:${name}`
-      			if (seen.has(key)) continue
-      			seen.add(key)
-      			flattened.push(contract)
-      		}
+      const flattenContracts = <THasErrors extends boolean>(output: CompileOutput<THasErrors>) => {
+      	if (output.hasCompilerErrors()) {
+      		throw new Error(
+      			`Expected compilation without errors but received error: ${JSON.stringify(output.errors, null, 2)}`,
+      		)
       	}
-      
-      	for (const [sourceName, sourceArtifacts] of Object.entries(output.artifacts ?? {})) {
-      		if (!sourceArtifacts) continue
-      		const resolvedSource = sourceArtifacts.sourcePath ?? (sourceArtifacts as any).source_path ?? sourceName
-      		for (const [contractName, contract] of Object.entries(sourceArtifacts.contracts ?? {})) {
-      			const name = (contract as any)?.name ?? contractName
-      			const key = `${resolvedSource}:${name}`
-      			if (seen.has(key)) continue
-      			seen.add(key)
-      			flattened.push(contract)
-      		}
-      	}
-      
-      	return flattened
+      	const json = output.toJson()
+      	console.log('DEBUG json', json)
+      	console.log('DEBUG artifact', output.artifact)
+      	const primary = Object.values(json.artifact?.contracts ?? {})
+      	const extra = Object.values(json.artifacts ?? {}).flatMap((source) =>
+      		Object.values(source?.contracts ?? {}),
+      	)
+      	return [...primary, ...extra]
       }
-      
-      const contractNames = (output: ArtifactCarrier) => flattenContracts(output).map((contract) => contract.name)
-      
-      const firstContract = (output: ArtifactCarrier) => flattenContracts(output)[0]
       
       let altVersionInstalled = false
       
@@ -1918,27 +1839,28 @@
       
       describe('Compiler constructor', () => {
       	test('rejects invalid settings shape', () => {
-      		expect(() => new Compiler({ solcSettings: 42 as unknown as any })).toThrowErrorMatchingInlineSnapshot(
+      		expect(() => new Compiler({ cacheEnabled: false, solcSettings: 42 as unknown as any })).toThrowErrorMatchingInlineSnapshot(
       			`"solcSettings override must be provided as an object."`,
       		)
       	})
       
       	test('rejects malformed solc versions at construction', () => {
-      		expect(() => new Compiler({ solcVersion: 'bad-version' })).toThrowErrorMatchingInlineSnapshot(
+      		expect(() => new Compiler({ cacheEnabled: false, solcVersion: 'bad-version' })).toThrowErrorMatchingInlineSnapshot(
       			`"Failed to parse solc version: unexpected character 'b' while parsing major version number"`,
       		)
       	})
       
       	test('rejects when requested solc version is not installed', () => {
-      		expect(() => new Compiler({ solcVersion: '123.45.67' })).toThrowErrorMatchingInlineSnapshot(
+      		expect(() => new Compiler({ cacheEnabled: false, solcVersion: '123.45.67' })).toThrowErrorMatchingInlineSnapshot(
       			`"Solc 123.45.67 is not installed. Call installSolcVersion first."`,
       		)
       	})
       
       	test('accepts nested settings without mutating defaults', () => {
-      		const compiler = new Compiler({
-      			solcVersion: DEFAULT_SOLC_VERSION,
-      			solcSettings: {
+      	const compiler = new Compiler({
+      		cacheEnabled: false,
+      		solcVersion: DEFAULT_SOLC_VERSION,
+      		solcSettings: {
       				optimizer: { enabled: true, runs: 9 },
       				metadata: { bytecodeHash: BytecodeHash.None },
       				debug: {
@@ -1955,34 +1877,35 @@
       			},
       		})
       
-      		const first = compiler.compileSource(INLINE_SOURCE)
-      		const second = compiler.compileSource(INLINE_SOURCE)
+      	const first = compiler.compileSource(INLINE_SOURCE)
+      	const second = compiler.compileSource(INLINE_SOURCE)
       
-      		expect(flattenContracts(first)).toHaveLength(1)
-      		expect(flattenContracts(second)).toHaveLength(1)
+      	for (const output of [first, second]) {
+      		expect(flattenContracts(output)).toHaveLength(1)
+      	}
       	})
       
       	test('per-call overrides leaving outputSelection empty are sanitized', () => {
-      		const compiler = new Compiler()
-      		const first = compiler.compileSource(INLINE_SOURCE)
-      		const second = compiler.compileSource(INLINE_SOURCE, {
-      			solcSettings: {
-      				optimizer: { enabled: true, runs: 1 },
-      				outputSelection: {
-      					'*': { '*': [], '': [] },
-      				},
+      	const compiler = new Compiler({ cacheEnabled: false })
+      	const first = compiler.compileSource(INLINE_SOURCE)
+      	const second = compiler.compileSource(INLINE_SOURCE, {
+      		solcSettings: {
+      			optimizer: { enabled: true, runs: 1 },
+      			outputSelection: {
+      				'*': { '*': [], '': [] },
       			},
-      		})
-      		const third = compiler.compileSource(INLINE_SOURCE)
+      		},
+      	})
+      	const third = compiler.compileSource(INLINE_SOURCE)
       
-      		expect(flattenContracts(first)).toHaveLength(1)
-      		expect(second.hasCompilerErrors()).toBe(false)
-      		expect(flattenContracts(second)).toHaveLength(1)
-      		expect(flattenContracts(third)).toHaveLength(1)
+      	for (const output of [first, second, third]) {
+      		expect(flattenContracts(output)).toHaveLength(1)
+      	}
+      	expect(second.hasCompilerErrors()).toBe(false)
       	})
       
       	test('per-call solc version overrides do not leak into subsequent compiles', () => {
-      		const compiler = new Compiler({ solcVersion: DEFAULT_SOLC_VERSION })
+      		const compiler = new Compiler({ cacheEnabled: false, solcVersion: DEFAULT_SOLC_VERSION })
       		if (!altVersionInstalled) {
       			const baseline = compiler.compileSource(INLINE_SOURCE)
       			expect(baseline.hasCompilerErrors()).toBe(false)
@@ -2000,7 +1923,7 @@
       	})
       
       	test('per-call overrides referencing missing solc versions throw and keep state intact', () => {
-      		const compiler = new Compiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		expect(() => compiler.compileSource(INLINE_SOURCE, { solcVersion: '999.0.0' })).toThrowErrorMatchingInlineSnapshot(
       			`"Solc 999.0.0 is not installed. Call installSolcVersion first."`,
       		)
@@ -2011,28 +1934,33 @@
       
       describe('Compiler.compileSource with Solidity strings', () => {
       	test('compiles inline solidity and exposes artifacts', () => {
-      		const compiler = new Compiler()
-      		const output = compiler.compileSource(INLINE_SOURCE)
+      	const compiler = new Compiler({ cacheEnabled: false })
+      	const output = compiler.compileSource(INLINE_SOURCE)
       
-      		expect(output.hasCompilerErrors()).toBe(false)
-      		expect(output.errors).toBeUndefined()
-      		expect(flattenContracts(output)).toHaveLength(1)
-      
-      		const [artifact] = flattenContracts(output)
-      		expect(artifact.name).toBe('InlineExample')
-      		expectBytecodeShape(artifact.creationBytecode)
-      		expectBytecodeShape(artifact.deployedBytecode)
-      		expectAbiShape(artifact.abi)
-      		if (artifact.methodIdentifiers) {
-      			expect(typeof artifact.methodIdentifiers).toBe('object')
-      		}
-      		if (artifact.immutableReferences) {
-      			expect(typeof artifact.immutableReferences).toBe('object')
-      		}
+      	expect(output.hasCompilerErrors()).toBe(false)
+      	expect(output.errors).toBeUndefined()
+      	const json = output.toJson()
+      	const artifactContracts = Object.values(json.artifact?.contracts ?? {})
+      	const additionalContracts = Object.values(json.artifacts ?? {}).flatMap((source) =>
+      		Object.values(source?.contracts ?? {}),
+      	)
+      	const allContracts = [...artifactContracts, ...additionalContracts]
+      	expect(allContracts).toHaveLength(1)
+      	const contract = allContracts[0]
+      	expect(contract.name).toBe('InlineExample')
+      	expectBytecodeShape(contract.creationBytecode)
+      	expectBytecodeShape(contract.deployedBytecode)
+      	expectAbiShape(contract.abi)
+      	if (contract.methodIdentifiers) {
+      		expect(typeof contract.methodIdentifiers).toBe('object')
+      	}
+      	if (contract.immutableReferences) {
+      		expect(typeof contract.immutableReferences).toBe('object')
+      	}
       	})
       
       	test('produces warnings without marking compilation as failed', () => {
-      		const compiler = new Compiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileSource(WARNING_SOURCE)
       
       		expect(output.hasCompilerErrors()).toBe(false)
@@ -2044,7 +1972,7 @@
       	})
       
       	test('surfaces syntax errors without throwing', () => {
-      		const compiler = new Compiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileSource(BROKEN_SOURCE)
       
       		expect(output.hasCompilerErrors()).toBe(true)
@@ -2057,28 +1985,38 @@
       	})
       
       	test('supports stopAfter parsing while keeping diagnostics', () => {
-      		const compiler = new Compiler()
-      		const parsingOnly = compiler.compileSource(BROKEN_SOURCE, {
-      			solcSettings: { stopAfter: 'parsing' },
-      		})
-      		expect(flattenContracts(parsingOnly)).toHaveLength(0)
-      		expect(parsingOnly.hasCompilerErrors()).toBe(true)
+      		const compiler = new Compiler({ cacheEnabled: false })
+      	const parsingOnly = compiler.compileSource(BROKEN_SOURCE, {
+      		solcSettings: { stopAfter: 'parsing' },
+      	})
+      	const parsingOnlyJson = parsingOnly.toJson()
+      	const parsingOnlyContracts = Object.values(parsingOnlyJson.artifact?.contracts ?? {})
+      	const parsingOnlyExtra = Object.values(parsingOnlyJson.artifacts ?? {}).flatMap((source) =>
+      		Object.values(source?.contracts ?? {}),
+      	)
+      	expect([...parsingOnlyContracts, ...parsingOnlyExtra]).toHaveLength(0)
+      	expect(parsingOnly.hasCompilerErrors()).toBe(true)
       		expect(parsingOnly.errors).toBeDefined()
       		expect(parsingOnly.errors?.[0]?.message).toMatchInlineSnapshot(
       			`"Requested output selection conflicts with "settings.stopAfter"."`,
       		)
       
-      		const parsingOnlyCorrect = compiler.compileSource(INLINE_SOURCE, {
-      			solcSettings: {
-      				stopAfter: 'parsing',
-      				outputSelection: {
-      					'*': {
-      						'': ['ast'],
+      	const parsingOnlyCorrect = compiler.compileSource(INLINE_SOURCE, {
+      		solcSettings: {
+      			stopAfter: 'parsing',
+      			outputSelection: {
+      				'*': {
+      					'': ['ast'],
       					},
       				},
       			},
       		})
-      		expect(flattenContracts(parsingOnlyCorrect)).toHaveLength(0)
+      	const parsingOnlyCorrectJson = parsingOnlyCorrect.toJson()
+      	const parsingOnlyCorrectContracts = Object.values(parsingOnlyCorrectJson.artifact?.contracts ?? {})
+      	const parsingOnlyCorrectExtra = Object.values(parsingOnlyCorrectJson.artifacts ?? {}).flatMap((source) =>
+      		Object.values(source?.contracts ?? {}),
+      	)
+      	expect([...parsingOnlyCorrectContracts, ...parsingOnlyCorrectExtra]).toHaveLength(0)
       		expect(parsingOnlyCorrect.hasCompilerErrors()).toBe(false)
       		expect(parsingOnlyCorrect.artifact?.ast).toBeDefined()
       		expect(parsingOnlyCorrect.artifact?.contracts).toBeDefined()
@@ -2113,12 +2051,17 @@
       			},
       		} as const satisfies CompilerSettings
       
-      		const compiler = new Compiler({ solcSettings: settings })
-      		const output = compiler.compileSource(BROKEN_SOURCE, {
-      			solcSettings: settings,
-      		})
+      	const compiler = new Compiler({ cacheEnabled: false, solcSettings: settings })
+      	const output = compiler.compileSource(BROKEN_SOURCE, {
+      		solcSettings: settings,
+      	})
       
-      		expect(flattenContracts(output)).toHaveLength(0)
+      	const json = output.toJson()
+      	const contracts = Object.values(json.artifact?.contracts ?? {})
+      	const extraContracts = Object.values(json.artifacts ?? {}).flatMap((source) =>
+      		Object.values(source?.contracts ?? {}),
+      	)
+      	expect([...contracts, ...extraContracts]).toHaveLength(0)
       		expect(output.hasCompilerErrors()).toBe(true)
       		expect(output.errors).toBeDefined()
       		expect((output.errors ?? []).length).toBeGreaterThan(0)
@@ -2126,45 +2069,48 @@
       
       	test('respects per-call optimizer overrides', () => {
       		const compiler = new Compiler({
+      			cacheEnabled: false,
       			solcSettings: {
       				optimizer: { enabled: false },
       			},
       		})
       
-      		const withoutOptimizer = compiler.compileSource(INLINE_SOURCE)
-      		const withOptimizer = compiler.compileSource(INLINE_SOURCE, {
-      			solcSettings: {
-      				optimizer: { enabled: true, runs: 200 },
-      			},
-      		})
+      	const withoutOptimizer = compiler.compileSource(INLINE_SOURCE)
+      	const withOptimizer = compiler.compileSource(INLINE_SOURCE, {
+      		solcSettings: {
+      			optimizer: { enabled: true, runs: 200 },
+      		},
+      	})
       
-      		expect(flattenContracts(withoutOptimizer)).toHaveLength(1)
-      		expect(flattenContracts(withOptimizer)).toHaveLength(1)
-      		expect(withOptimizer.errors).toBeUndefined()
+      	for (const output of [withoutOptimizer, withOptimizer]) {
+      		expect(flattenContracts(output)).toHaveLength(1)
+      	}
+      	expect(withOptimizer.errors).toBeUndefined()
       	})
       
       	test('allows metadata and evm version overrides', () => {
-      		const compiler = new Compiler()
-      		const output = compiler.compileSource(INLINE_SOURCE, {
-      			solcSettings: {
-      				metadata: { bytecodeHash: BytecodeHash.None },
-      				evmVersion: EvmVersion.London,
-      			},
-      		})
-      		expect(output.hasCompilerErrors()).toBe(false)
-      		expect(flattenContracts(output)).toHaveLength(1)
+      	const compiler = new Compiler({ cacheEnabled: false })
+      	const output = compiler.compileSource(INLINE_SOURCE, {
+      		solcSettings: {
+      			metadata: { bytecodeHash: BytecodeHash.None },
+      			evmVersion: EvmVersion.London,
+      		},
+      	})
+      	expect(output.hasCompilerErrors()).toBe(false)
+      	const contracts = flattenContracts(output)
+      	expect(contracts).toHaveLength(1)
       	})
       
       	test('compiles multiple contracts in a single source', () => {
-      		const compiler = new Compiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileSource(MULTI_CONTRACT_SOURCE)
-      
-      		const names = contractNames(output)
+      		const contracts = flattenContracts(output)
+      		const names = contracts.map((contract) => contract.name)
       		expect(names).toEqual(expect.arrayContaining(['First', 'Second', 'Target']))
       	})
       
       	test('supports concurrent compilation calls', async () => {
-      		const compiler = new Compiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		const [a, b] = await Promise.all([
       			Promise.resolve().then(() => compiler.compileSource(INLINE_SOURCE)),
       			Promise.resolve().then(() => compiler.compileSource(MULTI_CONTRACT_SOURCE)),
@@ -2172,42 +2118,47 @@
       
       		expect(a.hasCompilerErrors()).toBe(false)
       		expect(b.hasCompilerErrors()).toBe(false)
+      		expect(flattenContracts(a)).toHaveLength(1)
+      		expect(flattenContracts(b)).toHaveLength(3)
       	})
       })
       
       describe('Compiler.compileSource with AST and Yul inputs', () => {
       	test('accepts pre-parsed AST values', () => {
-      		const ast = createAst().fromSource(INLINE_SOURCE).ast()
-      		const compiler = new Compiler()
-      		const output = compiler.compileSource(ast)
-      		expect(output.hasCompilerErrors()).toBe(false)
-      		expect(firstContract(output).name).toBe('InlineExample')
+      	const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+      	const compiler = new Compiler({ cacheEnabled: false })
+      	const output = compiler.compileSource(ast)
+      	expect(output.hasCompilerErrors()).toBe(false)
+      	const [contract] = flattenContracts(output)
+      	expect(contract.name).toBe('InlineExample')
       	})
       
       	test('returns diagnostics when AST lacks contract definitions', () => {
-      		const compiler = new Compiler()
-      		const output = compiler.compileSource(deepClone(EMPTY_SOURCE_UNIT))
-      		expect(flattenContracts(output)).toHaveLength(0)
+      	const compiler = new Compiler({ cacheEnabled: false })
+      	const output = compiler.compileSource(deepClone(EMPTY_SOURCE_UNIT))
+      	expect(output.hasCompilerErrors()).toBe(false)
+      	expect(flattenContracts(output)).toHaveLength(0)
       		expect(output.errors).toBeUndefined()
       		expect(Array.isArray(output.diagnostics)).toBe(true)
       	})
       
       	test('compiles sanitized AST after instrumentation', () => {
-      		const instrumented = createAst()
-      			.fromSource(INLINE_SOURCE)
-      			.injectShadow(FUNCTION_FRAGMENT)
-      			.injectShadow(VARIABLE_FRAGMENT)
-      			.ast()
+      	const instrumented = new Ast({ solcVersion: DEFAULT_SOLC_VERSION })
+      		.fromSource(INLINE_SOURCE)
+      		.injectShadow(FUNCTION_FRAGMENT)
+      		.injectShadow(VARIABLE_FRAGMENT)
+      		.ast()
       
-      		const compiler = new Compiler()
-      		const output = compiler.compileSource(instrumented)
-      		expect(output.hasCompilerErrors()).toBe(false)
-      		expect(firstContract(output).name).toBe('InlineExample')
+      	const compiler = new Compiler({ cacheEnabled: false })
+      	const output = compiler.compileSource(instrumented)
+      	expect(output.hasCompilerErrors()).toBe(false)
+      	const [contract] = flattenContracts(output)
+      	expect(contract.name).toBe('InlineExample')
       	})
       
       	test('rejects unsupported languages for AST sources', () => {
-      		const ast = createAst().fromSource(INLINE_SOURCE).ast()
-      		const compiler = new Compiler()
+      	const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		expect(() =>
       			compiler.compileSource(ast, {
       				language: CompilerLanguage.Yul,
@@ -2221,40 +2172,52 @@
       	})
       
       	test('compiles Yul sources when requested', () => {
-      		const compiler = new Compiler()
-      		const output = compiler.compileSource(YUL_SOURCE, {
-      			language: CompilerLanguage.Yul,
-      		})
-      		expect(output.hasCompilerErrors()).toBe(false)
-      		expect(flattenContracts(output)).toHaveLength(1)
-      		const compiled = firstContract(output)
-      		expectBytecodeShape(compiled.creationBytecode ?? compiled.bytecode)
+      		const compiler = new Compiler({ cacheEnabled: false })
+      	const output = compiler.compileSource(YUL_SOURCE, {
+      		language: CompilerLanguage.Yul,
+      	})
+      	expect(output.hasCompilerErrors()).toBe(false)
+      	const json = output.toJson()
+      	const contracts = Object.values(json.artifact?.contracts ?? {})
+      	const extraContracts = Object.values(json.artifacts ?? {}).flatMap((source) =>
+      		Object.values(source?.contracts ?? {}),
+      	)
+      	const allContracts = [...contracts, ...extraContracts]
+      	expect(allContracts).toHaveLength(1)
+      	const compiled = allContracts[0]
+      	expectBytecodeShape(compiled.creationBytecode)
+      	expectBytecodeShape(compiled.deployedBytecode)
       	})
       
       	test('compiles Vyper sources when requested', () => {
-      		const compiler = new Compiler({ language: CompilerLanguage.Vyper })
-      		const output = compiler.compileSource(VYPER_COUNTER_SOURCE, {
-      			language: CompilerLanguage.Vyper,
-      		})
-      		expect(output.hasCompilerErrors()).toBe(false)
-      		expect(flattenContracts(output)).toHaveLength(1)
+      		const compiler = new Compiler({ cacheEnabled: false, language: CompilerLanguage.Vyper })
+      	const output = compiler.compileSource(VYPER_COUNTER_SOURCE, {
+      		language: CompilerLanguage.Vyper,
+      	})
+      	expect(output.hasCompilerErrors()).toBe(false)
+      	const json = output.toJson()
+      	const contracts = Object.values(json.artifact?.contracts ?? {})
+      	const extraContracts = Object.values(json.artifacts ?? {}).flatMap((source) =>
+      		Object.values(source?.contracts ?? {}),
+      	)
+      	expect([...contracts, ...extraContracts]).toHaveLength(1)
       	})
       })
       
       describe('Compiler.compileSources', () => {
       	test('compiles multiple solidity entries by path', () => {
-      		const compiler = new Compiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileSources({
       			'InlineExample.sol': INLINE_SOURCE,
       			'WarningContract.sol': WARNING_SOURCE,
       		})
       
-      		const names = contractNames(output)
+      		const names = flattenContracts(output).map((contract) => contract.name)
       		expect(names).toEqual(expect.arrayContaining(['InlineExample', 'WarningContract']))
       	})
       
       	test('compiles Yul sources when supplied as a map', () => {
-      		const compiler = new Compiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileSources(
       			{
       				'Echo.yul': YUL_SOURCE,
@@ -2267,7 +2230,7 @@
       	})
       
       	test('compiles Vyper sources when supplied as a map', () => {
-      		const compiler = new Compiler({ language: CompilerLanguage.Vyper })
+      		const compiler = new Compiler({ cacheEnabled: false, language: CompilerLanguage.Vyper })
       		const output = compiler.compileSources({
       			'Counter.vy': VYPER_COUNTER_SOURCE,
       		})
@@ -2276,17 +2239,18 @@
       	})
       
       	test('compiles AST entries keyed by path', () => {
-      		const ast = createAst().fromSource(INLINE_SOURCE).ast()
-      		const compiler = new Compiler()
+      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileSources({ 'InlineExample.sol': ast })
       
       		expect(output.hasCompilerErrors()).toBe(false)
-      		expect(firstContract(output).name).toBe('InlineExample')
+      		const [contract] = flattenContracts(output)
+      		expect(contract.name).toBe('InlineExample')
       	})
       
       	test('rejects mixing ast and source strings', () => {
-      		const ast = createAst().fromSource(INLINE_SOURCE).ast()
-      		const compiler = new Compiler()
+      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		expect(() =>
       			compiler.compileSources({
       				'InlineExample.sol': INLINE_SOURCE,
@@ -2300,7 +2264,7 @@
       
       describe('Compiler toJson snapshots', () => {
       	test('captures structured Solidity artifacts', () => {
-      		const compiler = new Compiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileSources({
       			'InlineExample.sol': INLINE_SOURCE,
       		})
@@ -2308,7 +2272,7 @@
       	})
       
       	test('captures structured Yul artifacts', () => {
-      		const compiler = new Compiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileSources(
       			{
       				'Echo.yul': YUL_SOURCE,
@@ -2319,7 +2283,7 @@
       	})
       
       	test('captures structured Vyper artifacts', () => {
-      		const compiler = new Compiler({ language: CompilerLanguage.Vyper })
+      		const compiler = new Compiler({ cacheEnabled: false, language: CompilerLanguage.Vyper })
       		const output = compiler.compileSources({
       			'Counter.vy': VYPER_COUNTER_SOURCE,
       		})
@@ -2328,18 +2292,16 @@
       })
       
       describe('Compiler.compileFiles', () => {
-      	const createCompiler = () => new Compiler()
-      
       	test('compiles solidity files from disk', () => {
-      		const compiler = createCompiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileFiles([INLINE_PATH, WARNING_PATH])
       
-      		const names = contractNames(output)
+      		const names = flattenContracts(output).map((contract) => contract.name)
       		expect(names).toEqual(expect.arrayContaining(['InlineExample', 'WarningContract']))
       	})
       
       	test('compiles yul files when language override is provided', () => {
-      		const compiler = createCompiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileFiles([YUL_PATH], {
       			language: CompilerLanguage.Yul,
       		})
@@ -2349,7 +2311,7 @@
       	})
       
       	test('compiles vyper files when language override is provided', () => {
-      		const compiler = new Compiler({ language: CompilerLanguage.Vyper })
+      		const compiler = new Compiler({ cacheEnabled: false, language: CompilerLanguage.Vyper })
       		const output = compiler.compileFiles([VYPER_COUNTER_PATH], {
       			language: CompilerLanguage.Vyper,
       		})
@@ -2358,43 +2320,45 @@
       	})
       
       	test('throws when a path cannot be read', () => {
-      		const compiler = createCompiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		expect(() => compiler.compileFiles(['/non-existent/path.sol'])).toThrowErrorMatchingInlineSnapshot(
       			`"Failed to read source file: No such file or directory (os error 2)"`,
       		)
       	})
       
       	test('compiles json ast files', () => {
-      		const ast = createAst().fromSource(INLINE_SOURCE).ast()
+      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
       		const dir = createTempDir('tevm-compile-files-ast-')
       		const astPath = join(dir, 'InlineExample.ast.json')
       		writeFileSync(astPath, JSON.stringify(ast))
       
-      		const compiler = createCompiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileFiles([astPath])
       
       		expect(output.hasCompilerErrors()).toBe(false)
-      		expect(firstContract(output).name).toBe('InlineExample')
+      		const [contract] = flattenContracts(output)
+      		expect(contract.name).toBe('InlineExample')
       	})
       
       	test('compiles ast files with unrecognized extensions', () => {
-      		const ast = createAst().fromSource(INLINE_SOURCE).ast()
+      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
       		const dir = createTempDir('tevm-compile-files-ast-ext-')
       		const astPath = join(dir, 'InlineExample.ast')
       		writeFileSync(astPath, JSON.stringify(ast))
       
-      		const compiler = createCompiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileFiles([astPath])
       
-      		expect(firstContract(output).name).toBe('InlineExample')
+      		const [contract] = flattenContracts(output)
+      		expect(contract.name).toBe('InlineExample')
       	})
       
       	test('errors when mixing ast and source inputs', () => {
-      		const ast = createAst().fromSource(INLINE_SOURCE).ast()
+      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
       		const dir = createTempDir('tevm-compile-files-mix-')
       		const astPath = join(dir, 'InlineExample.ast.json')
       		writeFileSync(astPath, JSON.stringify(ast))
-      		const compiler = createCompiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       
       		expect(() => compiler.compileFiles([INLINE_PATH, astPath])).toThrowErrorMatchingInlineSnapshot(
       			`"compileSources does not support mixing inline source strings with AST entries in the same call."`,
@@ -2405,13 +2369,13 @@
       		const dir = createTempDir('tevm-compile-files-unknown-')
       		const unknownPath = join(dir, 'InlineExample.txt')
       		writeFileSync(unknownPath, INLINE_SOURCE)
-      		const compiler = createCompiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       
       		expect(() => compiler.compileFiles([unknownPath])).toThrow(/Unable to infer compiler language/i)
       	})
       
       	test('errors when multiple languages are detected', () => {
-      		const compiler = createCompiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       		expect(() => compiler.compileFiles([INLINE_PATH, YUL_PATH])).toThrowErrorMatchingInlineSnapshot(
       			`"compileFiles requires all non-AST sources to share the same language. Provide language explicitly to disambiguate."`,
       		)
@@ -2419,20 +2383,22 @@
       
       	test('ignores constructor language preference', () => {
       		const compiler = new Compiler({
+      			cacheEnabled: false,
       			solcVersion: DEFAULT_SOLC_VERSION,
       			language: CompilerLanguage.Yul,
       		})
       		const output = compiler.compileFiles([INLINE_PATH])
       
       		expect(output.hasCompilerErrors()).toBe(false)
-      		expect(firstContract(output).name).toBe('InlineExample')
+      		const [contract] = flattenContracts(output)
+      		expect(contract.name).toBe('InlineExample')
       	})
       
       	test('rejects json files that are not objects', () => {
       		const dir = createTempDir('tevm-compile-files-json-')
       		const jsonPath = join(dir, 'Invalid.json')
       		writeFileSync(jsonPath, '[]')
-      		const compiler = createCompiler()
+      		const compiler = new Compiler({ cacheEnabled: false })
       
       		expect(() => compiler.compileFiles([jsonPath])).toThrowErrorMatchingInlineSnapshot(
       			`"JSON sources must contain a Solidity AST object."`,
@@ -2443,7 +2409,7 @@
       describe('Compiler project paths', () => {
       	test('reports synthetic layout when no project is attached', () => {
       		const root = createTempDir('tevm-synth-')
-      		const compiler = Compiler.fromRoot(root)
+      		const compiler = Compiler.fromRoot(root, { cacheEnabled: false })
       		const paths = compiler.getPaths()
       		const canonical = realpathSync(root)
       
@@ -2460,55 +2426,129 @@
       		expect(new Set(paths.allowedPaths)).toContain(canonical)
       	})
       
-      	test('writes cache artifacts for inline sources in default synthetic workspace', () => {
-      		const workspace = createTempDir('tevm-default-cache-')
-      		const script = `
-      const { Compiler } = require(${JSON.stringify(COMPILER_MODULE_PATH)});
-      const source = ${JSON.stringify(INLINE_SOURCE)};
-      const compiler = new Compiler();
-      const output = compiler.compileSource(source);
-      if (output.hasCompilerErrors()) {
-      	throw new Error('Compilation produced errors');
-      }
-      `
-      		const result = spawnSync(process.execPath, ['-e', script], {
-      			cwd: workspace,
-      			encoding: 'utf8',
+      })
+      
+      describe('Compiler cache behaviour', () => {
+      	describe('compileSource', () => {
+      		test('caches inline sources in default workspace', () => {
+      			const workspace = createTempDir('tevm-cache-source-default-')
+      			const originalCwd = process.cwd()
+      			process.chdir(workspace)
+      			try {
+      				const compiler = new Compiler({ cacheEnabled: true })
+      				const output = compiler.compileSource(INLINE_SOURCE)
+      				expect(output.hasCompilerErrors()).toBe(false)
+      				const snapshot = normaliseSnapshotPaths(output.toJson(), workspace)
+      				expect(snapshot).toMatchSnapshot()
+      
+      				const tevmRoot = join(workspace, '.tevm')
+      				const cacheFile = join(tevmRoot, 'cache', 'solidity-files-cache.json')
+      				expect(existsSync(cacheFile)).toBe(true)
+      				expect(listJsonFiles(join(tevmRoot, 'out')).some((file) => !file.includes('build-info'))).toBe(true)
+      			} finally {
+      				process.chdir(originalCwd)
+      			}
       		})
       
-      		if (result.status !== 0) {
-      			throw new Error(result.stderr || 'Failed to execute compilation script')
-      		}
+      		test('caches inline sources for fromRoot compiler', () => {
+      			const root = createTempDir('tevm-cache-source-root-')
+      			const compiler = Compiler.fromRoot(root, { cacheEnabled: true })
+      			const output = compiler.compileSource(INLINE_SOURCE)
+      			expect(output.hasCompilerErrors()).toBe(false)
+      			const snapshot = normaliseSnapshotPaths(output.toJson(), root)
+      			expect(snapshot).toMatchSnapshot()
       
-      		const tevmRoot = join(workspace, '.tevm')
-      		const cacheFile = join(tevmRoot, 'cache', 'solidity-files-cache.json')
-      		const artifactsDir = join(tevmRoot, 'out')
-      		const virtualSources = join(tevmRoot, 'virtual-sources')
-      
-      		expect(existsSync(cacheFile)).toBe(true)
-      		expect(listJsonFiles(artifactsDir).some((file) => !file.includes('build-info'))).toBe(true)
-      		expect(existsSync(virtualSources)).toBe(true)
-      		const virtualEntries = readdirSync(virtualSources)
-      		expect(virtualEntries.some((entry) => entry.endsWith('.sol'))).toBe(true)
+      			const tevmRoot = join(root, '.tevm')
+      			const cacheFile = join(tevmRoot, 'cache', 'solidity-files-cache.json')
+      			expect(existsSync(cacheFile)).toBe(true)
+      			expect(listJsonFiles(join(tevmRoot, 'out')).some((file) => !file.includes('build-info'))).toBe(true)
+      		})
       	})
       
-      	test('writes cache artifacts for inline sources in synthetic project', () => {
-      		const root = createTempDir('tevm-synth-cache-')
-      		const compiler = Compiler.fromRoot(root)
-      		const tevmRoot = join(root, '.tevm')
-      		const cacheFile = join(tevmRoot, 'cache', 'solidity-files-cache.json')
-      		const artifactsDir = join(tevmRoot, 'out')
-      		const virtualSources = join(tevmRoot, 'virtual-sources')
+      	describe('compileSources', () => {
+      		test('caches inline source map in default workspace', () => {
+      			const workspace = createTempDir('tevm-cache-sources-default-')
+      			const originalCwd = process.cwd()
+      			process.chdir(workspace)
+      			try {
+      				const compiler = new Compiler({ cacheEnabled: true })
+      				const output = compiler.compileSources({
+      					'InlineExample.sol': INLINE_SOURCE,
+      					'WarningContract.sol': WARNING_SOURCE,
+      				})
+      				expect(output.hasCompilerErrors()).toBe(false)
+      				const snapshot = normaliseSnapshotPaths(output.toJson(), workspace)
+      				expect(snapshot).toMatchSnapshot()
       
-      		const output = compiler.compileSource(INLINE_SOURCE)
+      				const tevmRoot = join(workspace, '.tevm')
+      				const cacheFile = join(tevmRoot, 'cache', 'solidity-files-cache.json')
+      				expect(existsSync(cacheFile)).toBe(true)
+      				expect(listJsonFiles(join(tevmRoot, 'out')).some((file) => !file.includes('build-info'))).toBe(true)
+      			} finally {
+      				process.chdir(originalCwd)
+      			}
+      		})
       
-      		expect(output.hasCompilerErrors()).toBe(false)
-      		expect(existsSync(cacheFile)).toBe(true)
-      		expect(JSON.parse(readFileSync(cacheFile, 'utf8'))).toBeTruthy()
-      		expect(listJsonFiles(artifactsDir).some((file) => !file.includes('build-info'))).toBe(true)
-      		expect(existsSync(virtualSources)).toBe(true)
-      		const virtualEntries = readdirSync(virtualSources)
-      		expect(virtualEntries.some((entry) => entry.endsWith('.sol'))).toBe(true)
+      		test('caches inline source map for fromRoot compiler', () => {
+      			const root = createTempDir('tevm-cache-sources-root-')
+      			const compiler = Compiler.fromRoot(root, { cacheEnabled: true })
+      			const output = compiler.compileSources({
+      				'InlineExample.sol': INLINE_SOURCE,
+      				'WarningContract.sol': WARNING_SOURCE,
+      			})
+      			expect(output.hasCompilerErrors()).toBe(false)
+      			const snapshot = normaliseSnapshotPaths(output.toJson(), root)
+      			expect(snapshot).toMatchSnapshot()
+      
+      			const tevmRoot = join(root, '.tevm')
+      			const cacheFile = join(tevmRoot, 'cache', 'solidity-files-cache.json')
+      			expect(existsSync(cacheFile)).toBe(true)
+      			expect(listJsonFiles(join(tevmRoot, 'out')).some((file) => !file.includes('build-info'))).toBe(true)
+      		})
+      	})
+      
+      	describe('compileFiles', () => {
+      		test('caches file compilation in default workspace', () => {
+      			const workspace = createTempDir('tevm-cache-files-default-')
+      			const originalCwd = process.cwd()
+      			process.chdir(workspace)
+      			try {
+      				const inlinePath = join(workspace, 'InlineExample.sol')
+      				const warningPath = join(workspace, 'WarningContract.sol')
+      				writeFileSync(inlinePath, INLINE_SOURCE)
+      				writeFileSync(warningPath, WARNING_SOURCE)
+      
+      				const compiler = new Compiler({ cacheEnabled: true })
+      				const output = compiler.compileFiles([inlinePath, warningPath])
+      				expect(output.hasCompilerErrors()).toBe(false)
+      				const snapshot = normaliseSnapshotPaths(output.toJson(), workspace)
+      				expect(snapshot).toMatchSnapshot()
+      
+      				const tevmRoot = join(workspace, '.tevm')
+      				const cacheFile = join(tevmRoot, 'cache', 'solidity-files-cache.json')
+      				expect(existsSync(cacheFile)).toBe(true)
+      				expect(listJsonFiles(join(tevmRoot, 'out')).some((file) => !file.includes('build-info'))).toBe(true)
+      			} finally {
+      				process.chdir(originalCwd)
+      			}
+      		})
+      
+      		test('caches file compilation for fromRoot compiler', () => {
+      			const root = createTempDir('tevm-cache-files-root-')
+      			const inlinePath = join(root, 'InlineExample.sol')
+      			writeFileSync(inlinePath, INLINE_SOURCE)
+      
+      			const compiler = Compiler.fromRoot(root, { cacheEnabled: true })
+      			const output = compiler.compileFiles([inlinePath])
+      			expect(output.hasCompilerErrors()).toBe(false)
+      			const snapshot = normaliseSnapshotPaths(output.toJson(), root)
+      			expect(snapshot).toMatchSnapshot()
+      
+      			const tevmRoot = join(root, '.tevm')
+      			const cacheFile = join(tevmRoot, 'cache', 'solidity-files-cache.json')
+      			expect(existsSync(cacheFile)).toBe(true)
+      			expect(listJsonFiles(join(tevmRoot, 'out')).some((file) => !file.includes('build-info'))).toBe(true)
+      		})
       	})
       })
     </spec-file>

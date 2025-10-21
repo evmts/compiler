@@ -1,22 +1,19 @@
 <!-- nx configuration start-->
 <!-- Leave the start & end comments to automatically receive updates. -->
 
-# General Guidelines for working with Nx
+# Agent Onboarding
 
-- When running tasks (for example build, lint, test, e2e, etc.), always prefer running the task through `nx` (i.e. `nx run`, `nx run-many`, `nx affected`) instead of using the underlying tooling directly
-- You have access to the Nx MCP server and its tools, use them to help the user
-- When answering questions about the repository, use the `nx_workspace` tool first to gain an understanding of the workspace architecture where applicable.
-- When working in individual projects, use the `nx_project_details` mcp tool to analyze and understand the specific project structure and dependencies
-- For questions around nx configuration, best practices or if you're unsure, use the `nx_docs` tool to get relevant, up-to-date docs. Always use this instead of assuming things about nx configuration
-- If the user needs help with an Nx configuration or project graph error, use the `nx_workspace` tool to get any errors
-
-# CI Error Guidelines
-
-If the user wants help with fixing an error in their CI pipeline, use the following flow:
-- Retrieve the list of current CI Pipeline Executions (CIPEs) using the `nx_cloud_cipe_details` tool
-- If there are any errors, use the `nx_cloud_fix_cipe_failure` tool to retrieve the logs for a specific task
-- Use the task logs to see what's wrong and help the user fix their problem. Use the appropriate tools if necessary
-- Make sure that the problem is fixed by running the task that you passed into the `nx_cloud_fix_cipe_failure` tool
-
+- **Project scope:** Maintain `@tevm/compiler`, a Rust + N-API compiler bridge consumed from Node.js/Bun. Core exports live in `libs/compiler/build/index.{js,d.ts}` after running the Nx build.
+- **Workspace layout:** Use `pnpm nx graph --focus=compiler` to visualise dependencies. The only active project is `libs/compiler`, but tests depend on fixtures under `libs/compiler/test/fixtures`.
+- **Environment:** Node 18+, pnpm 9+, Bun 1.1+, Rust stable. Solc binaries must exist in Foundry's `svm` cache (`Compiler.installSolcVersion`) before specs are executed. Vyper workflows require the `vyper` CLI on `PATH`.
+- **Common commands:**
+  - Install deps: `pnpm install`
+  - Build bindings: `pnpm nx run compiler:build`
+  - Post-build (copies `.d.ts`, type-checks, regenerates docs): `pnpm nx run compiler:post-build`
+  - Test suites: `pnpm nx run compiler:test`, or the targeted variants `:test:rust`, `:test:js`, `:test:typecheck`
+  - Formatting/linting: `pnpm nx run compiler:format`, `pnpm nx run compiler:lint`
+  - Build, lint, test: `pnpm all`
+- **Change workflow:** Prefer editing Rust + TypeScript in tandem so the generated `.d.ts` stays truthful. Every new feature needs regression coverage in Bun specs or TS type tests. Keep error messages descriptive—CLI users read them directly.
+- **Gotchas:** Avoid editing files in `libs/compiler/build/**`; they are short-lived and auto-generated.
 
 <!-- nx configuration end-->

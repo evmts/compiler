@@ -1,105 +1,54 @@
-TODO: readme
+# @tevm/compiler
 
-# Compiler Library
+Rust + N-API bindings that expose Foundry's multi-compiler to JavaScript, Bun, and WASI runtimes. The crate powers TEVM's compiler pipeline and ships with first-class helpers for AST instrumentation and contract state hydration.
 
-Rust + N-API bridge used by the Shadow toolchain to expose Foundry's Solidity compiler workflow to Node.js, Bun, and WASI runtimes.
+## What Lives Here
 
-## Build Targets
+- `src/ast` – Solidity-only AST orchestration (`Ast` class) for stitching fragments, promoting visibility, and validating stitched trees.
+- `src/compiler` – Project-aware compilation core (`Compiler`) that understands Foundry, Hardhat, inline sources, and language overrides (Solidity, Yul, Vyper).
+- `src/contract` – Ergonomic wrappers around standard JSON artifacts (`Contract`, `JsContract`) with mutation helpers for downstream tooling.
+- `src/internal` – Shared config parsing, solc/vyper orchestration, filesystem discovery, and error translation surfaced through N-API.
+- `src/types` – Hand-authored `.d.ts` extensions copied into `build/` after every release.
 
-- `nx run compiler:build` produces `libs/compiler/build/` with the JS loader, TypeScript entry point, and per-platform native binaries.
-- `nx run compiler:copy-types` validates the curated `.d.ts` files and copies them into `build/`. Run this after a successful build when publishing.
-- Rust unit tests live behind `nx run compiler:test:rust`; JavaScript shims run with `nx run compiler:test:js`.
-
-> **Note:** Native `.node` binaries are generated locally and in CI. They are gitignored on purpose; consumers are expected to build or download matching artifacts during release.
-
-## Module Layout
-
-- `ast/` – high level AST helpers that parse source, stitch fragments, and expose helper mutations. See `src/ast/README.md`.
-- `compiler/` – compilation pipeline. `CompilerCore` resolves project layouts (Foundry, Hardhat, synthetic), drives `ProjectRunner`, and normalises output for JS.
-- `internal/` – shared config parsing, solc orchestration, filesystem discovery, and error helpers consumed by both `ast` and `compiler`.
-
-### Compilation Pipeline
-
-1. **Configuration** – N-API `CompilerConfig` inputs (parsed as `JsCompilerConfigOptions`) and any Rust-side `CompilerConfigOptions` are merged into the resolved `CompilerConfig`.
-2. **Context detection** – `CompilerCore::new` optionally loads project metadata via `FoundryAdapter`/`HardhatAdapter` or synthesises an ephemeral workspace for inline sources.
-3. **Input selection** – `CompilationInput` handles inline strings, source maps, AST units, or file paths. Mixed inputs are rejected at the binding layer for clarity.
-4. **Execution** – `CompilerCore::compile_as` runs against an attached project via `ProjectRunner` when available, otherwise falls back to a "pure" `foundry-compilers` invocation with temporary sources.
-5. **Result mapping** – outputs are converted into serialisable `JsCompileOutput`/`ContractArtifact` structs that align with the TypeScript bindings in `build/index.d.ts`.
-
-The `Compiler` N-API class threads this flow into four primary entry points (`compileSource`, `compileSources`, `compileFiles`, `compileProject`) plus helpers for installing `solc` versions and instantiating from known project roots.
-
-## Vyper Support
-
-The compiler facade now exposes a language-agnostic surface via the `CompilerLanguage` enum. Solidity remains the default, but Yul and Vyper workflows are now first-class citizens:
-
-- Language overrides can be provided explicitly (`{ language: CompilerLanguage.Vyper }`) or inferred from file extensions (`.vy`, `.vyi`, `.yul`).
-- Inline Vyper sources and on-disk projects transparently resolve the `vyper` binary via `PATH`. If the executable is not present we return a helpful error explaining how to install it.
-- Advanced consumers can configure Vyper via `compiler.vyper`—override the binary path, optimisation mode, EVM target, search paths, or output selection without touching Foundry defaults.
-- AST compilation remains Solidity-only. Requests that attempt to compile AST inputs in non-Solidity modes now surface a clear error instead of silently falling back.
-
-Foundry and Hardhat project adapters use the `MultiCompiler` backend so mixed-language repositories are supported. When running tests locally or in CI ensure that a compatible `vyper` binary is available on the `PATH` for these project-based entry points.
-
-## Type Generation Workflow
-
-The AST helpers expose richer data than the automatic N-API generator currently understands. To keep the published package ergonomic we hand-author a small set of TypeScript declaration files in `src/types/`. The `copy-types` script intentionally:
-
-1. Type-checks the `.d.ts` files with `tsc` to catch syntax drift.
-2. Copies the vetted files into `build/` so they ship with the package.
-
-We keep this script manual so future maintainers do not delete or auto-generate the declarations. Run it whenever the Rust surface changes or before cutting a release:
+## Build & Test
 
 ```bash
-nx run compiler:build
-nx run compiler:copy-types
+# Build native bindings and emit build/index.{js,d.ts}
+pnpm nx run compiler:build
+
+# Copy curated types, generate llms.md, type-check declarations
+pnpm nx run compiler:post-build
+
+# Execute the full suite (cargo tests + Bun integration specs + TS type checks)
+pnpm nx run compiler:test
 ```
 
-## JavaScript Integrations
+Useful sub-targets:
 
-```ts
-import { Compiler } from "@compiler/compiler";
+- `pnpm nx run compiler:test:rust` – Rust unit tests (`cargo test`).
+- `pnpm nx run compiler:test:js` – Bun specs in `test/**/*.spec.ts`.
+- `pnpm nx run compiler:test:typecheck` – Validates the published `.d.ts` surface.
+- `pnpm nx run compiler:lint` / `:format` – Biome for JS + `cargo fmt` for Rust sources.
 
-const compiler = new Compiler({
-  solcVersion: "0.8.30",
-  remappings: ["@openzeppelin/=node_modules/@openzeppelin/"],
-});
-await compiler.installSolcVersion("0.8.30");
+## API Highlights
 
-const output = compiler.compileSources({
-  "MyContract.sol": "contract MyContract { function x() public {} }",
-});
+- `Compiler.installSolcVersion(version)` downloads solc releases into the Foundry `svm` cache. `Compiler.isSolcVersionInstalled` performs fast existence checks.
+- `new Compiler(options)` compiles inline sources or AST units. `.fromFoundryRoot`, `.fromHardhatRoot`, and `.fromRoot` bootstrap project-aware compilers.
+- `compileSource(s)`, `compileFiles`, `compileProject`, `compileContract` return `CompileOutput` snapshots with structured diagnostics, contract wrappers, and standard JSON.
+- `Ast` instances parse Solidity sources, inject fragment sources or AST objects (`injectShadow`), expose internal members, and emit unique-ID `SourceUnit`s ready for compilation.
+- `Contract` wrappers (available in JS and Rust) provide `.withAddress`, `.withCreationBytecode`, `.withDeployedBytecode`, and `.toJson()` for ergonomic artifact manipulation.
 
-console.log(output.contracts["MyContract.sol"]);
-```
+## Release Checklist
 
-Pair AST transforms with compilation by using the `Ast` helper (`src/ast/README.md`) to stitch fragments, then feed the resulting source map or AST back through `compileSources`.
+1. `pnpm nx run compiler:build --configuration=production`
+2. `pnpm nx run compiler:post-build`
+3. `pnpm nx run compiler:test`
+4. Package platform binaries or publish as required.
 
-## Contract State Helpers
+The `libs/compiler/build/llms.md` bundle is regenerated automatically during `post-build` so AI assistants stay in sync with the public surface.
 
-Rust callers can materialise contract metadata in a single step using the new wrappers:
+## Troubleshooting Notes
 
-```rust
-use compiler::contract::Contract;
-use foundry_compilers::artifacts::contract::Contract as FoundryContract;
-
-fn hydrate(contract: &FoundryContract) -> compiler::Result<()> {
-  let mut wrapper = Contract::from_foundry_standard_json("MyContract", contract);
-  wrapper.with_address(Some("0xdeadbeef".into()));
-  let state = wrapper.into_state();
-  assert_eq!(state.name, "MyContract");
-  Ok(())
-}
-```
-
-JavaScript bindings expose the same surface through the exported `Contract` class—no `build()` ceremony required:
-
-```ts
-import { Contract } from "@compiler/compiler";
-
-const contract = Contract.fromSolcContractOutput("Example", solcArtifact).withAddress("0x1234").withExtra("tag", { env: "test" });
-
-console.log(contract.toJson());
-
-const manual = new Contract({ name: "Manual" }).withAddress("0xdeadbeef").withExtra("note", "local override");
-
-console.log(manual.toJson());
-```
+- Always call `Compiler.installSolcVersion(version)` (or ensure Foundry's `svm` cache is primed) before running tests locally. Specs assert that required solc versions exist.
+- Vyper workflows depend on a `vyper` executable available on `PATH`. Missing binaries throw actionable N-API errors; install via `pipx install vyper`.
+- AST helpers reject non-Solidity `solcLanguage` overrides—limit them to Solidity and feed the resulting tree back into `compiler.compileSources`.
