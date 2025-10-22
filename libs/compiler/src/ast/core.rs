@@ -6,10 +6,13 @@ use foundry_compilers::solc::SolcLanguage;
 use super::{orchestrator::AstOrchestrator, stitcher, utils};
 use crate::internal::config::{AstConfig, AstConfigOptions};
 use crate::internal::errors::{map_err_with_context, Error, Result};
+use crate::internal::logging::{ensure_rust_logger, update_level};
 use crate::internal::solc;
+use log::{error, info, warn};
 use serde_json::{json, Value};
 
 const VIRTUAL_SOURCE_PATH: &str = "__VIRTUAL__.sol";
+const LOG_TARGET: &str = "tevm::ast";
 
 #[derive(Clone)]
 pub struct State {
@@ -34,14 +37,22 @@ pub fn init(options: Option<AstConfigOptions>) -> Result<State> {
   let default_language = solc::default_language();
   let mut config = AstConfig::from_options(&default_language, &default_settings, options.as_ref())
     .map_err(Error::from)?;
+  ensure_rust_logger(config.logging_level)?;
+  info!(target: LOG_TARGET, "initialising AST state with language {:?}", default_language);
   config.solc.settings =
     AstOrchestrator::sanitize_settings(Some(config.solc.settings.clone())).map_err(Error::from)?;
   if config.solc.language != SolcLanguage::Solidity {
+    error!(target: LOG_TARGET, "Ast helpers only support solcLanguage \"Solidity\"");
     return Err(Error::new(
       "Ast helpers only support solcLanguage \"Solidity\".",
     ));
   }
   solc::ensure_installed(&config.solc.version)?;
+  info!(
+    target: LOG_TARGET,
+    "AST ready (instrumented_contract={:?})",
+    config.instrumented_contract()
+  );
 
   Ok(State { config, ast: None })
 }
@@ -52,9 +63,25 @@ pub fn from_source(
   overrides: Option<&AstConfigOptions>,
 ) -> Result<()> {
   match target {
-    SourceTarget::Text(source) => load_source_text(state, &source, overrides)?,
-    SourceTarget::Ast(unit) => load_source_ast(state, unit, overrides)?,
+    SourceTarget::Text(source) => {
+      info!(
+        target: LOG_TARGET,
+        "loading AST from source text (len={})",
+        source.len()
+      );
+      load_source_text(state, &source, overrides)?;
+    }
+    SourceTarget::Ast(unit) => {
+      let node_count = unit.nodes.len();
+      info!(
+        target: LOG_TARGET,
+        "loading AST from pre-built unit (nodes={})",
+        node_count
+      );
+      load_source_ast(state, unit, overrides)?;
+    }
   }
+  info!(target: LOG_TARGET, "AST source loaded");
   Ok(())
 }
 
@@ -64,9 +91,25 @@ pub fn inject_shadow(
   overrides: Option<&AstConfigOptions>,
 ) -> Result<()> {
   match fragment {
-    FragmentTarget::Text(source) => inject_fragment_string(state, &source, overrides)?,
-    FragmentTarget::Ast(unit) => inject_fragment_ast(state, unit, overrides)?,
+    FragmentTarget::Text(source) => {
+      info!(
+        target: LOG_TARGET,
+        "injecting AST fragment from shadow source (len={})",
+        source.len()
+      );
+      inject_fragment_string(state, &source, overrides)?;
+    }
+    FragmentTarget::Ast(unit) => {
+      let node_count = unit.nodes.len();
+      info!(
+        target: LOG_TARGET,
+        "injecting pre-built AST fragment (nodes={})",
+        node_count
+      );
+      inject_fragment_ast(state, unit, overrides)?;
+    }
   }
+  info!(target: LOG_TARGET, "AST fragment injected");
   Ok(())
 }
 
@@ -74,14 +117,30 @@ pub fn expose_internal_variables(
   state: &mut State,
   overrides: Option<&AstConfigOptions>,
 ) -> Result<()> {
-  expose_variables_internal(state, overrides)
+  let contract = contract_override(state, overrides).unwrap_or("<all>");
+  info!(
+    target: LOG_TARGET,
+    "exposing internal variables (contract={})",
+    contract
+  );
+  expose_variables_internal(state, overrides)?;
+  info!(target: LOG_TARGET, "internal variables exposed");
+  Ok(())
 }
 
 pub fn expose_internal_functions(
   state: &mut State,
   overrides: Option<&AstConfigOptions>,
 ) -> Result<()> {
-  expose_functions_internal(state, overrides)
+  let contract = contract_override(state, overrides).unwrap_or("<all>");
+  info!(
+    target: LOG_TARGET,
+    "exposing internal functions (contract={})",
+    contract
+  );
+  expose_functions_internal(state, overrides)?;
+  info!(target: LOG_TARGET, "internal functions exposed");
+  Ok(())
 }
 
 pub fn source_unit(state: &State) -> Option<&SourceUnit> {
@@ -112,6 +171,13 @@ fn resolve_config(state: &State, overrides: Option<&AstConfigOptions>) -> Result
     AstOrchestrator::sanitize_settings(Some(config.solc.settings.clone())),
     "Failed to sanitize compiler settings",
   )?;
+  update_level(config.logging_level);
+  info!(
+    target: LOG_TARGET,
+    "resolved AST config (solc={}, instrumented_contract={:?})",
+    config.solc.version,
+    config.instrumented_contract()
+  );
   Ok(config)
 }
 
@@ -252,6 +318,11 @@ fn expose_functions_internal(
 }
 
 pub fn validate(state: &mut State, overrides: Option<&AstConfigOptions>) -> Result<()> {
+  info!(
+    target: LOG_TARGET,
+    "validating AST (current_contract={:?})",
+    state.config.instrumented_contract()
+  );
   let config = resolve_config(state, overrides)?;
   let mut compile_config = config.solc.clone();
   compile_config.settings.stop_after = None;
@@ -296,6 +367,11 @@ pub fn validate(state: &mut State, overrides: Option<&AstConfigOptions>) -> Resu
       }
     }
     if !messages.is_empty() {
+      warn!(
+        target: LOG_TARGET,
+        "AST validation failed with {} error(s)",
+        messages.len()
+      );
       return Err(Error::new(format!(
         "AST validation failed:\n{}",
         messages.join("\n")
@@ -316,6 +392,7 @@ pub fn validate(state: &mut State, overrides: Option<&AstConfigOptions>) -> Resu
   )?;
 
   state.ast = Some(next_ast);
+  info!(target: LOG_TARGET, "AST validation succeeded");
   Ok(())
 }
 
@@ -444,6 +521,7 @@ contract Target {
     let overrides = AstConfigOptions {
       solc: crate::SolcConfigOptions::default(),
       instrumented_contract: Some("Target".into()),
+      logging_level: None,
     };
 
     inject_shadow(
@@ -523,6 +601,7 @@ contract Target {
     let overrides = AstConfigOptions {
       solc: crate::SolcConfigOptions::default(),
       instrumented_contract: Some("Target".into()),
+      logging_level: None,
     };
     expose_internal_variables(&mut state, Some(&overrides)).expect("expose vars");
     expose_internal_functions(&mut state, Some(&overrides)).expect("expose funcs");

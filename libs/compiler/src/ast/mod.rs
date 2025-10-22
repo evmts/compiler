@@ -21,6 +21,7 @@ use utils::{from_js_value, sanitize_ast_value, to_js_value};
 
 use crate::internal::config::{parse_js_ast_options, AstConfig, AstConfigOptions};
 use crate::internal::errors::{map_napi_error, napi_error, to_napi_result, Result};
+use crate::internal::logging::ensure_napi_logger;
 
 /// Pure Rust façade around the AST core functions.
 #[derive(Clone)]
@@ -123,6 +124,11 @@ impl JsAst {
       .as_ref()
       .map(|opts| AstConfigOptions::try_from(opts))
       .transpose()?;
+    let level = config_options
+      .as_ref()
+      .and_then(|opts| opts.logging_level)
+      .unwrap_or_default();
+    ensure_napi_logger(&env, level)?;
     let ast = to_napi_result(Ast::new(config_options))?;
     Ok(Self::from_ast(ast))
   }

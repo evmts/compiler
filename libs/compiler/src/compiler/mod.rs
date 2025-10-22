@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use foundry_compilers::artifacts::ast::SourceUnit;
+use log::{error, info};
 use napi::bindgen_prelude::*;
 use napi::{Env, JsObject, JsUnknown};
 use serde_json::Value;
@@ -11,6 +13,7 @@ use crate::internal::config::{
   parse_js_compiler_config, CompilerConfig, CompilerConfigOptions, CompilerLanguage,
 };
 use crate::internal::errors::{map_napi_error, napi_error, to_napi_result, Error, Result};
+use crate::internal::logging::{ensure_napi_logger, ensure_rust_logger, update_level};
 use crate::internal::path::ProjectPaths;
 use crate::internal::project::{default_cache_dir, synthetic_project_paths, ProjectContext};
 use crate::internal::solc;
@@ -26,6 +29,8 @@ pub mod core;
 mod input;
 pub mod output;
 mod project_runner;
+
+const LOG_TARGET: &str = "tevm::compiler";
 
 #[cfg(test)]
 mod compiler_tests;
@@ -44,8 +49,33 @@ impl Compiler {
   /// cache inline sources and emitted artifacts.
   pub fn new(options: Option<CompilerConfigOptions>) -> Result<Self> {
     let config = CompilerConfig::from_options(options).map_err(Error::from)?;
-    let state = init(config, None)?;
-    Ok(Self { state })
+    ensure_rust_logger(config.logging_level)?;
+    info!(
+      target: LOG_TARGET,
+      "initialising compiler (language={:?}, solc_version={})",
+      config.language,
+      config.solc_version
+    );
+    let started = Instant::now();
+    match init(config, None) {
+      Ok(state) => {
+        info!(
+          target: LOG_TARGET,
+          "compiler initialised in {:?}",
+          started.elapsed()
+        );
+        Ok(Self { state })
+      }
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "compiler initialisation failed after {:?}: {}",
+          started.elapsed(),
+          err
+        );
+        Err(err)
+      }
+    }
   }
 
   /// Instantiate a compiler scoped to an existing Foundry project root. The workspace metadata is
@@ -55,8 +85,36 @@ impl Compiler {
     options: Option<CompilerConfigOptions>,
   ) -> Result<Self> {
     let config = CompilerConfig::from_options(options).map_err(Error::from)?;
-    let state = init_from_foundry_root(config, root.as_ref())?;
-    Ok(Self { state })
+    ensure_rust_logger(config.logging_level)?;
+    let root_path = root.as_ref();
+    let root_display = format!("{}", root_path.display());
+    info!(
+      target: LOG_TARGET,
+      "initialising compiler from Foundry root {}",
+      root_display
+    );
+    let started = Instant::now();
+    match init_from_foundry_root(config, root_path) {
+      Ok(state) => {
+        info!(
+          target: LOG_TARGET,
+          "compiler bound to Foundry project {} in {:?}",
+          root_display,
+          started.elapsed()
+        );
+        Ok(Self { state })
+      }
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "failed to initialise Foundry compiler for {} after {:?}: {}",
+          root_display,
+          started.elapsed(),
+          err
+        );
+        Err(err)
+      }
+    }
   }
 
   /// Instantiate a compiler scoped to a Hardhat project root. Hardhat configuration is parsed and
@@ -66,8 +124,36 @@ impl Compiler {
     options: Option<CompilerConfigOptions>,
   ) -> Result<Self> {
     let config = CompilerConfig::from_options(options).map_err(Error::from)?;
-    let state = init_from_hardhat_root(config, root.as_ref())?;
-    Ok(Self { state })
+    ensure_rust_logger(config.logging_level)?;
+    let root_path = root.as_ref();
+    let root_display = format!("{}", root_path.display());
+    info!(
+      target: LOG_TARGET,
+      "initialising compiler from Hardhat root {}",
+      root_display
+    );
+    let started = Instant::now();
+    match init_from_hardhat_root(config, root_path) {
+      Ok(state) => {
+        info!(
+          target: LOG_TARGET,
+          "compiler bound to Hardhat project {} in {:?}",
+          root_display,
+          started.elapsed()
+        );
+        Ok(Self { state })
+      }
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "failed to initialise Hardhat compiler for {} after {:?}: {}",
+          root_display,
+          started.elapsed(),
+          err
+        );
+        Err(err)
+      }
+    }
   }
 
   /// Instantiate a compiler using an arbitrary filesystem root. Best suited for ad-hoc projects that
@@ -77,21 +163,119 @@ impl Compiler {
     options: Option<CompilerConfigOptions>,
   ) -> Result<Self> {
     let config = CompilerConfig::from_options(options).map_err(Error::from)?;
-    let state = init_from_root(config, root.as_ref())?;
-    Ok(Self { state })
+    ensure_rust_logger(config.logging_level)?;
+    let root_path = root.as_ref();
+    let root_display = format!("{}", root_path.display());
+    info!(
+      target: LOG_TARGET,
+      "initialising compiler from root {}",
+      root_display
+    );
+    let started = Instant::now();
+    match init_from_root(config, root_path) {
+      Ok(state) => {
+        info!(
+          target: LOG_TARGET,
+          "compiler bound to root {} in {:?}",
+          root_display,
+          started.elapsed()
+        );
+        Ok(Self { state })
+      }
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "failed to initialise compiler for root {} after {:?}: {}",
+          root_display,
+          started.elapsed(),
+          err
+        );
+        Err(err)
+      }
+    }
   }
 
   /// Parse the supplied semantic version and ensure the matching `solc` binary is present on disk.
   /// The download is skipped when the version already exists.
   pub fn install_solc_version(version: &str) -> Result<()> {
-    let parsed = solc::parse_version(version)?;
-    solc::install_version(&parsed)
+    info!(
+      target: LOG_TARGET,
+      "installing solc version {}",
+      version
+    );
+    let started = Instant::now();
+    let parsed = match solc::parse_version(version) {
+      Ok(parsed) => parsed,
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "failed to parse solc version \"{}\": {}",
+          version,
+          err
+        );
+        return Err(err);
+      }
+    };
+    match solc::install_version(&parsed) {
+      Ok(()) => {
+        info!(
+          target: LOG_TARGET,
+          "solc {} installed in {:?}",
+          parsed,
+          started.elapsed()
+        );
+        Ok(())
+      }
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "failed to install solc {} after {:?}: {}",
+          parsed,
+          started.elapsed(),
+          err
+        );
+        Err(err)
+      }
+    }
   }
 
   /// Return whether the requested `solc` version is already available locally.
   pub fn is_solc_version_installed(version: &str) -> Result<bool> {
-    let parsed = solc::parse_version(version)?;
-    solc::is_version_installed(&parsed)
+    let started = Instant::now();
+    let parsed = match solc::parse_version(version) {
+      Ok(parsed) => parsed,
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "failed to parse solc version \"{}\": {}",
+          version,
+          err
+        );
+        return Err(err);
+      }
+    };
+    match solc::is_version_installed(&parsed) {
+      Ok(installed) => {
+        info!(
+          target: LOG_TARGET,
+          "solc {} installation status checked in {:?}: installed={}",
+          parsed,
+          started.elapsed(),
+          installed
+        );
+        Ok(installed)
+      }
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "failed to query solc {} installation after {:?}: {}",
+          parsed,
+          started.elapsed(),
+          err
+        );
+        Err(err)
+      }
+    }
   }
 
   /// Compile a single inline source string or Solidity AST using the compiler's current
@@ -103,8 +287,45 @@ impl Compiler {
     target: SourceTarget,
     options: Option<CompilerConfigOptions>,
   ) -> Result<CompileOutput> {
-    let config = self.resolve_call_config(options.as_ref())?;
-    compile_source(&self.state, &config, target)
+    let started = Instant::now();
+    let config = match self.resolve_call_config(options.as_ref()) {
+      Ok(config) => config,
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "compile_source failed to resolve config: {}",
+          err
+        );
+        return Err(err);
+      }
+    };
+    update_level(config.logging_level);
+    info!(
+      target: LOG_TARGET,
+      "compile_source start language={:?} solc={}",
+      config.language,
+      config.solc_version
+    );
+    match compile_source(&self.state, &config, target) {
+      Ok(output) => {
+        info!(
+          target: LOG_TARGET,
+          "compile_source success diagnostics={} duration={:?}",
+          output.errors.len(),
+          started.elapsed()
+        );
+        Ok(output)
+      }
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "compile_source error after {:?}: {}",
+          started.elapsed(),
+          err
+        );
+        Err(err)
+      }
+    }
   }
 
   /// Compile an in-memory map of sources or AST units. All entries must share the same language
@@ -115,8 +336,45 @@ impl Compiler {
     sources: BTreeMap<String, SourceValue>,
     options: Option<CompilerConfigOptions>,
   ) -> Result<CompileOutput> {
-    let config = self.resolve_call_config(options.as_ref())?;
-    compile_sources(&self.state, &config, sources)
+    let started = Instant::now();
+    let config = match self.resolve_call_config(options.as_ref()) {
+      Ok(config) => config,
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "compile_sources failed to resolve config: {}",
+          err
+        );
+        return Err(err);
+      }
+    };
+    update_level(config.logging_level);
+    info!(
+      target: LOG_TARGET,
+      "compile_sources start language={:?} solc={}",
+      config.language,
+      config.solc_version
+    );
+    match compile_sources(&self.state, &config, sources) {
+      Ok(output) => {
+        info!(
+          target: LOG_TARGET,
+          "compile_sources success diagnostics={} duration={:?}",
+          output.errors.len(),
+          started.elapsed()
+        );
+        Ok(output)
+      }
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "compile_sources error after {:?}: {}",
+          started.elapsed(),
+          err
+        );
+        Err(err)
+      }
+    }
   }
 
   /// Compile concrete files from disk. The language is inferred from file extensions unless
@@ -129,18 +387,96 @@ impl Compiler {
     options: Option<CompilerConfigOptions>,
   ) -> Result<CompileOutput> {
     if paths.is_empty() {
+      error!(
+        target: LOG_TARGET,
+        "compile_files called without any paths"
+      );
       return Err(Error::new("compileFiles requires at least one path."));
     }
-    let config = self.resolve_call_config(options.as_ref())?;
+    let started = Instant::now();
+    let config = match self.resolve_call_config(options.as_ref()) {
+      Ok(config) => config,
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "compile_files failed to resolve config: {}",
+          err
+        );
+        return Err(err);
+      }
+    };
+    update_level(config.logging_level);
     let language_override = language_override(options.as_ref());
-    compile_files(&config, paths, language_override)
+    info!(
+      target: LOG_TARGET,
+      "compile_files start language={:?} solc={}",
+      config.language,
+      config.solc_version
+    );
+    match compile_files(&config, paths, language_override) {
+      Ok(output) => {
+        info!(
+          target: LOG_TARGET,
+          "compile_files success diagnostics={} duration={:?}",
+          output.errors.len(),
+          started.elapsed()
+        );
+        Ok(output)
+      }
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "compile_files error after {:?}: {}",
+          started.elapsed(),
+          err
+        );
+        Err(err)
+      }
+    }
   }
 
   /// Compile every contract discovered in the attached project or synthetic workspace. Equivalent to
   /// running `forge build`/`hardhat compile` with the resolved configuration.
   pub fn compile_project(&self, options: Option<CompilerConfigOptions>) -> Result<CompileOutput> {
-    let config = self.resolve_call_config(options.as_ref())?;
-    compile_project(&self.state, &config)
+    let started = Instant::now();
+    let config = match self.resolve_call_config(options.as_ref()) {
+      Ok(config) => config,
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "compile_project failed to resolve config: {}",
+          err
+        );
+        return Err(err);
+      }
+    };
+    update_level(config.logging_level);
+    info!(
+      target: LOG_TARGET,
+      "compile_project start language={:?} solc={}",
+      config.language,
+      config.solc_version
+    );
+    match compile_project(&self.state, &config) {
+      Ok(output) => {
+        info!(
+          target: LOG_TARGET,
+          "compile_project success diagnostics={} duration={:?}",
+          output.errors.len(),
+          started.elapsed()
+        );
+        Ok(output)
+      }
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "compile_project error after {:?}: {}",
+          started.elapsed(),
+          err
+        );
+        Err(err)
+      }
+    }
   }
 
   /// Compile a single contract by name within the attached project or workspace. Contract names are
@@ -150,8 +486,48 @@ impl Compiler {
     contract_name: &str,
     options: Option<CompilerConfigOptions>,
   ) -> Result<CompileOutput> {
-    let config = self.resolve_call_config(options.as_ref())?;
-    compile_contract(&self.state, &config, contract_name)
+    let started = Instant::now();
+    let config = match self.resolve_call_config(options.as_ref()) {
+      Ok(config) => config,
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "compile_contract failed to resolve config for {contract_name}: {}",
+          err
+        );
+        return Err(err);
+      }
+    };
+    update_level(config.logging_level);
+    info!(
+      target: LOG_TARGET,
+      "compile_contract start name={} language={:?} solc={}",
+      contract_name,
+      config.language,
+      config.solc_version
+    );
+    match compile_contract(&self.state, &config, contract_name) {
+      Ok(output) => {
+        info!(
+          target: LOG_TARGET,
+          "compile_contract success name={} diagnostics={} duration={:?}",
+          contract_name,
+          output.errors.len(),
+          started.elapsed()
+        );
+        Ok(output)
+      }
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "compile_contract error name={} after {:?}: {}",
+          contract_name,
+          started.elapsed(),
+          err
+        );
+        Err(err)
+      }
+    }
   }
 
   /// Access the resolved compiler configuration backing this instance.
@@ -177,7 +553,31 @@ impl Compiler {
   /// Resolve the filesystem layout used for caching and artifact emission (`ProjectPaths`). If no
   /// project is attached a synthetic layout rooted in `~/.tevm` is returned.
   pub fn get_paths(&self) -> Result<ProjectPaths> {
-    resolve_project_paths(&self.state)
+    info!(
+      target: LOG_TARGET,
+      "resolving project paths"
+    );
+    let started = Instant::now();
+    match resolve_project_paths(&self.state) {
+      Ok(paths) => {
+        info!(
+          target: LOG_TARGET,
+          "project paths resolved (root={}, duration={:?})",
+          paths.root,
+          started.elapsed()
+        );
+        Ok(paths)
+      }
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "failed to resolve project paths after {:?}: {}",
+          started.elapsed(),
+          err
+        );
+        Err(err)
+      }
+    }
   }
 
   /// Consume the compiler and return the internal state for advanced workflows.
@@ -245,6 +645,11 @@ impl JsCompiler {
       .as_ref()
       .map(|opts| CompilerConfigOptions::try_from(opts))
       .transpose()?;
+    let level = config_options
+      .as_ref()
+      .and_then(|opts| opts.logging_level)
+      .unwrap_or_default();
+    ensure_napi_logger(&env, level)?;
     let compiler = to_napi_result(Compiler::new(config_options))?;
     Ok(Self::from_compiler(compiler))
   }
@@ -265,6 +670,11 @@ impl JsCompiler {
       .as_ref()
       .map(|opts| CompilerConfigOptions::try_from(opts))
       .transpose()?;
+    let level = config_options
+      .as_ref()
+      .and_then(|opts| opts.logging_level)
+      .unwrap_or_default();
+    ensure_napi_logger(&env, level)?;
     let compiler = to_napi_result(Compiler::from_foundry_root(
       Path::new(&root),
       config_options,
@@ -288,6 +698,11 @@ impl JsCompiler {
       .as_ref()
       .map(|opts| CompilerConfigOptions::try_from(opts))
       .transpose()?;
+    let level = config_options
+      .as_ref()
+      .and_then(|opts| opts.logging_level)
+      .unwrap_or_default();
+    ensure_napi_logger(&env, level)?;
     let compiler = to_napi_result(Compiler::from_hardhat_root(
       Path::new(&root),
       config_options,
@@ -307,6 +722,11 @@ impl JsCompiler {
       .as_ref()
       .map(|opts| CompilerConfigOptions::try_from(opts))
       .transpose()?;
+    let level = config_options
+      .as_ref()
+      .and_then(|opts| opts.logging_level)
+      .unwrap_or_default();
+    ensure_napi_logger(&env, level)?;
     let compiler = to_napi_result(Compiler::from_root(Path::new(&root), config_options))?;
     Ok(Self::from_compiler(compiler))
   }

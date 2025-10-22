@@ -12,6 +12,7 @@ use napi::{Env, JsObject, JsUnknown, NapiRaw, ValueType};
 use semver::Version;
 
 use crate::internal::errors::{map_napi_error, napi_error};
+use crate::internal::logging::LoggingLevel;
 use crate::internal::path::{to_path_set, to_path_vec};
 use crate::internal::settings::{
   merge_settings, sanitize_settings, CompilerSettingsOptions, JsCompilerSettingsOptions,
@@ -176,6 +177,8 @@ pub struct CompilerConfig {
   pub ignored_error_codes: Vec<u64>,
   /// Lowest diagnostic severity surfaced to consumers. Defaults to `Severity::Error` (errors only).
   pub compiler_severity_filter: Severity,
+  /// Global logging level applied to compiler operations.
+  pub logging_level: LoggingLevel,
 }
 
 impl Default for CompilerConfig {
@@ -200,6 +203,7 @@ impl Default for CompilerConfig {
       ignored_file_paths: BTreeSet::new(),
       ignored_error_codes: Vec::new(),
       compiler_severity_filter: Severity::Error,
+      logging_level: LoggingLevel::default(),
     }
   }
 }
@@ -302,6 +306,8 @@ pub struct CompilerConfigOptions {
   /// Overrides the severity filter applied to compiler diagnostics. Accepts `Severity::Error`,
   /// `Severity::Warning`, or `Severity::Info`.
   pub compiler_severity_filter: Option<Severity>,
+  /// Overrides the compiler logging level. Defaults to [`LoggingLevel::Info`].
+  pub logging_level: Option<LoggingLevel>,
 }
 
 /// Overrides for the AST helper configuration.
@@ -311,6 +317,8 @@ pub struct AstConfigOptions {
   pub solc: SolcConfigOptions,
   /// Contract name targeted by helper operations. Applies to all contracts when `None`.
   pub instrumented_contract: Option<String>,
+  /// Overrides the logging level applied to AST operations.
+  pub logging_level: Option<LoggingLevel>,
 }
 
 impl AstConfigOptions {
@@ -326,6 +334,8 @@ pub struct AstConfig {
   pub solc: SolcConfig,
   /// Contract name targeted by helper operations, when provided.
   pub instrumented_contract: Option<String>,
+  /// Logging level used for AST workflows.
+  pub logging_level: LoggingLevel,
 }
 
 impl AstConfig {
@@ -339,9 +349,13 @@ impl AstConfig {
       default_settings,
       options,
     )?;
+    let logging_level = options
+      .and_then(|opts| opts.logging_level)
+      .unwrap_or_default();
     Ok(AstConfig {
       solc,
       instrumented_contract: options.and_then(|opts| opts.instrumented_contract.clone()),
+      logging_level,
     })
   }
 
@@ -351,9 +365,11 @@ impl AstConfig {
       .instrumented_contract
       .clone()
       .or_else(|| self.instrumented_contract.clone());
+    let logging_level = overrides.logging_level.unwrap_or(self.logging_level);
     Ok(AstConfig {
       solc,
       instrumented_contract,
+      logging_level,
     })
   }
 
@@ -434,6 +450,10 @@ impl TryFrom<&JsCompilerConfigOptions> for CompilerConfigOptions {
       overrides.vyper = VyperConfigOptions::try_from(vyper)?;
     }
 
+    if let Some(level) = options.logging_level {
+      overrides.logging_level = Some(level.into());
+    }
+
     Ok(overrides)
   }
 }
@@ -510,6 +530,7 @@ impl TryFrom<&JsAstConfigOptions> for AstConfigOptions {
       typed.solc.settings = Some(CompilerSettingsOptions::try_from(settings)?);
     }
     typed.instrumented_contract = options.instrumented_contract.clone();
+    typed.logging_level = options.logging_level.map(Into::into);
 
     Ok(typed)
   }
@@ -593,6 +614,10 @@ pub struct JsCompilerConfigOptions {
   /// `"Error"` which hides warnings.
   #[napi(ts_type = "string | undefined")]
   pub compiler_severity: Option<String>,
+  /// Controls the logging verbosity (`"silent"`, `"error"`, `"warn"`, `"info"`). Defaults to
+  /// `"info"`.
+  #[napi(ts_type = "LoggingLevel | undefined")]
+  pub logging_level: Option<JsLoggingLevel>,
 }
 
 /// Selects which frontend pipeline the compiler should use.
@@ -610,6 +635,27 @@ impl From<JsCompilerLanguage> for CompilerLanguage {
       JsCompilerLanguage::Solidity => CompilerLanguage::Solidity,
       JsCompilerLanguage::Yul => CompilerLanguage::Yul,
       JsCompilerLanguage::Vyper => CompilerLanguage::Vyper,
+    }
+  }
+}
+
+/// Logging levels surfaced to JavaScript callers.
+#[napi(string_enum, js_name = "LoggingLevel")]
+#[derive(Debug, Eq, PartialEq)]
+pub enum JsLoggingLevel {
+  Silent,
+  Error,
+  Warn,
+  Info,
+}
+
+impl From<JsLoggingLevel> for LoggingLevel {
+  fn from(level: JsLoggingLevel) -> Self {
+    match level {
+      JsLoggingLevel::Silent => LoggingLevel::Silent,
+      JsLoggingLevel::Error => LoggingLevel::Error,
+      JsLoggingLevel::Warn => LoggingLevel::Warn,
+      JsLoggingLevel::Info => LoggingLevel::Info,
     }
   }
 }
@@ -676,6 +722,9 @@ pub struct JsAstConfigOptions {
   /// Contract name to target when mutating the AST. Applies to every contract when omitted.
   #[napi(ts_type = "string | undefined")]
   pub instrumented_contract: Option<String>,
+  /// Logging verbosity applied while manipulating the AST.
+  #[napi(ts_type = "LoggingLevel | undefined")]
+  pub logging_level: Option<JsLoggingLevel>,
 }
 
 #[napi(string_enum)]
@@ -960,6 +1009,7 @@ impl CompilerConfigBuilder {
       ignored_file_paths,
       ignored_error_codes,
       compiler_severity_filter,
+      logging_level,
     } = overrides;
 
     if let Some(language) = compiler {
@@ -1037,6 +1087,9 @@ impl CompilerConfigBuilder {
     }
     if let Some(severity) = compiler_severity_filter {
       self.config.compiler_severity_filter = severity;
+    }
+    if let Some(level) = logging_level {
+      self.config.logging_level = level;
     }
 
     Ok(self)

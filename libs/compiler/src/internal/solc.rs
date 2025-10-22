@@ -1,11 +1,14 @@
 use std::sync::{Mutex, OnceLock};
 
+use log::error;
 use semver::Version;
 
 use foundry_compilers::solc::{Solc, SolcLanguage};
 use napi::{bindgen_prelude::AsyncTask, Env, Task};
 
 use super::errors::{map_err_with_context, to_napi_result, Error, Result};
+
+const LOG_TARGET: &str = "tevm::solc";
 
 pub(crate) const DEFAULT_SOLC_VERSION: &str = "0.8.30";
 
@@ -26,6 +29,7 @@ pub(crate) fn ensure_installed(version: &Version) -> Result<Solc> {
   if let Some(solc) = find_installed_version(version)? {
     return Ok(solc);
   }
+  error!(target: LOG_TARGET, "Solc {} is not installed. Call installSolcVersion first.", version);
   Err(Error::new(format!(
     "Solc {} is not installed. Call installSolcVersion first.",
     version

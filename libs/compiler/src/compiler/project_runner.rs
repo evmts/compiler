@@ -1,6 +1,6 @@
-use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use super::input::CompilationInput;
 use super::output::{into_core_compile_output, CompileOutput};
@@ -18,6 +18,7 @@ use crate::internal::{
 use foundry_compilers::artifacts::sources::Source as FoundrySource;
 use foundry_compilers::compilers::multi::MultiCompiler;
 use foundry_compilers::{Project, ProjectCompileOutput};
+use log::{error, info};
 
 struct VirtualSourceEntry<'a> {
   original_path: Option<&'a str>,
@@ -27,6 +28,8 @@ struct VirtualSourceEntry<'a> {
 pub struct ProjectRunner<'a> {
   context: &'a ProjectContext,
 }
+
+const LOG_TARGET: &str = "tevm::compiler.project_runner";
 
 impl<'a> ProjectRunner<'a> {
   pub fn new(context: &'a ProjectContext) -> Self {
@@ -44,6 +47,10 @@ impl<'a> ProjectRunner<'a> {
     match input {
       CompilationInput::InlineSource { source } => {
         if matches!(self.context.layout, ProjectLayout::Synthetic) && config.cache_enabled {
+          info!(
+            target: LOG_TARGET,
+            "materialising inline source for synthetic project cache"
+          );
           let mut paths = self.write_virtual_sources(
             config,
             [VirtualSourceEntry {
@@ -60,13 +67,28 @@ impl<'a> ProjectRunner<'a> {
           });
           output.map(|out| Some(into_core_compile_output(out)))
         } else {
+          info!(
+            target: LOG_TARGET,
+            "skipping project compilation for inline source (layout={:?}, cache_enabled={})",
+            self.context.layout,
+            config.cache_enabled
+          );
           Ok(None)
         }
       }
       CompilationInput::FilePaths { paths, .. } => {
         if matches!(self.context.layout, ProjectLayout::Synthetic) && !config.cache_enabled {
+          info!(
+            target: LOG_TARGET,
+            "project compilation bypassed for filesystem paths (cache disabled)"
+          );
           return Ok(None);
         }
+        info!(
+          target: LOG_TARGET,
+          "delegating filesystem compilation to project (files={})",
+          paths.len()
+        );
         let normalized = self.context.normalise_paths(paths.as_slice())?;
         let output = self.compile_with_project(config, "Compilation failed", |project| {
           project.compile_files(normalized)
@@ -78,6 +100,12 @@ impl<'a> ProjectRunner<'a> {
         language_override,
       } => {
         if matches!(self.context.layout, ProjectLayout::Synthetic) && config.cache_enabled {
+          info!(
+            target: LOG_TARGET,
+            "materialising source map entries for project compilation (count={}, language_override={:?})",
+            sources.len(),
+            language_override
+          );
           let files = self.write_virtual_sources(
             config,
             sources.iter().map(|(path, contents)| VirtualSourceEntry {
@@ -91,14 +119,31 @@ impl<'a> ProjectRunner<'a> {
           });
           output.map(|out| Some(into_core_compile_output(out)))
         } else {
+          info!(
+            target: LOG_TARGET,
+            "skipping project compilation for source map (layout={:?}, cache_enabled={})",
+            self.context.layout,
+            config.cache_enabled
+          );
           Ok(None)
         }
       }
-      CompilationInput::AstUnits { .. } => Ok(None),
+      CompilationInput::AstUnits { .. } => {
+        info!(
+          target: LOG_TARGET,
+          "project runner skipping AST inputs; Foundry doesn't know how to cache"
+        );
+        Ok(None)
+      }
     }
   }
 
   pub fn compile_project(&self, config: &CompilerConfig) -> Result<CompileOutput> {
+    info!(
+      target: LOG_TARGET,
+      "compiling full project (layout={:?})",
+      self.context.layout
+    );
     let output = self.compile_with_project(config, "Project compilation failed", |project| {
       project.compile()
     });
@@ -110,6 +155,12 @@ impl<'a> ProjectRunner<'a> {
     config: &CompilerConfig,
     contract_name: &str,
   ) -> Result<CompileOutput> {
+    info!(
+      target: LOG_TARGET,
+      "compiling contract {} (layout={:?})",
+      contract_name,
+      self.context.layout
+    );
     let name = contract_name.to_owned();
     let output = self.compile_with_project(config, "Contract compilation failed", move |project| {
       let path = project.find_contract_path(&name)?;
@@ -132,26 +183,85 @@ impl<'a> ProjectRunner<'a> {
       foundry_compilers::error::SolcError,
     >,
   {
+    let started = Instant::now();
+    info!(target: LOG_TARGET, "starting project compilation step: {label}");
     if config.language.is_solc_language() {
+      info!(
+        target: LOG_TARGET,
+        "ensuring solc {} for project compilation",
+        config.solc_version
+      );
       solc::ensure_installed(&config.solc_version)?;
     } else if config.language == CompilerLanguage::Vyper {
+      info!(target: LOG_TARGET, "ensuring vyper compiler for project compilation");
       vyper::ensure_installed(config.vyper_settings.path.clone())?;
     }
-    let project = map_err_with_context(
+    let project = match map_err_with_context(
       build_project(config, self.context),
       "Failed to configure Solidity project",
-    )?;
-    map_err_with_context(compile_fn(&project), label)
+    ) {
+      Ok(project) => {
+        info!(
+          target: LOG_TARGET,
+          "project configuration ready (root={})",
+          self.context.root.display()
+        );
+        project
+      }
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "project configuration failed during {label}: {}",
+          err
+        );
+        return Err(err);
+      }
+    };
+
+    match map_err_with_context(compile_fn(&project), label) {
+      Ok(output) => {
+        info!(
+          target: LOG_TARGET,
+          "project compilation step succeeded ({label}) in {:?}",
+          started.elapsed()
+        );
+        Ok(output)
+      }
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "project compilation step failed ({label}): {}",
+          err
+        );
+        Err(err)
+      }
+    }
   }
 
   pub fn prepare_synthetic_context(config: &CompilerConfig) -> Result<Option<ProjectContext>> {
     if !config.cache_enabled {
+      info!(
+        target: LOG_TARGET,
+        "synthetic workspace disabled (cache_enabled=false)"
+      );
       return Ok(None);
     }
 
     let base_dir = default_cache_dir();
+    info!(
+      target: LOG_TARGET,
+      "preparing synthetic workspace under {}",
+      base_dir.display()
+    );
 
-    create_synthetic_context(base_dir.as_path()).map(Some)
+    create_synthetic_context(base_dir.as_path()).map(|context| {
+      info!(
+        target: LOG_TARGET,
+        "synthetic workspace ready at {}",
+        context.root.display()
+      );
+      Some(context)
+    })
   }
 
   fn write_virtual_sources<'entries, I>(
@@ -164,8 +274,10 @@ impl<'a> ProjectRunner<'a> {
     I: IntoIterator<Item = VirtualSourceEntry<'entries>>,
   {
     let mut paths = Vec::new();
+    let mut processed = 0usize;
 
     for entry in entries {
+      processed += 1;
       let language = language_override.unwrap_or(config.language);
       let extension = determine_extension(entry.original_path, language);
       let contents = entry.contents;
@@ -192,9 +304,19 @@ impl<'a> ProjectRunner<'a> {
         ))
       })?;
 
+      info!(
+        target: LOG_TARGET,
+        "virtual source prepared (language={:?}, path={})",
+        language,
+        path.display()
+      );
       paths.push(canonicalize_path(&path));
     }
 
+    info!(
+      target: LOG_TARGET,
+      "materialised {processed} virtual source(s)"
+    );
     Ok(paths)
   }
 }

@@ -622,7 +622,7 @@ describe('Compiler.compileFiles', () => {
 	test('throws when a path cannot be read', () => {
 		const compiler = new Compiler({ cacheEnabled: false })
 		expect(() => compiler.compileFiles(['/non-existent/path.sol'])).toThrowErrorMatchingInlineSnapshot(
-			`"Failed to read source file: No such file or directory (os error 2)"`,
+			`"Failed to read source file /non-existent/path.sol: No such file or directory (os error 2)"`,
 		)
 	})
 

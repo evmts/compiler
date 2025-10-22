@@ -8,6 +8,7 @@ use foundry_compilers::artifacts::{
 };
 use foundry_compilers::compilers::vyper::VyperInput;
 use foundry_compilers::compilers::CompilerOutput as FoundryCompilerOutput;
+use log::{error, info, warn};
 use serde_json::{json, Value};
 
 use super::input::CompilationInput;
@@ -22,6 +23,8 @@ use crate::internal::project::{
   create_synthetic_context, FoundryAdapter, HardhatAdapter, ProjectContext,
 };
 use crate::internal::{solc, vyper};
+
+const LOG_TARGET: &str = "tevm::compiler.core";
 
 #[derive(Clone)]
 pub struct State {
@@ -43,11 +46,49 @@ pub enum SourceValue {
 
 pub fn init(config: CompilerConfig, project: Option<ProjectContext>) -> Result<State> {
   let project = match project {
-    Some(context) => Some(context),
-    None => ProjectRunner::prepare_synthetic_context(&config)?,
+    Some(context) => {
+      info!(
+        target: LOG_TARGET,
+        "using provided project context (layout={:?}, root={})",
+        context.layout,
+        context.root.display()
+      );
+      Some(context)
+    }
+    None => match ProjectRunner::prepare_synthetic_context(&config)? {
+      Some(context) => {
+        info!(
+          target: LOG_TARGET,
+          "prepared synthetic workspace at {}",
+          context.root.display()
+        );
+        Some(context)
+      }
+      None => {
+        if !config.cache_enabled {
+          warn!(
+            target: LOG_TARGET,
+            "synthetic workspace disabled (cache_enabled=false); proceeding without caching sources"
+          );
+        } else {
+          info!(
+            target: LOG_TARGET,
+            "no project context detected; compiling without synthetic workspace"
+          );
+        }
+        None
+      }
+    },
   };
   if config.language.is_solc_language() {
+    info!(
+      target: LOG_TARGET,
+      "ensuring solc {} is available",
+      config.solc_version
+    );
     solc::ensure_installed(&config.solc_version)?;
+  } else if config.language == CompilerLanguage::Vyper {
+    info!(target: LOG_TARGET, "using Vyper backend for compilation");
   }
   Ok(State { config, project })
 }
@@ -120,10 +161,29 @@ pub fn compile_as(
   input: CompilationInput,
 ) -> Result<CompileOutput> {
   if let Some(context) = &state.project {
+    info!(
+      target: LOG_TARGET,
+      "attempting to compile as project (layout={:?})",
+      context.layout
+    );
     let runner = ProjectRunner::new(context);
-    if let Some(result) = runner.compile(config, &input)? {
-      return Ok(result);
+    match runner.compile(config, &input)? {
+      Some(result) => {
+        info!(target: LOG_TARGET, "compilation succeeded");
+        return Ok(result);
+      }
+      None => {
+        info!(
+          target: LOG_TARGET,
+          "unable to compile a project; falling back to standalone pipeline"
+        );
+      }
     }
+  } else {
+    info!(
+      target: LOG_TARGET,
+      "no project context attached; using standalone compiler pipeline"
+    );
   }
 
   compile_pure(config, input)
@@ -146,21 +206,48 @@ pub fn compile_contract(
 fn compile_pure(config: &CompilerConfig, input: CompilationInput) -> Result<CompileOutput> {
   match input {
     CompilationInput::InlineSource { source } => {
+      info!(
+        target: LOG_TARGET,
+        "compiling inline source (len={}, language={:?})",
+        source.len(),
+        config.language
+      );
       compile_inline_source(config, source, config.language)
     }
     CompilationInput::SourceMap {
       sources,
       language_override,
     } => {
+      info!(
+        target: LOG_TARGET,
+        "compiling source map (entries={}, language_override={:?})",
+        sources.len(),
+        language_override
+      );
       let resolved_language = language_override.unwrap_or(config.language);
       let solc_sources = sources_from_map(sources);
       compile_standard_sources(config, solc_sources, resolved_language)
     }
-    CompilationInput::AstUnits { units } => compile_ast_sources(config, units),
+    CompilationInput::AstUnits { units } => {
+      info!(
+        target: LOG_TARGET,
+        "compiling pre-parsed AST units (count={})",
+        units.len()
+      );
+      compile_ast_sources(config, units)
+    }
     CompilationInput::FilePaths {
       paths,
       language_override,
-    } => compile_file_paths(config, paths, language_override),
+    } => {
+      info!(
+        target: LOG_TARGET,
+        "compiling filesystem paths (count={}, language_override={:?})",
+        paths.len(),
+        language_override
+      );
+      compile_file_paths(config, paths, language_override)
+    }
   }
 }
 
@@ -186,6 +273,12 @@ fn compile_standard_sources(
 ) -> Result<CompileOutput> {
   match language {
     CompilerLanguage::Solidity | CompilerLanguage::Yul => {
+      info!(
+        target: LOG_TARGET,
+        "running solc compilation (language={:?}, sources={})",
+        language,
+        sources.len()
+      );
       let solc_language = to_solc_language(language)?;
       let solc_config = SolcConfig {
         version: config.solc_version.clone(),
@@ -200,6 +293,11 @@ fn compile_standard_sources(
       Ok(from_standard_json(output))
     }
     CompilerLanguage::Vyper => {
+      info!(
+        target: LOG_TARGET,
+        "running vyper compilation (sources={})",
+        sources.len()
+      );
       let vyper_compiler = vyper::ensure_installed(config.vyper_settings.path.clone())?;
       let search_paths = combined_vyper_search_paths(config);
       let mut settings = config
@@ -279,16 +377,41 @@ fn compile_file_paths(
   language_override: Option<CompilerLanguage>,
 ) -> Result<CompileOutput> {
   if paths.is_empty() {
+    warn!(
+      target: LOG_TARGET,
+      "compile_file_paths invoked with empty input"
+    );
     return Err(Error::new("compileFiles requires at least one path."));
   }
+
+  let path_count = paths.len();
+  info!(
+    target: LOG_TARGET,
+    "compiling filesystem sources (count={}, language_override={:?})",
+    path_count,
+    language_override
+  );
 
   let mut string_entries: BTreeMap<String, String> = BTreeMap::new();
   let mut ast_entries: BTreeMap<String, SourceUnit> = BTreeMap::new();
   let mut detected_language: Option<CompilerLanguage> = None;
 
   for original in paths {
-    let content =
-      map_err_with_context(fs::read_to_string(&original), "Failed to read source file")?;
+    let content = match fs::read_to_string(&original) {
+      Ok(content) => content,
+      Err(err) => {
+        error!(
+          target: LOG_TARGET,
+          "failed to read source file {}: {}",
+          original.display(),
+          err
+        );
+        return Err(Error::with_context(
+          format!("Failed to read source file {}", original.display()),
+          err,
+        ));
+      }
+    };
     let canonical_path = original.canonicalize().unwrap_or_else(|_| original.clone());
     let canonical_string = canonical_path.to_string_lossy().into_owned();
 
@@ -300,6 +423,10 @@ fn compile_file_paths(
     if language_override.is_none() {
       if let Some(existing) = detected_language {
         if existing != inferred {
+          warn!(
+            target: LOG_TARGET,
+            "detected mixed source languages ({existing:?} vs {inferred:?})"
+          );
           return Err(Error::new(
             "compileFiles requires all non-AST sources to share the same language. Provide language explicitly to disambiguate.",
           ));
@@ -313,12 +440,21 @@ fn compile_file_paths(
   }
 
   if !string_entries.is_empty() && !ast_entries.is_empty() {
+    warn!(
+      target: LOG_TARGET,
+      "rejecting mixed inline sources and AST entries"
+    );
     return Err(Error::new(
       "compileSources does not support mixing inline source strings with AST entries in the same call.",
     ));
   }
 
   if !ast_entries.is_empty() {
+    info!(
+      target: LOG_TARGET,
+      "delegating filesystem AST compilation (count={})",
+      ast_entries.len()
+    );
     let mut updated = config.clone();
     updated.language = CompilerLanguage::Solidity;
     return compile_ast_sources(&updated, ast_entries);
@@ -327,6 +463,11 @@ fn compile_file_paths(
   let final_language = language_override
     .or(detected_language)
     .unwrap_or(config.language);
+  info!(
+    target: LOG_TARGET,
+    "using final language {:?} for filesystem compilation",
+    final_language
+  );
   let mut updated = config.clone();
   updated.language = final_language;
   let sources = sources_from_map(string_entries);

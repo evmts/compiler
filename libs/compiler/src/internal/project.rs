@@ -25,7 +25,7 @@ use crate::internal::path::{canonicalize_path, canonicalize_with_base, ProjectPa
 use crate::internal::settings::CompilerSettingsOptions;
 use crate::internal::vyper;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ProjectLayout {
   Hardhat,
   Foundry,

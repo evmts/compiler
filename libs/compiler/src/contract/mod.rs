@@ -9,6 +9,7 @@ use core::{
 };
 use foundry_compilers::artifacts::ConfigurableContractArtifact;
 use foundry_compilers::Artifact;
+use log::info;
 use napi::bindgen_prelude::*;
 use napi::{Either, JsUnknown, ValueType};
 use serde::{Deserialize, Serialize};
@@ -18,6 +19,8 @@ use std::collections::HashMap;
 pub use core::{
   ContractBytecode, ContractState, ImmutableSlot, JsEwasm, JsFunctionDebugDataEntry, JsGasEstimates,
 };
+
+const LOG_TARGET: &str = "tevm::contract";
 
 // -----------------------------------------------------------------------------
 // Rust-facing contract wrapper
@@ -32,6 +35,8 @@ pub struct Contract {
 impl Contract {
   /// Create a new contract snapshot with only its name populated.
   pub fn new(name: impl Into<String>) -> Self {
+    let name = name.into();
+    info!(target: LOG_TARGET, "initialising contract state for {name}");
     Self {
       state: new_state(name),
     }
@@ -42,6 +47,12 @@ impl Contract {
     name: impl Into<String>,
     contract: &foundry_compilers::artifacts::contract::Contract,
   ) -> Self {
+    let name = name.into();
+    info!(
+      target: LOG_TARGET,
+      "building contract {} from standard JSON artifact",
+      name
+    );
     Self {
       state: from_foundry_standard_json(name, contract),
     }
@@ -52,6 +63,12 @@ impl Contract {
     name: impl Into<String>,
     artifact: &ConfigurableContractArtifact,
   ) -> Self {
+    let name = name.into();
+    info!(
+      target: LOG_TARGET,
+      "building contract {} from configurable artifact",
+      name
+    );
     Self {
       state: from_configurable_artifact(name, artifact),
     }
@@ -59,6 +76,12 @@ impl Contract {
 
   /// Construct from any Foundry project artifact surfaced through the artifact graph.
   pub fn from_foundry_project_artifact(name: impl Into<String>, artifact: &impl Artifact) -> Self {
+    let name = name.into();
+    info!(
+      target: LOG_TARGET,
+      "building contract {} from project artifact",
+      name
+    );
     Self {
       state: from_foundry_project_artifact(name, artifact),
     }
@@ -101,16 +124,31 @@ impl Contract {
 
   /// Update the recorded contract address.
   pub fn with_address(&mut self, address: Option<String>) {
+    let address_repr = address.as_deref().unwrap_or("<unset>");
+    info!(
+      target: LOG_TARGET,
+      "updating contract address to {address_repr}"
+    );
     self.state.address = address;
   }
 
   /// Replace the recorded creation bytecode.
   pub fn with_creation_bytecode(&mut self, bytecode: Option<ContractBytecode>) {
+    let length = bytecode.as_ref().map(|value| value.len()).unwrap_or(0);
+    info!(
+      target: LOG_TARGET,
+      "updating creation bytecode (len={length})"
+    );
     self.state.creation_bytecode = bytecode;
   }
 
   /// Replace the recorded deployed bytecode.
   pub fn with_deployed_bytecode(&mut self, bytecode: Option<ContractBytecode>) {
+    let length = bytecode.as_ref().map(|value| value.len()).unwrap_or(0);
+    info!(
+      target: LOG_TARGET,
+      "updating deployed bytecode (len={length})"
+    );
     self.state.deployed_bytecode = bytecode;
   }
 }

@@ -236,6 +236,8 @@ export interface AstConfigOptions {
   solcSettings?: CompilerSettings | undefined
   /** Contract name to target when mutating the AST. Applies to every contract when omitted. */
   instrumentedContract?: string | undefined
+  /** Logging verbosity applied while manipulating the AST. */
+  loggingLevel?: LoggingLevel | undefined
 }
 
 export declare const enum BytecodeHash {
@@ -330,6 +332,11 @@ export interface CompilerConfigOptions {
    * `"Error"` which hides warnings.
    */
   compilerSeverity?: string | undefined
+  /**
+   * Controls the logging verbosity (`"silent"`, `"error"`, `"warn"`, `"info"`). Defaults to
+   * `"info"`.
+   */
+  loggingLevel?: LoggingLevel | undefined
 }
 
 /** Normalised compiler diagnostic exposed through the TypeScript bindings. */
@@ -521,6 +528,14 @@ export interface ImmutableSlot {
   start: number
   /** Byte length occupied by the immutable value. */
   length: number
+}
+
+/** Logging levels surfaced to JavaScript callers. */
+export declare const enum LoggingLevel {
+  Silent = 'Silent',
+  Error = 'Error',
+  Warn = 'Warn',
+  Info = 'Info'
 }
 
 export declare const enum ModelCheckerEngine {
