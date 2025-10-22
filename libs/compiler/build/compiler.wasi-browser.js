@@ -82,22 +82,23 @@ function __napi_rs_initialize_modules(__napiInstance) {
   __napiInstance.exports['__napi_register__JsVyperCompilerConfig_struct_88']?.()
   __napiInstance.exports['__napi_register__JsAstConfigOptions_struct_89']?.()
   __napiInstance.exports['__napi_register__SolcLanguage_90']?.()
-  __napiInstance.exports['__napi_register__ProjectPaths_struct_91']?.()
-  __napiInstance.exports['__napi_register__JsCompilerSettingsOptions_struct_92']?.()
-  __napiInstance.exports['__napi_register__JsOptimizerSettingsOptions_struct_93']?.()
-  __napiInstance.exports['__napi_register__JsOptimizerDetailsOptions_struct_94']?.()
-  __napiInstance.exports['__napi_register__JsYulDetailsOptions_struct_95']?.()
-  __napiInstance.exports['__napi_register__JsDebuggingSettingsOptions_struct_96']?.()
-  __napiInstance.exports['__napi_register__JsSettingsMetadataOptions_struct_97']?.()
-  __napiInstance.exports['__napi_register__JsModelCheckerSettingsOptions_struct_98']?.()
-  __napiInstance.exports['__napi_register__BytecodeHash_99']?.()
-  __napiInstance.exports['__napi_register__RevertStrings_100']?.()
-  __napiInstance.exports['__napi_register__ModelCheckerEngine_101']?.()
-  __napiInstance.exports['__napi_register__ModelCheckerTarget_102']?.()
-  __napiInstance.exports['__napi_register__ModelCheckerInvariant_103']?.()
-  __napiInstance.exports['__napi_register__ModelCheckerSolver_104']?.()
-  __napiInstance.exports['__napi_register__ModelCheckerInvariantKind_105']?.()
-  __napiInstance.exports['__napi_register__EvmVersion_106']?.()
+  __napiInstance.exports['__napi_register__JsResolveConflictStrategy_91']?.()
+  __napiInstance.exports['__napi_register__ProjectPaths_struct_92']?.()
+  __napiInstance.exports['__napi_register__JsCompilerSettingsOptions_struct_93']?.()
+  __napiInstance.exports['__napi_register__JsOptimizerSettingsOptions_struct_94']?.()
+  __napiInstance.exports['__napi_register__JsOptimizerDetailsOptions_struct_95']?.()
+  __napiInstance.exports['__napi_register__JsYulDetailsOptions_struct_96']?.()
+  __napiInstance.exports['__napi_register__JsDebuggingSettingsOptions_struct_97']?.()
+  __napiInstance.exports['__napi_register__JsSettingsMetadataOptions_struct_98']?.()
+  __napiInstance.exports['__napi_register__JsModelCheckerSettingsOptions_struct_99']?.()
+  __napiInstance.exports['__napi_register__BytecodeHash_100']?.()
+  __napiInstance.exports['__napi_register__RevertStrings_101']?.()
+  __napiInstance.exports['__napi_register__ModelCheckerEngine_102']?.()
+  __napiInstance.exports['__napi_register__ModelCheckerTarget_103']?.()
+  __napiInstance.exports['__napi_register__ModelCheckerInvariant_104']?.()
+  __napiInstance.exports['__napi_register__ModelCheckerSolver_105']?.()
+  __napiInstance.exports['__napi_register__ModelCheckerInvariantKind_106']?.()
+  __napiInstance.exports['__napi_register__EvmVersion_107']?.()
 }
 export const Ast = __napiModule.exports.Ast
 export const JsAst = __napiModule.exports.JsAst
@@ -120,6 +121,8 @@ export const ModelCheckerInvariant = __napiModule.exports.ModelCheckerInvariant
 export const ModelCheckerInvariantKind = __napiModule.exports.ModelCheckerInvariantKind
 export const ModelCheckerSolver = __napiModule.exports.ModelCheckerSolver
 export const ModelCheckerTarget = __napiModule.exports.ModelCheckerTarget
+export const ResolveConflictStrategy = __napiModule.exports.ResolveConflictStrategy
+export const JsResolveConflictStrategy = __napiModule.exports.JsResolveConflictStrategy
 export const RevertStrings = __napiModule.exports.RevertStrings
 export const SeverityLevel = __napiModule.exports.SeverityLevel
 export const SolcLanguage = __napiModule.exports.SolcLanguage

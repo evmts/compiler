@@ -26,7 +26,7 @@ pub use contract::{
 };
 pub use internal::config::{
   AstConfig, AstConfigOptions, CompilerConfig, CompilerConfigOptions, JsAstConfigOptions,
-  JsCompilerConfigOptions, SolcConfig, SolcConfigOptions,
+  JsCompilerConfigOptions, ResolveConflictStrategy, SolcConfig, SolcConfigOptions,
 };
 pub use internal::errors::{Error, Result};
 pub use internal::path::ProjectPaths;

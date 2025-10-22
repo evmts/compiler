@@ -4,11 +4,11 @@ use foundry_compilers::artifacts::ast::{
 use foundry_compilers::solc::SolcLanguage;
 
 use super::{orchestrator::AstOrchestrator, stitcher, utils};
-use crate::internal::config::{AstConfig, AstConfigOptions};
+use crate::internal::config::{AstConfig, AstConfigOptions, ResolveConflictStrategy};
 use crate::internal::errors::{map_err_with_context, Error, Result};
 use crate::internal::logging::{ensure_rust_logger, update_level};
 use crate::internal::solc;
-use log::{error, info, warn};
+use log::{error, info};
 use serde_json::{json, Value};
 
 const VIRTUAL_SOURCE_PATH: &str = "__VIRTUAL__.sol";
@@ -213,6 +213,7 @@ fn inject_fragment_contract(
   state: &mut State,
   fragment_contract: ContractDefinition,
   overrides: Option<&AstConfigOptions>,
+  strategy: ResolveConflictStrategy,
 ) -> Result<()> {
   let contract_name = contract_override(state, overrides).map(|name| name.to_owned());
   let contract_idx = {
@@ -222,7 +223,12 @@ fn inject_fragment_contract(
 
   let target_ast = target_ast_mut(state)?;
   map_err_with_context(
-    AstOrchestrator::stitch_fragment_into_contract(target_ast, contract_idx, &fragment_contract),
+    AstOrchestrator::stitch_fragment_into_contract(
+      target_ast,
+      contract_idx,
+      &fragment_contract,
+      strategy,
+    ),
     "Failed to stitch AST nodes",
   )
 }
@@ -367,7 +373,7 @@ pub fn validate(state: &mut State, overrides: Option<&AstConfigOptions>) -> Resu
       }
     }
     if !messages.is_empty() {
-      warn!(
+      error!(
         target: LOG_TARGET,
         "AST validation failed with {} error(s)",
         messages.len()
@@ -438,12 +444,13 @@ fn inject_fragment_string(
   let config = resolve_config(state, overrides)?;
   let solc = solc::ensure_installed(&config.solc.version)?;
 
+  let strategy = config.resolve_conflict_strategy;
   let fragment_contract = map_err_with_context(
     AstOrchestrator::parse_fragment_contract(fragment_source, &solc, &config.solc.settings),
     "Failed to parse AST fragment",
   )?;
 
-  inject_fragment_contract(state, fragment_contract, overrides)
+  inject_fragment_contract(state, fragment_contract, overrides, strategy)
 }
 
 fn inject_fragment_ast(
@@ -454,12 +461,13 @@ fn inject_fragment_ast(
   let config = resolve_config(state, overrides)?;
   solc::ensure_installed(&config.solc.version)?;
 
+  let strategy = config.resolve_conflict_strategy;
   let fragment_contract = map_err_with_context(
     AstOrchestrator::extract_fragment_contract(&fragment_ast),
     "Failed to locate fragment contract",
   )?;
 
-  inject_fragment_contract(state, fragment_contract, overrides)
+  inject_fragment_contract(state, fragment_contract, overrides, strategy)
 }
 
 #[cfg(test)]
@@ -522,6 +530,7 @@ contract Target {
       solc: crate::SolcConfigOptions::default(),
       instrumented_contract: Some("Target".into()),
       logging_level: None,
+      resolve_conflict_strategy: None,
     };
 
     inject_shadow(
@@ -602,6 +611,7 @@ contract Target {
       solc: crate::SolcConfigOptions::default(),
       instrumented_contract: Some("Target".into()),
       logging_level: None,
+      resolve_conflict_strategy: None,
     };
     expose_internal_variables(&mut state, Some(&overrides)).expect("expose vars");
     expose_internal_functions(&mut state, Some(&overrides)).expect("expose funcs");

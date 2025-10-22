@@ -115,7 +115,7 @@ const inlineSnapshot = syntheticCompiler.compileSource("contract Foo { }");
 ### Manipulate ASTs for shadowing contracts
 
 ```ts
-import { Ast, Compiler } from "@tevm/compiler";
+import { Ast, Compiler, ResolveConflictStrategy } from "@tevm/compiler";
 
 await Compiler.installSolcVersion("0.8.30");
 
@@ -135,6 +135,15 @@ const compiler = new Compiler({ solcVersion: "0.8.30" });
 const output = compiler.compileSources({ "Example.sol": stitched });
 // The compilation output returns ast classes as well
 const ast = output.artifacts["Example.sol"].ast;
+```
+
+When a fragment redefines existing members you can switch the conflict strategy to replace the matching node while still appending the rest:
+
+```ts
+astHelper.injectShadow(
+  "function getValue() public view returns (uint256) { return value + 1; }",
+  { resolveConflictStrategy: ResolveConflictStrategy.Replace },
+)
 ```
 
 AST helpers only support Solidity targets; requests for other languages throw with actionable guidance. Node IDs remain unique after fragment injection, making the resulting tree safe to feed back into the compiler.

@@ -3,7 +3,7 @@ use foundry_compilers::artifacts::{output_selection::OutputSelection, Settings};
 use foundry_compilers::solc::Solc;
 
 use super::{error::AstError, parser, stitcher, utils};
-use crate::internal::settings;
+use crate::internal::{config::ResolveConflictStrategy, settings};
 
 pub(crate) struct AstOrchestrator;
 
@@ -44,6 +44,7 @@ impl AstOrchestrator {
     target: &mut SourceUnit,
     contract_idx: usize,
     fragment_contract: &ContractDefinition,
+    strategy: ResolveConflictStrategy,
   ) -> Result<(), AstError> {
     let max_target_id = utils::max_id(target)?;
     stitcher::stitch_fragment_nodes_into_contract(
@@ -51,6 +52,7 @@ impl AstOrchestrator {
       contract_idx,
       fragment_contract,
       max_target_id,
+      strategy,
     )
   }
 }
@@ -58,7 +60,10 @@ impl AstOrchestrator {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::{ast::stitcher, internal::solc};
+  use crate::{
+    ast::stitcher,
+    internal::{config::ResolveConflictStrategy, solc},
+  };
   use foundry_compilers::{
     artifacts::ast::{ContractDefinitionPart, SourceUnitPart},
     solc::Solc,
@@ -108,8 +113,13 @@ contract Target {
     let idx = stitcher::find_instrumented_contract_index(&unit, Some("Target"))
       .expect("find target contract");
 
-    AstOrchestrator::stitch_fragment_into_contract(&mut unit, idx, &fragment)
-      .expect("stitch fragment");
+    AstOrchestrator::stitch_fragment_into_contract(
+      &mut unit,
+      idx,
+      &fragment,
+      ResolveConflictStrategy::Safe,
+    )
+    .expect("stitch fragment");
 
     let SourceUnitPart::ContractDefinition(contract) = &unit.nodes[idx] else {
       panic!("expected contract definition");

@@ -238,6 +238,13 @@ export interface AstConfigOptions {
   instrumentedContract?: string | undefined
   /** Logging verbosity applied while manipulating the AST. */
   loggingLevel?: LoggingLevel | undefined
+  /**
+   * Conflict resolution strategy applied while stitching fragments.
+   * Default strategy is `ResolveConflictStrategy::Safe`, which will fail to compile if
+   * conflicting members are found (usually conflicting name). `ResolveConflictStrategy::Replace`
+   * will overwrite the existing members when conflicting.
+   */
+  resolveConflictStrategy?: ResolveConflictStrategy | undefined
 }
 
 export declare const enum BytecodeHash {
@@ -654,6 +661,11 @@ export interface ProjectPaths {
    * projects this lives under `~/.tevm/virtual-sources`).
    */
   virtualSources?: string
+}
+
+export declare const enum ResolveConflictStrategy {
+  Safe = 'Safe',
+  Replace = 'Replace'
 }
 
 export declare const enum RevertStrings {

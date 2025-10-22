@@ -319,6 +319,8 @@ pub struct AstConfigOptions {
   pub instrumented_contract: Option<String>,
   /// Overrides the logging level applied to AST operations.
   pub logging_level: Option<LoggingLevel>,
+  /// Controls how AST stitching resolves contract member conflicts.
+  pub resolve_conflict_strategy: Option<ResolveConflictStrategy>,
 }
 
 impl AstConfigOptions {
@@ -336,6 +338,8 @@ pub struct AstConfig {
   pub instrumented_contract: Option<String>,
   /// Logging level used for AST workflows.
   pub logging_level: LoggingLevel,
+  /// Conflict resolution strategy applied when stitching fragments.
+  pub resolve_conflict_strategy: ResolveConflictStrategy,
 }
 
 impl AstConfig {
@@ -352,10 +356,14 @@ impl AstConfig {
     let logging_level = options
       .and_then(|opts| opts.logging_level)
       .unwrap_or_default();
+    let resolve_conflict_strategy = options
+      .and_then(|opts| opts.resolve_conflict_strategy)
+      .unwrap_or_default();
     Ok(AstConfig {
       solc,
       instrumented_contract: options.and_then(|opts| opts.instrumented_contract.clone()),
       logging_level,
+      resolve_conflict_strategy,
     })
   }
 
@@ -366,10 +374,14 @@ impl AstConfig {
       .clone()
       .or_else(|| self.instrumented_contract.clone());
     let logging_level = overrides.logging_level.unwrap_or(self.logging_level);
+    let resolve_conflict_strategy = overrides
+      .resolve_conflict_strategy
+      .unwrap_or(self.resolve_conflict_strategy);
     Ok(AstConfig {
       solc,
       instrumented_contract,
       logging_level,
+      resolve_conflict_strategy,
     })
   }
 
@@ -531,6 +543,9 @@ impl TryFrom<&JsAstConfigOptions> for AstConfigOptions {
     }
     typed.instrumented_contract = options.instrumented_contract.clone();
     typed.logging_level = options.logging_level.map(Into::into);
+    typed.resolve_conflict_strategy = options
+      .resolve_conflict_strategy
+      .map(ResolveConflictStrategy::from);
 
     Ok(typed)
   }
@@ -725,6 +740,12 @@ pub struct JsAstConfigOptions {
   /// Logging verbosity applied while manipulating the AST.
   #[napi(ts_type = "LoggingLevel | undefined")]
   pub logging_level: Option<JsLoggingLevel>,
+  /// Conflict resolution strategy applied while stitching fragments.
+  /// Default strategy is `ResolveConflictStrategy::Safe`, which will fail to compile if
+  /// conflicting members are found (usually conflicting name). `ResolveConflictStrategy::Replace`
+  /// will overwrite the existing members when conflicting.
+  #[napi(ts_type = "ResolveConflictStrategy | undefined")]
+  pub resolve_conflict_strategy: Option<JsResolveConflictStrategy>,
 }
 
 #[napi(string_enum)]
@@ -739,6 +760,38 @@ impl From<SolcLanguage> for FoundrySolcLanguage {
     match language {
       SolcLanguage::Solidity => FoundrySolcLanguage::Solidity,
       SolcLanguage::Yul => FoundrySolcLanguage::Yul,
+    }
+  }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ResolveConflictStrategy {
+  #[default]
+  Safe,
+  Replace,
+}
+
+#[napi(string_enum, js_name = "ResolveConflictStrategy")]
+#[derive(Debug, Eq, PartialEq)]
+pub enum JsResolveConflictStrategy {
+  Safe,
+  Replace,
+}
+
+impl From<JsResolveConflictStrategy> for ResolveConflictStrategy {
+  fn from(strategy: JsResolveConflictStrategy) -> Self {
+    match strategy {
+      JsResolveConflictStrategy::Safe => ResolveConflictStrategy::Safe,
+      JsResolveConflictStrategy::Replace => ResolveConflictStrategy::Replace,
+    }
+  }
+}
+
+impl From<ResolveConflictStrategy> for JsResolveConflictStrategy {
+  fn from(strategy: ResolveConflictStrategy) -> Self {
+    match strategy {
+      ResolveConflictStrategy::Safe => JsResolveConflictStrategy::Safe,
+      ResolveConflictStrategy::Replace => JsResolveConflictStrategy::Replace,
     }
   }
 }

@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { Ast, Compiler } from '../build/index.js'
+import { Ast, Compiler, ResolveConflictStrategy } from '../build/index.js'
 import type { ContractDefinition, SourceUnit } from '../build/solc-ast.js'
 
 const DEFAULT_SOLC_VERSION = '0.8.30'
@@ -14,6 +14,7 @@ const INLINE_SOURCE = readFileSync(join(CONTRACTS_DIR, 'InlineExample.sol'), 'ut
 const MULTI_CONTRACT_SOURCE = readFileSync(join(CONTRACTS_DIR, 'MultiContract.sol'), 'utf8')
 const NO_CONTRACTS_SOURCE = readFileSync(join(CONTRACTS_DIR, 'NoContracts.sol'), 'utf8')
 const FUNCTION_FRAGMENT = readFileSync(join(FRAGMENTS_DIR, 'function_fragment.sol'), 'utf8')
+const FUNCTION_FRAGMENT_OVERRIDE = readFileSync(join(FRAGMENTS_DIR, 'function_fragment_override.sol'), 'utf8')
 const VARIABLE_FRAGMENT = readFileSync(join(FRAGMENTS_DIR, 'variable_fragment.sol'), 'utf8')
 const SHADOW_CONTRACT_FRAGMENT = readFileSync(join(FRAGMENTS_DIR, 'shadow_contract.sol'), 'utf8')
 const EMPTY_SOURCE_UNIT = JSON.parse(readFileSync(join(AST_DIR, 'empty_source_unit.json'), 'utf8'))
@@ -211,6 +212,49 @@ describe('injectShadow', () => {
 		expect(() => ast.injectShadow(FUNCTION_FRAGMENT)).toThrowErrorMatchingInlineSnapshot(
 			`"Ast has no target AST. Call from_source first."`,
 		)
+	})
+
+	test('defaults to safe conflict resolution when members clash', () => {
+		const instrumented = createAst()
+			.fromSource(INLINE_SOURCE)
+			.injectShadow(FUNCTION_FRAGMENT)
+			.injectShadow(FUNCTION_FRAGMENT_OVERRIDE)
+
+		const contract = findContract(instrumented.ast(), 'InlineExample')!
+		const tapStored = contract.nodes.filter(
+			(node): node is any => node.nodeType === 'FunctionDefinition' && (node as any).name === 'tapStored',
+		)
+		expect(tapStored).toHaveLength(2)
+		expect(() => instrumented.validate()).toThrow('Analysis of the AST failed')
+	})
+
+	test('replace conflict strategy swaps existing members in place', () => {
+		const instrumented = createAst().fromSource(INLINE_SOURCE).injectShadow(FUNCTION_FRAGMENT)
+
+		const original = findTapStored(instrumented.ast())
+		const originalId = original.id
+
+		instrumented.injectShadow(FUNCTION_FRAGMENT_OVERRIDE, {
+			resolveConflictStrategy: ResolveConflictStrategy.Replace,
+		})
+
+		const contract = findContract(instrumented.ast(), 'InlineExample')!
+		const tapStored = contract.nodes.filter(
+			(node): node is any => node.nodeType === 'FunctionDefinition' && (node as any).name === 'tapStored',
+		)
+		expect(tapStored).toHaveLength(1)
+		expect(tapStored[0].id).toBe(originalId)
+		expect(JSON.stringify(tapStored[0].body)).toContain('"42"')
+
+		const replacementVariable = contract.nodes.find(
+			(node): node is any => node.nodeType === 'VariableDeclaration' && (node as any).name === 'replacementCounter',
+		)
+		expect(replacementVariable).toBeDefined()
+
+		const ids: number[] = []
+		collectIds(instrumented.ast(), ids)
+		expect(ids.length).toBe(new Set(ids).size)
+		instrumented.validate()
 	})
 })
 
