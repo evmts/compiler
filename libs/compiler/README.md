@@ -18,7 +18,7 @@ Rust + N-API bindings that expose Foundry's multi-language compiler (Solidity, Y
 3. **Build native bindings**
    ```bash
    pnpm nx run compiler:build
-   pnpm nx run compiler:post-build   # copies curated .d.ts files, type-checks, regenerates build/llms.md
+   pnpm nx run compiler:post-build   # copies curated .d.ts files, type-checks, regenerates build/llms.txt
    ```
 4. **Run the full test matrix**
    ```bash
@@ -27,7 +27,7 @@ Rust + N-API bindings that expose Foundry's multi-language compiler (Solidity, Y
 
 ## Usage
 
-- Feed `libs/compiler/build/llms.md` to your favourite LLM and ask how to adapt the compiler for your workflow—the bundle includes the public API surface, curated `.d.ts`, and executable specs.
+- Feed `libs/compiler/build/llms.txt` to your favourite LLM and ask how to adapt the compiler for your workflow—the bundle includes the public API surface, curated `.d.ts`, and executable specs.
 - The sections below show direct JavaScript usage patterns; all examples run in Node.js or Bun.
 
 ### Compile inline sources
@@ -84,57 +84,57 @@ const output = compiler.compileFiles(['Example.sol', 'Another.sol'])
 ### Target existing projects
 
 ```ts
-import { Compiler } from "@tevm/compiler"
-import { join } from "node:path"
+import { Compiler } from "@tevm/compiler";
+import { join } from "node:path";
 
 // Reuse foundry.toml configuration, remappings, and cache directories.
-const foundryRoot = join(process.cwd(), "projects", "foundry-sample")
+const foundryRoot = join(process.cwd(), "projects", "foundry-sample");
 const foundryCompiler = Compiler.fromFoundryRoot(foundryRoot, {
   solcVersion: "0.8.30",
-})
+});
 
 // Compile everything the project declares in its remappings/sources
-const projectSnapshot = foundryCompiler.compileProject()
+const projectSnapshot = foundryCompiler.compileProject();
 // Narrow to a single contract that will be resolved with the project graph
-const counterSnapshot = foundryCompiler.compileContract("Counter")
+const counterSnapshot = foundryCompiler.compileContract("Counter");
 
 // Hardhat projects automatically normalise cache + build-info placement
-const hardhatRoot = join(process.cwd(), "projects", "hardhat-sample")
-const hardhatCompiler = Compiler.fromHardhatRoot(hardhatRoot)
+const hardhatRoot = join(process.cwd(), "projects", "hardhat-sample");
+const hardhatCompiler = Compiler.fromHardhatRoot(hardhatRoot);
 const compiledHardhat = hardhatCompiler.compileSources({
   "Inline.sol": "contract Inline { function value() public {} }",
-})
+});
 
 // Work inside an arbitrary directory while still persisting .tevm artifacts.
-const syntheticRoot = join(process.cwd(), "tmp", "inline-only")
-const syntheticCompiler = Compiler.fromRoot(syntheticRoot)
+const syntheticRoot = join(process.cwd(), "tmp", "inline-only");
+const syntheticCompiler = Compiler.fromRoot(syntheticRoot);
 // or `new Compiler()` which will use the current workspace as root
-const inlineSnapshot = syntheticCompiler.compileSource("contract Foo { }")
+const inlineSnapshot = syntheticCompiler.compileSource("contract Foo { }");
 ```
 
 ### Manipulate ASTs for shadowing contracts
 
 ```ts
-import { Ast, Compiler } from "@tevm/compiler"
+import { Ast, Compiler } from "@tevm/compiler";
 
-await Compiler.installSolcVersion("0.8.30")
+await Compiler.installSolcVersion("0.8.30");
 
 const astHelper = new Ast({
   solcVersion: "0.8.30",
   instrumentedContract: "Example", // this is not necessary if there is only one contract
 })
-  .fromSource('contract Example { uint256 private value; }')
-  .injectShadow('function getValue() public returns (uint256) { return value; }') // any inline Solidity (contract body)
+  .fromSource("contract Example { uint256 private value; }")
+  .injectShadow("function getValue() public returns (uint256) { return value; }") // any inline Solidity (contract body)
   .exposeInternalFunctions() // promote private/internal functions
   .exposeInternalVariables() // promote private/internal variables
-  .validate() // optional: recompiles to ensure the AST is sound
+  .validate(); // optional: recompiles to ensure the AST is sound
 
-const stitched = astHelper.ast() // SourceUnit ready for compilation
+const stitched = astHelper.ast(); // SourceUnit ready for compilation
 
-const compiler = new Compiler({ solcVersion: "0.8.30" })
-const output = compiler.compileSources({ "Example.sol": stitched })
+const compiler = new Compiler({ solcVersion: "0.8.30" });
+const output = compiler.compileSources({ "Example.sol": stitched });
 // The compilation output returns ast classes as well
-const ast = output.artifacts["Example.sol"].ast
+const ast = output.artifacts["Example.sol"].ast;
 ```
 
 AST helpers only support Solidity targets; requests for other languages throw with actionable guidance. Node IDs remain unique after fragment injection, making the resulting tree safe to feed back into the compiler.
@@ -142,16 +142,14 @@ AST helpers only support Solidity targets; requests for other languages throw wi
 ### Contract snapshots
 
 ```ts
-import { Contract } from "@tevm/compiler"
+import { Contract } from "@tevm/compiler";
 
-const counter = Contract.fromSolcContractOutput("Counter", artifact)
-  .withAddress("0xabc...")
-  .withCreationBytecode("0x6000...")
+const counter = Contract.fromSolcContractOutput("Counter", artifact).withAddress("0xabc...").withCreationBytecode("0x6000...");
 
 // address and creationBytecode are typed
-console.log(counter.address)
-console.log(counter.creationBytecode.hex)
-console.log(counter.toJson()) // normalised contract state
+console.log(counter.address);
+console.log(counter.creationBytecode.hex);
+console.log(counter.toJson()); // normalised contract state
 ```
 
 `CompileOutput` instances expose `.artifacts`, `.artifact`, `.errors`, `.diagnostics`, `.hasCompilerErrors()`, and `.toJson()` so downstream tools can safely persist or transport build metadata.
@@ -162,7 +160,7 @@ console.log(counter.toJson()) // normalised contract state
 # Build native bindings and emit build/index.{js,d.ts}
 pnpm nx run compiler:build
 
-# Copy curated types, generate llms.md, type-check declarations
+# Copy curated types, generate llms.txt, type-check declarations
 pnpm nx run compiler:post-build
 
 # Execute the full suite (cargo tests + Bun integration specs + TS type checks)
@@ -200,7 +198,7 @@ Useful sub-targets:
 3. `pnpm nx run compiler:test`
 4. Package platform binaries or publish as required.
 
-The `libs/compiler/build/llms.md` bundle is regenerated automatically during `post-build` so AI assistants stay in sync with the public surface.
+The `libs/compiler/build/llms.txt` bundle is regenerated automatically during `post-build` so AI assistants stay in sync with the public surface.
 
 ## Troubleshooting Notes
 

@@ -6,7 +6,7 @@ const path = require('node:path')
 
 const rootDir = path.join(__dirname, '..')
 const buildDir = path.join(rootDir, 'build')
-const outputPath = path.join(buildDir, 'llms.md')
+const outputPath = path.join(buildDir, 'llms.txt')
 const testDir = path.join(rootDir, 'test')
 
 const sections = [
