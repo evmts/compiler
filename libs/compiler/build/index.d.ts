@@ -18,6 +18,11 @@ export declare class Ast {
    */
   injectShadow(fragment: string | object, options?: AstConfigOptions | undefined): this
   /**
+   * Inject statements at the beginning of a function body and before every return without changing the ABI.
+   * The `selector` is the name of a function or its full signature, which might be useful if the function is overloaded.
+   */
+  injectShadowAtEdges(selector: string, options: { before?: string | string[], after?: string | string[] } & AstConfigOptions): this
+  /**
    * Promote private/internal state variables to public visibility. Omitting `instrumentedContract`
    * applies the change to all contracts.
    */

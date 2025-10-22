@@ -146,6 +146,35 @@ astHelper.injectShadow(
 )
 ```
 
+For quick instrumentation (e.g. invariants, guards), `injectShadowAtEdges` injects your snippets directly into the original body without changing the function signature. Each `return` path receives the "after" statements and the fallthrough path is automatically covered so the original control-flow remains intact while your instrumentation runs.
+
+```ts
+// Inject invariants before and after an existing function body.
+new Ast({ solcVersion: "0.8.30", instrumentedContract: "Token" })
+  .fromSource(readFileSync("Token.sol", "utf8"))
+  .injectShadowAtEdges("mint(address, uint256)", { // signature can be important if there are overloads
+    before: "uint256 __totalSupplyBefore = totalSupply();",
+    after: "require(totalSupply() == __totalSupplyBefore + amount);",
+  })
+  .validate();
+```
+
+```ts
+// Emit a shadow event inside a function
+new Ast({ solcVersion: "0.8.30", instrumentedContract: "Token" })
+  .fromSource(readFileSync("Token.sol", "utf8"))
+  .injectShadow(`
+    event BalanceChangeTrace(address account, uint256 balanceAfter);
+  `)
+  .injectShadowAtEdges("transfer", {
+    after: [
+        "emit BalanceChangeTrace(msg.sender, balanceOf(msg.sender));",
+        "emit BalanceChangeTrace(to, balanceOf(to));",
+    ],
+  })
+  .validate();
+```
+
 AST helpers only support Solidity targets; requests for other languages throw with actionable guidance. Node IDs remain unique after fragment injection, making the resulting tree safe to feed back into the compiler.
 
 ### Contract snapshots

@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Ast, Compiler, ResolveConflictStrategy } from '../build/index.js'
-import type { ContractDefinition, SourceUnit } from '../build/solc-ast.js'
+import type { ContractDefinition, FunctionDefinition, SourceUnit } from '../build/solc-ast.js'
 
 const DEFAULT_SOLC_VERSION = '0.8.30'
 const FIXTURES_DIR = join(__dirname, 'fixtures')
@@ -30,6 +30,14 @@ const findContract = (unit: SourceUnit, name: string): ContractDefinition | unde
 		.filter((node) => node.nodeType === 'ContractDefinition')
 		.map((node) => node as unknown as ContractDefinition)
 		.find((definition) => definition.name === name)
+
+const findFunction = (unit: SourceUnit, contractName: string, functionName: string): FunctionDefinition | undefined => {
+	const contract = findContract(unit, contractName)
+	if (!contract) return undefined
+	return contract.nodes.find(
+		(node): node is FunctionDefinition => node.nodeType === 'FunctionDefinition' && node.name === functionName,
+	)
+}
 
 const collectIds = (value: unknown, ids: number[]) => {
 	if (Array.isArray(value)) {
@@ -255,6 +263,57 @@ describe('injectShadow', () => {
 		collectIds(instrumented.ast(), ids)
 		expect(ids.length).toBe(new Set(ids).size)
 		instrumented.validate()
+	})
+})
+
+describe('injectShadowAtEdges', () => {
+	test('injects before and after statements', () => {
+		const instrumented = createAst().fromSource(INLINE_SOURCE).injectShadowAtEdges('get()', {
+			before: 'uint256 __checkpoint = stored;',
+			after: 'require(stored >= __checkpoint);',
+		})
+
+		const fn = findFunction(instrumented.ast(), 'InlineExample', 'get')
+		expect(fn).toBeDefined()
+		expect(fn?.body?.statements).toMatchSnapshot()
+	})
+
+	test('accepts snippet arrays', () => {
+		const instrumented = createAst()
+			.fromSource(INLINE_SOURCE)
+			.injectShadowAtEdges('get()', {
+				before: ['uint256 __checkpoint = stored;', 'uint256 __second = stored;'],
+				after: ['require(__second >= __checkpoint);'],
+			})
+
+		const fn = findFunction(instrumented.ast(), 'InlineExample', 'get')
+		expect(fn).toBeDefined()
+		expect(fn?.body?.statements).toMatchSnapshot()
+	})
+
+	test('throws when snippets are missing', () => {
+		expect(() =>
+			createAst().fromSource(INLINE_SOURCE).injectShadowAtEdges('get()', {}),
+		).toThrowErrorMatchingInlineSnapshot(`"injectShadowAtEdges requires a \`before\` and/or \`after\` snippet."`)
+	})
+
+	test('throws when selector is ambiguous', () => {
+		expect(() =>
+			createAst()
+				.fromSource(`
+			contract Overloads {
+				function call(uint256 value) public pure returns (uint256) { return value; }
+				function call(address target) public pure returns (address) { return target; }
+			}
+		`)
+				.injectShadowAtEdges('call', { before: 'uint256 sentry = 1;' }),
+		).toThrowErrorMatchingInlineSnapshot(`"Function name is ambiguous. Please provide a full function signature."`)
+	})
+
+	test('throws when function is missing', () => {
+		expect(() =>
+			createAst().fromSource(INLINE_SOURCE).injectShadowAtEdges('missing()', { before: 'uint256 sentinel = 0;' }),
+		).toThrowErrorMatchingInlineSnapshot(`"Target function not found for injectShadowAtEdges."`)
 	})
 })
 

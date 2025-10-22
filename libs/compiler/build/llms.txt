@@ -183,6 +183,35 @@
     )
     ```
     
+    For quick instrumentation (e.g. invariants, guards), `injectShadowAtEdges` injects your snippets directly into the original body without changing the function signature. Each `return` path receives the "after" statements and the fallthrough path is automatically covered so the original control-flow remains intact while your instrumentation runs.
+    
+    ```ts
+    // Inject invariants before and after an existing function body.
+    new Ast({ solcVersion: "0.8.30", instrumentedContract: "Token" })
+      .fromSource(readFileSync("Token.sol", "utf8"))
+      .injectShadowAtEdges("mint(address, uint256)", { // signature can be important if there are overloads
+        before: "uint256 __totalSupplyBefore = totalSupply();",
+        after: "require(totalSupply() == __totalSupplyBefore + amount);",
+      })
+      .validate();
+    ```
+    
+    ```ts
+    // Emit a shadow event inside a function
+    new Ast({ solcVersion: "0.8.30", instrumentedContract: "Token" })
+      .fromSource(readFileSync("Token.sol", "utf8"))
+      .injectShadow(`
+        event BalanceChangeTrace(address account, uint256 balanceAfter);
+      `)
+      .injectShadowAtEdges("transfer", {
+        after: [
+            "emit BalanceChangeTrace(msg.sender, balanceOf(msg.sender));",
+            "emit BalanceChangeTrace(to, balanceOf(to));",
+        ],
+      })
+      .validate();
+    ```
+    
     AST helpers only support Solidity targets; requests for other languages throw with actionable guidance. Node IDs remain unique after fragment injection, making the resulting tree safe to feed back into the compiler.
     
     ### Contract snapshots
@@ -273,6 +302,11 @@
        * contract.
        */
       injectShadow(fragment: string | object, options?: AstConfigOptions | undefined): this
+      /**
+       * Inject statements at the beginning of a function body and before every return without changing the ABI.
+       * The `selector` is the name of a function or its full signature, which might be useful if the function is overloaded.
+       */
+      injectShadowAtEdges(selector: string, options: { before?: string | string[], after?: string | string[] } & AstConfigOptions): this
       /**
        * Promote private/internal state variables to public visibility. Omitting `instrumentedContract`
        * applies the change to all contracts.
@@ -1214,7 +1248,7 @@
       import { readFileSync } from 'node:fs'
       import { join } from 'node:path'
       import { Ast, Compiler, ResolveConflictStrategy } from '../build/index.js'
-      import type { ContractDefinition, SourceUnit } from '../build/solc-ast.js'
+      import type { ContractDefinition, FunctionDefinition, SourceUnit } from '../build/solc-ast.js'
       
       const DEFAULT_SOLC_VERSION = '0.8.30'
       const FIXTURES_DIR = join(__dirname, 'fixtures')
@@ -1242,6 +1276,14 @@
       		.filter((node) => node.nodeType === 'ContractDefinition')
       		.map((node) => node as unknown as ContractDefinition)
       		.find((definition) => definition.name === name)
+      
+      const findFunction = (unit: SourceUnit, contractName: string, functionName: string): FunctionDefinition | undefined => {
+      	const contract = findContract(unit, contractName)
+      	if (!contract) return undefined
+      	return contract.nodes.find(
+      		(node): node is FunctionDefinition => node.nodeType === 'FunctionDefinition' && node.name === functionName,
+      	)
+      }
       
       const collectIds = (value: unknown, ids: number[]) => {
       	if (Array.isArray(value)) {
@@ -1467,6 +1509,57 @@
       		collectIds(instrumented.ast(), ids)
       		expect(ids.length).toBe(new Set(ids).size)
       		instrumented.validate()
+      	})
+      })
+      
+      describe('injectShadowAtEdges', () => {
+      	test('injects before and after statements', () => {
+      		const instrumented = createAst().fromSource(INLINE_SOURCE).injectShadowAtEdges('get()', {
+      			before: 'uint256 __checkpoint = stored;',
+      			after: 'require(stored >= __checkpoint);',
+      		})
+      
+      		const fn = findFunction(instrumented.ast(), 'InlineExample', 'get')
+      		expect(fn).toBeDefined()
+      		expect(fn?.body?.statements).toMatchSnapshot()
+      	})
+      
+      	test('accepts snippet arrays', () => {
+      		const instrumented = createAst()
+      			.fromSource(INLINE_SOURCE)
+      			.injectShadowAtEdges('get()', {
+      				before: ['uint256 __checkpoint = stored;', 'uint256 __second = stored;'],
+      				after: ['require(__second >= __checkpoint);'],
+      			})
+      
+      		const fn = findFunction(instrumented.ast(), 'InlineExample', 'get')
+      		expect(fn).toBeDefined()
+      		expect(fn?.body?.statements).toMatchSnapshot()
+      	})
+      
+      	test('throws when snippets are missing', () => {
+      		expect(() =>
+      			createAst().fromSource(INLINE_SOURCE).injectShadowAtEdges('get()', {}),
+      		).toThrowErrorMatchingInlineSnapshot(`"injectShadowAtEdges requires a \`before\` and/or \`after\` snippet."`)
+      	})
+      
+      	test('throws when selector is ambiguous', () => {
+      		expect(() =>
+      			createAst()
+      				.fromSource(`
+      			contract Overloads {
+      				function call(uint256 value) public pure returns (uint256) { return value; }
+      				function call(address target) public pure returns (address) { return target; }
+      			}
+      		`)
+      				.injectShadowAtEdges('call', { before: 'uint256 sentry = 1;' }),
+      		).toThrowErrorMatchingInlineSnapshot(`"Function name is ambiguous. Please provide a full function signature."`)
+      	})
+      
+      	test('throws when function is missing', () => {
+      		expect(() =>
+      			createAst().fromSource(INLINE_SOURCE).injectShadowAtEdges('missing()', { before: 'uint256 sentinel = 0;' }),
+      		).toThrowErrorMatchingInlineSnapshot(`"Target function not found for injectShadowAtEdges."`)
       	})
       })
       

@@ -13,6 +13,16 @@ where
   env.to_js_value(value)
 }
 
+pub fn clone_with_new_ids<T>(value: &T, next_id: &mut i64) -> std::result::Result<T, AstError>
+where
+  T: Serialize + serde::de::DeserializeOwned,
+{
+  let mut json = serde_json::to_value(value).map_err(|err| AstError::JsonError(err.to_string()))?;
+  walk_renumber(&mut json, next_id);
+  sanitize_ast_value(&mut json);
+  serde_json::from_value(json).map_err(|err| AstError::JsonError(err.to_string()))
+}
+
 pub fn from_js_value<T>(env: &Env, value: JsUnknown) -> napi::Result<T>
 where
   T: DeserializeOwned,

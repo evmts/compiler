@@ -3,7 +3,7 @@ use foundry_compilers::artifacts::ast::{
 };
 use foundry_compilers::solc::SolcLanguage;
 
-use super::{orchestrator::AstOrchestrator, stitcher, utils};
+use super::{instrumenter, orchestrator::AstOrchestrator, stitcher, utils};
 use crate::internal::config::{AstConfig, AstConfigOptions, ResolveConflictStrategy};
 use crate::internal::errors::{map_err_with_context, Error, Result};
 use crate::internal::logging::{ensure_rust_logger, update_level};
@@ -110,6 +110,51 @@ pub fn inject_shadow(
     }
   }
   info!(target: LOG_TARGET, "AST fragment injected");
+  Ok(())
+}
+
+/// Inject statements at the beginning of a function body and before every return without changing the ABI.
+pub fn inject_shadow_at_edges(
+  state: &mut State,
+  selector: &str,
+  before: &[String],
+  after: &[String],
+  overrides: Option<&AstConfigOptions>,
+) -> Result<()> {
+  let contract = contract_override(state, overrides).map(|name| name.to_owned());
+  info!(
+    target: LOG_TARGET,
+    "injecting edge instrumentation (selector={}, contract={:?})",
+    selector,
+    contract
+  );
+
+  let config = resolve_config(state, overrides)?;
+  let solc = solc::ensure_installed(&config.solc.version)?;
+
+  let idx = {
+    let target_ast = target_ast(state)?;
+    find_contract_index(state, target_ast, contract.as_deref())?
+  };
+
+  let unit = target_ast_mut(state)?;
+  instrumenter::inject_edges(
+    unit,
+    idx,
+    selector,
+    before,
+    after,
+    &solc,
+    &config.solc.settings,
+  )?;
+
+  info!(
+    target: LOG_TARGET,
+    "edge instrumentation applied (selector={}, contract={:?})",
+    selector,
+    contract
+  );
+
   Ok(())
 }
 

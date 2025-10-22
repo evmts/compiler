@@ -168,7 +168,7 @@ fn contract_part_key(part: &ContractDefinitionPart) -> Result<Option<ConflictKey
   }
 }
 
-fn function_signature(function: &FunctionDefinition) -> Result<Vec<String>, AstError> {
+pub(crate) fn function_signature(function: &FunctionDefinition) -> Result<Vec<String>, AstError> {
   function
     .parameters
     .parameters
