@@ -29,15 +29,24 @@ runs:
       with:
         path: |
           ~/.foundry
-          ~/.svm
+          ~/.cache/.svm
+          ~/.local/share/solc
         key: ${{ runner.os }}-svm-${{ env.SOLC_VERSION }}
         restore-keys: |
           ${{ runner.os }}-svm-
 
-    - name: Install Foundry (svm)
+    - name: Install Foundry
       uses: foundry-rs/foundry-toolchain@v1
       with:
         version: nightly
+
+    - name: Install svm-rs
+      shell: bash
+      run: |
+        if ! command -v svm >/dev/null; then
+          cargo install svm-rs --locked
+        fi
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
     - name: Install solc
       run: svm install $SOLC_VERSION
