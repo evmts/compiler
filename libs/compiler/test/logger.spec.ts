@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
-import { Ast, Compiler, Contract, LoggingLevel } from '../build/index.js'
+import { Ast, Compiler, Contract } from '../build/index.js'
 
 const INLINE_SOURCE = 'contract Logger { function noop() public {} }'
 const _INVALID_SOURCE = 'contract Broken {'
@@ -53,21 +53,21 @@ describe('Logger integration', () => {
 	})
 
 	test('compiler suppresses info logs at warn level', async () => {
-		const compiler = new Compiler({ loggingLevel: LoggingLevel.Warn })
+		const compiler = new Compiler({ loggingLevel: 'warn' })
 		compiler.compileSource(INLINE_SOURCE)
 		await flushLogs()
 		expect(capturedLog.length).toBe(0)
 	})
 
 	test('compiler emits no logs at silent level', async () => {
-		const compiler = new Compiler({ loggingLevel: LoggingLevel.Silent })
+		const compiler = new Compiler({ loggingLevel: 'silent' })
 		compiler.compileSource(INLINE_SOURCE)
 		await flushLogs()
 		expect(capturedLog.length).toBe(0)
 	})
 
 	test('compiler logs context for filesystem errors', async () => {
-		const compiler = new Compiler({ loggingLevel: LoggingLevel.Info })
+		const compiler = new Compiler({ loggingLevel: 'info' })
 		const missing = join(process.cwd(), 'libs', 'compiler', 'test', 'fixtures', 'missing.sol')
 		let threw = false
 		try {
@@ -87,7 +87,7 @@ describe('Logger integration', () => {
 	})
 
 	test('ast helper logs structural changes', async () => {
-		const ast = new Ast({ loggingLevel: LoggingLevel.Info })
+		const ast = new Ast({ loggingLevel: 'info' })
 		ast.fromSource(INLINE_SOURCE)
 		await flushLogs()
 		expect(capturedLog.some((line) => line.includes('loading AST from source text'))).toBe(true)
@@ -95,7 +95,7 @@ describe('Logger integration', () => {
 
 	test('contract helpers emit lifecycle logs', async () => {
 		// Ensure the JS logger is initialised before creating contract instances.
-		new Compiler({ loggingLevel: LoggingLevel.Info })
+		new Compiler({ loggingLevel: 'info' })
 		await flushLogs()
 		capturedLog.length = 0
 

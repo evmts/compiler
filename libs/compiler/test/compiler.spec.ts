@@ -2,19 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import {
-	Ast,
-	BytecodeHash,
-	CompileOutput,
-	Compiler,
-	CompilerLanguage,
-	CompilerSettings,
-	Contract,
-	EvmVersion,
-	ModelCheckerEngine,
-	RevertStrings,
-	SeverityLevel,
-} from '../build/index.js'
+import { Ast, CompileOutput, Compiler, CompilerSettings, Contract } from '../build/index.js'
 import type { OutputSelection } from '../build/solc-settings.js'
 
 const DEFAULT_SOLC_VERSION = '0.8.30'
@@ -187,9 +175,9 @@ describe('Compiler constructor', () => {
 			solcVersion: DEFAULT_SOLC_VERSION,
 			solcSettings: {
 				optimizer: { enabled: true, runs: 9 },
-				metadata: { bytecodeHash: BytecodeHash.None },
+				metadata: { bytecodeHash: 'none' },
 				debug: {
-					revertStrings: RevertStrings.Debug,
+					revertStrings: 'debug',
 					debugInfo: ['*'],
 				},
 				libraries: {
@@ -198,7 +186,7 @@ describe('Compiler constructor', () => {
 					},
 				},
 				outputSelection: DEFAULT_OUTPUT_SELECTION,
-				evmVersion: EvmVersion.London,
+				evmVersion: 'london',
 			},
 		})
 
@@ -277,10 +265,10 @@ describe('Compiler.compileSource with Solidity strings', () => {
 
 		expect(output.hasCompilerErrors()).toBe(false)
 		expect(output.errors).toBeUndefined()
-		const warnings = output.diagnostics.filter((diagnostic) => diagnostic.severity === SeverityLevel.Warning)
+		const warnings = output.diagnostics.filter((diagnostic) => diagnostic.severity === 'warning')
 		expect(warnings.length).toBeGreaterThan(0)
 		const severities = new Set(output.diagnostics.map((err) => err.severity))
-		expect(severities.has(SeverityLevel.Warning)).toBe(true)
+		expect(severities.has('warning')).toBe(true)
 	})
 
 	test('surfaces syntax errors without throwing', () => {
@@ -293,7 +281,7 @@ describe('Compiler.compileSource with Solidity strings', () => {
 		expect(errors.length).toBeGreaterThan(0)
 		const error = errors[0]
 		expect(error.message).toMatch(/expected ';'/i)
-		expect(error.severity).toBe(SeverityLevel.Error)
+		expect(error.severity.toLowerCase()).toBe('error')
 	})
 
 	test('supports stopAfter parsing while keeping diagnostics', () => {
@@ -341,21 +329,21 @@ describe('Compiler.compileSource with Solidity strings', () => {
 			remappings: ['lib/=lib'],
 			optimizer: { enabled: true, runs: 123, details: { yul: true } },
 			modelChecker: {
-				engine: ModelCheckerEngine.Bmc,
+				engine: 'bmc',
 				timeout: 1,
 				contracts: { '*': ['*'] },
 			},
 			metadata: {
 				useLiteralContent: true,
-				bytecodeHash: BytecodeHash.None,
+				bytecodeHash: 'none',
 				cborMetadata: false,
 			},
 			outputSelection: {
 				'*': { '*': ['abi', 'evm.bytecode.object'] },
 			},
-			evmVersion: EvmVersion.Prague,
+			evmVersion: 'prague',
 			viaIr: true,
-			debug: { revertStrings: RevertStrings.Debug, debugInfo: ['location'] },
+			debug: { revertStrings: 'debug', debugInfo: ['location'] },
 			libraries: {
 				'LibraryConsumer.sol': {
 					MathLib: '0x0000000000000000000000000000000000000001',
@@ -404,8 +392,8 @@ describe('Compiler.compileSource with Solidity strings', () => {
 		const compiler = new Compiler({ cacheEnabled: false })
 		const output = compiler.compileSource(INLINE_SOURCE, {
 			solcSettings: {
-				metadata: { bytecodeHash: BytecodeHash.None },
-				evmVersion: EvmVersion.London,
+				metadata: { bytecodeHash: 'none' },
+				evmVersion: 'london',
 			},
 		})
 		expect(output.hasCompilerErrors()).toBe(false)
@@ -473,12 +461,12 @@ describe('Compiler.compileSource with AST and Yul inputs', () => {
 		const compiler = new Compiler({ cacheEnabled: false })
 		expect(() =>
 			compiler.compileSource(ast, {
-				language: CompilerLanguage.Yul,
+				language: 'yul',
 			}),
 		).toThrow(/AST compilation is only supported for Solidity sources/i)
 		expect(() =>
 			compiler.compileSource(ast, {
-				language: CompilerLanguage.Vyper,
+				language: 'vyper',
 			}),
 		).toThrow(/AST compilation is only supported for Solidity sources/i)
 	})
@@ -486,7 +474,7 @@ describe('Compiler.compileSource with AST and Yul inputs', () => {
 	test('compiles Yul sources when requested', () => {
 		const compiler = new Compiler({ cacheEnabled: false })
 		const output = compiler.compileSource(YUL_SOURCE, {
-			language: CompilerLanguage.Yul,
+			language: 'yul',
 		})
 		expect(output.hasCompilerErrors()).toBe(false)
 		const [contract] = flattenContracts(output)
@@ -494,9 +482,9 @@ describe('Compiler.compileSource with AST and Yul inputs', () => {
 	})
 
 	test('compiles Vyper sources when requested', () => {
-		const compiler = new Compiler({ cacheEnabled: false, language: CompilerLanguage.Vyper })
+		const compiler = new Compiler({ cacheEnabled: false, language: 'vyper' })
 		const output = compiler.compileSource(VYPER_COUNTER_SOURCE, {
-			language: CompilerLanguage.Vyper,
+			language: 'vyper',
 		})
 		expect(output.hasCompilerErrors()).toBe(false)
 		const [contract] = flattenContracts(output)
@@ -522,7 +510,7 @@ describe('Compiler.compileSources', () => {
 			{
 				'Echo.yul': YUL_SOURCE,
 			},
-			{ language: CompilerLanguage.Yul },
+			{ language: 'yul' },
 		)
 
 		expect(output.hasCompilerErrors()).toBe(false)
@@ -530,7 +518,7 @@ describe('Compiler.compileSources', () => {
 	})
 
 	test('compiles Vyper sources when supplied as a map', () => {
-		const compiler = new Compiler({ cacheEnabled: false, language: CompilerLanguage.Vyper })
+		const compiler = new Compiler({ cacheEnabled: false, language: 'vyper' })
 		const output = compiler.compileSources({
 			'Counter.vy': VYPER_COUNTER_SOURCE,
 		})
@@ -577,13 +565,13 @@ describe('Compiler toJson snapshots', () => {
 			{
 				'Echo.yul': YUL_SOURCE,
 			},
-			{ language: CompilerLanguage.Yul },
+			{ language: 'yul' },
 		)
 		expect(output.toJson()).toMatchSnapshot()
 	})
 
 	test('captures structured Vyper artifacts', () => {
-		const compiler = new Compiler({ cacheEnabled: false, language: CompilerLanguage.Vyper })
+		const compiler = new Compiler({ cacheEnabled: false, language: 'vyper' })
 		const output = compiler.compileSources({
 			'Counter.vy': VYPER_COUNTER_SOURCE,
 		})
@@ -603,7 +591,7 @@ describe('Compiler.compileFiles', () => {
 	test('compiles yul files when language override is provided', () => {
 		const compiler = new Compiler({ cacheEnabled: false })
 		const output = compiler.compileFiles([YUL_PATH], {
-			language: CompilerLanguage.Yul,
+			language: 'yul',
 		})
 
 		expect(output.hasCompilerErrors()).toBe(false)
@@ -611,9 +599,9 @@ describe('Compiler.compileFiles', () => {
 	})
 
 	test('compiles vyper files when language override is provided', () => {
-		const compiler = new Compiler({ cacheEnabled: false, language: CompilerLanguage.Vyper })
+		const compiler = new Compiler({ cacheEnabled: false, language: 'vyper' })
 		const output = compiler.compileFiles([VYPER_COUNTER_PATH], {
-			language: CompilerLanguage.Vyper,
+			language: 'vyper',
 		})
 		expect(output.hasCompilerErrors()).toBe(false)
 		expect(flattenContracts(output)).toHaveLength(1)
@@ -685,7 +673,7 @@ describe('Compiler.compileFiles', () => {
 		const compiler = new Compiler({
 			cacheEnabled: false,
 			solcVersion: DEFAULT_SOLC_VERSION,
-			language: CompilerLanguage.Yul,
+			language: 'yul',
 		})
 		const output = compiler.compileFiles([INLINE_PATH])
 

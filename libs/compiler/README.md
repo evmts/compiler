@@ -38,7 +38,7 @@ import { Compiler, CompilerLanguage } from '@tevm/compiler'
 await Compiler.installSolcVersion('0.8.30')
 
 const compiler = new Compiler({
-  language: CompilerLanguage.Solidity, // Solidity, Yul, Vyper
+  language: 'solidity', // or 'yul', 'vyper'
   solcVersion: '0.8.30',
   solcSettings: {
     // any solc settings, see index.d.ts:CompilerSettings
@@ -145,7 +145,9 @@ When a fragment redefines existing members you can switch the conflict strategy 
 ```ts
 astHelper.injectShadow(
   "function getValue() public view returns (uint256) { return value + 1; }",
-  { resolveConflictStrategy: ResolveConflictStrategy.Replace },
+  // 'safe' is the default strategy (will fail to compile if conflicting members are found)
+  // 'replace' will overwrite the existing members when conflicting
+  { resolveConflictStrategy: 'replace' },
 )
 ```
 
@@ -185,11 +187,14 @@ AST helpers only support Solidity targets; requests for other languages throw wi
 ```ts
 import { Contract } from "@tevm/compiler";
 
-const counter = Contract.fromSolcContractOutput("Counter", artifact).withAddress("0xabc...").withCreationBytecode("0x6000...");
+const counter = Contract
+  .fromSolcContractOutput("Counter", artifact)
+  .withAddress("0xabc...")
+  .withDeployedBytecode("0x6000...");
 
-// address and creationBytecode are typed
+// address and deployedBytecode are typed
 console.log(counter.address);
-console.log(counter.creationBytecode.hex);
+console.log(counter.deployedBytecode.hex);
 console.log(counter.toJson()); // normalised contract state
 ```
 

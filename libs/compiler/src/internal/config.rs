@@ -638,14 +638,63 @@ pub struct JsCompilerConfigOptions {
   pub logging_level: Option<JsLoggingLevel>,
 }
 
+macro_rules! impl_js_enum_string_traits {
+  ($name:ident { $($variant:ident => $value:expr),+ $(,)? }) => {
+    impl $name {
+      const fn as_str(&self) -> &'static str {
+        match self {
+          $(Self::$variant => $value,)*
+        }
+      }
+    }
+
+    impl ::std::str::FromStr for $name {
+      type Err = String;
+
+      fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        $(
+          if value.eq_ignore_ascii_case($value) {
+            return Ok(Self::$variant);
+          }
+        )*
+        Err(format!("Invalid {} value `{value}`", stringify!($name)))
+      }
+    }
+
+    impl ::napi::bindgen_prelude::ToNapiValue for $name {
+      unsafe fn to_napi_value(
+        env: ::napi::sys::napi_env,
+        value: Self,
+      ) -> ::napi::Result<::napi::sys::napi_value> {
+        <&str as ::napi::bindgen_prelude::ToNapiValue>::to_napi_value(env, value.as_str())
+      }
+    }
+
+    impl ::napi::bindgen_prelude::FromNapiValue for $name {
+      unsafe fn from_napi_value(
+        env: ::napi::sys::napi_env,
+        napi_val: ::napi::sys::napi_value,
+      ) -> ::napi::Result<Self> {
+        let value = <String as ::napi::bindgen_prelude::FromNapiValue>::from_napi_value(env, napi_val)?;
+        value.parse().map_err(|err| ::napi::Error::new(::napi::Status::InvalidArg, err))
+      }
+    }
+  };
+}
+
 /// Selects which frontend pipeline the compiler should use.
-#[napi(string_enum, js_name = "CompilerLanguage")]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum JsCompilerLanguage {
   Solidity,
   Yul,
   Vyper,
 }
+
+impl_js_enum_string_traits!(JsCompilerLanguage {
+  Solidity => "solidity",
+  Yul => "yul",
+  Vyper => "vyper"
+});
 
 impl From<JsCompilerLanguage> for CompilerLanguage {
   fn from(language: JsCompilerLanguage) -> Self {
@@ -658,14 +707,20 @@ impl From<JsCompilerLanguage> for CompilerLanguage {
 }
 
 /// Logging levels surfaced to JavaScript callers.
-#[napi(string_enum, js_name = "LoggingLevel")]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum JsLoggingLevel {
   Silent,
   Error,
   Warn,
   Info,
 }
+
+impl_js_enum_string_traits!(JsLoggingLevel {
+  Silent => "silent",
+  Error => "error",
+  Warn => "warn",
+  Info => "info"
+});
 
 impl From<JsLoggingLevel> for LoggingLevel {
   fn from(level: JsLoggingLevel) -> Self {
@@ -679,13 +734,18 @@ impl From<JsLoggingLevel> for LoggingLevel {
 }
 
 /// Optimisation goals exposed by the Vyper compiler.
-#[napi(string_enum, js_name = "VyperOptimizationMode")]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum JsVyperOptimizationMode {
   Gas,
   Codesize,
   None,
 }
+
+impl_js_enum_string_traits!(JsVyperOptimizationMode {
+  Gas => "gas",
+  Codesize => "codesize",
+  None => "none"
+});
 
 impl From<JsVyperOptimizationMode> for VyperOptimizationMode {
   fn from(mode: JsVyperOptimizationMode) -> Self {
@@ -708,7 +768,7 @@ pub struct JsVyperCompilerConfig {
   #[napi(ts_type = "VyperOptimizationMode | undefined")]
   pub optimize: Option<JsVyperOptimizationMode>,
   /// Target EVM version. Defaults to Vyper's bundled target when omitted.
-  #[napi(ts_type = "EvmVersion | undefined")]
+  #[napi(ts_type = "import('./solc-settings').EvmVersion | undefined")]
   pub evm_version: Option<crate::internal::settings::EvmVersion>,
   /// Whether to embed bytecode metadata. Falls back to Vyper defaults when unspecified.
   #[napi(ts_type = "boolean | undefined")]
@@ -733,6 +793,7 @@ pub struct JsAstConfigOptions {
   #[napi(ts_type = "string | undefined")]
   pub solc_version: Option<String>,
   /// Solc language mode. Only `Solidity` is supported and used by default.
+  #[napi(ts_type = "import('./solc-settings').SolcLanguage | undefined")]
   pub solc_language: Option<SolcLanguage>,
   /// Partial solc settings merged with the AST orchestrator defaults.
   #[napi(ts_type = "CompilerSettings | undefined")]
@@ -751,12 +812,16 @@ pub struct JsAstConfigOptions {
   pub resolve_conflict_strategy: Option<JsResolveConflictStrategy>,
 }
 
-#[napi(string_enum)]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SolcLanguage {
   Solidity,
   Yul,
 }
+
+impl_js_enum_string_traits!(SolcLanguage {
+  Solidity => "solidity",
+  Yul => "yul"
+});
 
 impl From<SolcLanguage> for FoundrySolcLanguage {
   fn from(language: SolcLanguage) -> Self {
@@ -774,12 +839,16 @@ pub enum ResolveConflictStrategy {
   Replace,
 }
 
-#[napi(string_enum, js_name = "ResolveConflictStrategy")]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum JsResolveConflictStrategy {
   Safe,
   Replace,
 }
+
+impl_js_enum_string_traits!(JsResolveConflictStrategy {
+  Safe => "safe",
+  Replace => "replace"
+});
 
 impl From<JsResolveConflictStrategy> for ResolveConflictStrategy {
   fn from(strategy: JsResolveConflictStrategy) -> Self {

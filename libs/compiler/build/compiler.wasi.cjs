@@ -84,52 +84,38 @@ const { instance: __napiInstance, module: __wasiModule, napiModule: __napiModule
 function __napi_rs_initialize_modules(__napiInstance) {
   __napiInstance.exports['__napi_register__JsAst_struct_0']?.()
   __napiInstance.exports['__napi_register__JsAst_impl_10']?.()
-  __napiInstance.exports['__napi_register__SeverityLevel_11']?.()
-  __napiInstance.exports['__napi_register__SourceLocation_struct_12']?.()
-  __napiInstance.exports['__napi_register__SecondarySourceLocation_struct_13']?.()
-  __napiInstance.exports['__napi_register__VyperSourceLocation_struct_14']?.()
-  __napiInstance.exports['__napi_register__CompilerError_struct_15']?.()
-  __napiInstance.exports['__napi_register__SourceArtifactsJson_struct_16']?.()
-  __napiInstance.exports['__napi_register__CompileOutputJson_struct_17']?.()
-  __napiInstance.exports['__napi_register__JsSourceArtifacts_struct_18']?.()
-  __napiInstance.exports['__napi_register__JsSourceArtifacts_impl_26']?.()
-  __napiInstance.exports['__napi_register__JsCompileOutput_struct_27']?.()
-  __napiInstance.exports['__napi_register__JsCompileOutput_impl_36']?.()
-  __napiInstance.exports['__napi_register__JsCompiler_struct_37']?.()
-  __napiInstance.exports['__napi_register__JsCompiler_impl_50']?.()
-  __napiInstance.exports['__napi_register__ImmutableSlot_struct_51']?.()
-  __napiInstance.exports['__napi_register__JsFunctionDebugDataEntry_struct_52']?.()
-  __napiInstance.exports['__napi_register__JsGasEstimatesCreation_struct_53']?.()
-  __napiInstance.exports['__napi_register__JsGasEstimates_struct_54']?.()
-  __napiInstance.exports['__napi_register__JsEwasm_struct_55']?.()
-  __napiInstance.exports['__napi_register__JsContractBytecode_struct_56']?.()
-  __napiInstance.exports['__napi_register__JsContractState_struct_57']?.()
-  __napiInstance.exports['__napi_register__JsContract_struct_58']?.()
-  __napiInstance.exports['__napi_register__JsContract_impl_85']?.()
-  __napiInstance.exports['__napi_register__JsCompilerConfigOptions_struct_86']?.()
-  __napiInstance.exports['__napi_register__JsCompilerLanguage_87']?.()
-  __napiInstance.exports['__napi_register__JsLoggingLevel_88']?.()
-  __napiInstance.exports['__napi_register__JsVyperOptimizationMode_89']?.()
-  __napiInstance.exports['__napi_register__JsVyperCompilerConfig_struct_90']?.()
-  __napiInstance.exports['__napi_register__JsAstConfigOptions_struct_91']?.()
-  __napiInstance.exports['__napi_register__SolcLanguage_92']?.()
-  __napiInstance.exports['__napi_register__JsResolveConflictStrategy_93']?.()
-  __napiInstance.exports['__napi_register__ProjectPaths_struct_94']?.()
-  __napiInstance.exports['__napi_register__JsCompilerSettingsOptions_struct_95']?.()
-  __napiInstance.exports['__napi_register__JsOptimizerSettingsOptions_struct_96']?.()
-  __napiInstance.exports['__napi_register__JsOptimizerDetailsOptions_struct_97']?.()
-  __napiInstance.exports['__napi_register__JsYulDetailsOptions_struct_98']?.()
-  __napiInstance.exports['__napi_register__JsDebuggingSettingsOptions_struct_99']?.()
-  __napiInstance.exports['__napi_register__JsSettingsMetadataOptions_struct_100']?.()
-  __napiInstance.exports['__napi_register__JsModelCheckerSettingsOptions_struct_101']?.()
-  __napiInstance.exports['__napi_register__BytecodeHash_102']?.()
-  __napiInstance.exports['__napi_register__RevertStrings_103']?.()
-  __napiInstance.exports['__napi_register__ModelCheckerEngine_104']?.()
-  __napiInstance.exports['__napi_register__ModelCheckerTarget_105']?.()
-  __napiInstance.exports['__napi_register__ModelCheckerInvariant_106']?.()
-  __napiInstance.exports['__napi_register__ModelCheckerSolver_107']?.()
-  __napiInstance.exports['__napi_register__ModelCheckerInvariantKind_108']?.()
-  __napiInstance.exports['__napi_register__EvmVersion_109']?.()
+  __napiInstance.exports['__napi_register__SourceLocation_struct_11']?.()
+  __napiInstance.exports['__napi_register__SecondarySourceLocation_struct_12']?.()
+  __napiInstance.exports['__napi_register__VyperSourceLocation_struct_13']?.()
+  __napiInstance.exports['__napi_register__CompilerError_struct_14']?.()
+  __napiInstance.exports['__napi_register__SourceArtifactsJson_struct_15']?.()
+  __napiInstance.exports['__napi_register__CompileOutputJson_struct_16']?.()
+  __napiInstance.exports['__napi_register__JsSourceArtifacts_struct_17']?.()
+  __napiInstance.exports['__napi_register__JsSourceArtifacts_impl_25']?.()
+  __napiInstance.exports['__napi_register__JsCompileOutput_struct_26']?.()
+  __napiInstance.exports['__napi_register__JsCompileOutput_impl_35']?.()
+  __napiInstance.exports['__napi_register__JsCompiler_struct_36']?.()
+  __napiInstance.exports['__napi_register__JsCompiler_impl_49']?.()
+  __napiInstance.exports['__napi_register__ImmutableSlot_struct_50']?.()
+  __napiInstance.exports['__napi_register__JsFunctionDebugDataEntry_struct_51']?.()
+  __napiInstance.exports['__napi_register__JsGasEstimatesCreation_struct_52']?.()
+  __napiInstance.exports['__napi_register__JsGasEstimates_struct_53']?.()
+  __napiInstance.exports['__napi_register__JsEwasm_struct_54']?.()
+  __napiInstance.exports['__napi_register__JsContractBytecode_struct_55']?.()
+  __napiInstance.exports['__napi_register__JsContractState_struct_56']?.()
+  __napiInstance.exports['__napi_register__JsContract_struct_57']?.()
+  __napiInstance.exports['__napi_register__JsContract_impl_84']?.()
+  __napiInstance.exports['__napi_register__JsCompilerConfigOptions_struct_85']?.()
+  __napiInstance.exports['__napi_register__JsVyperCompilerConfig_struct_86']?.()
+  __napiInstance.exports['__napi_register__JsAstConfigOptions_struct_87']?.()
+  __napiInstance.exports['__napi_register__ProjectPaths_struct_88']?.()
+  __napiInstance.exports['__napi_register__JsCompilerSettingsOptions_struct_89']?.()
+  __napiInstance.exports['__napi_register__JsOptimizerSettingsOptions_struct_90']?.()
+  __napiInstance.exports['__napi_register__JsOptimizerDetailsOptions_struct_91']?.()
+  __napiInstance.exports['__napi_register__JsYulDetailsOptions_struct_92']?.()
+  __napiInstance.exports['__napi_register__JsDebuggingSettingsOptions_struct_93']?.()
+  __napiInstance.exports['__napi_register__JsSettingsMetadataOptions_struct_94']?.()
+  __napiInstance.exports['__napi_register__JsModelCheckerSettingsOptions_struct_95']?.()
 }
 module.exports.Ast = __napiModule.exports.Ast
 module.exports.JsAst = __napiModule.exports.JsAst
@@ -141,21 +127,3 @@ module.exports.Contract = __napiModule.exports.Contract
 module.exports.JsContract = __napiModule.exports.JsContract
 module.exports.SourceArtifacts = __napiModule.exports.SourceArtifacts
 module.exports.JsSourceArtifacts = __napiModule.exports.JsSourceArtifacts
-module.exports.BytecodeHash = __napiModule.exports.BytecodeHash
-module.exports.CompilerLanguage = __napiModule.exports.CompilerLanguage
-module.exports.JsCompilerLanguage = __napiModule.exports.JsCompilerLanguage
-module.exports.EvmVersion = __napiModule.exports.EvmVersion
-module.exports.LoggingLevel = __napiModule.exports.LoggingLevel
-module.exports.JsLoggingLevel = __napiModule.exports.JsLoggingLevel
-module.exports.ModelCheckerEngine = __napiModule.exports.ModelCheckerEngine
-module.exports.ModelCheckerInvariant = __napiModule.exports.ModelCheckerInvariant
-module.exports.ModelCheckerInvariantKind = __napiModule.exports.ModelCheckerInvariantKind
-module.exports.ModelCheckerSolver = __napiModule.exports.ModelCheckerSolver
-module.exports.ModelCheckerTarget = __napiModule.exports.ModelCheckerTarget
-module.exports.ResolveConflictStrategy = __napiModule.exports.ResolveConflictStrategy
-module.exports.JsResolveConflictStrategy = __napiModule.exports.JsResolveConflictStrategy
-module.exports.RevertStrings = __napiModule.exports.RevertStrings
-module.exports.SeverityLevel = __napiModule.exports.SeverityLevel
-module.exports.SolcLanguage = __napiModule.exports.SolcLanguage
-module.exports.VyperOptimizationMode = __napiModule.exports.VyperOptimizationMode
-module.exports.JsVyperOptimizationMode = __napiModule.exports.JsVyperOptimizationMode

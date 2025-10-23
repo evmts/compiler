@@ -247,6 +247,7 @@ pub struct JsCompilerSettingsOptions {
   /// Target EVM version for the compilation (e.g. `"paris"`). Defaults to the latest supported
   /// version for the chosen solc release.
   #[serde(rename = "evmVersion", skip_serializing_if = "Option::is_none")]
+  #[napi(ts_type = "import('./solc-settings').EvmVersion | undefined")]
   pub evm_version: Option<EvmVersion>,
   /// Enables Solc's via-IR pipeline when `Some(true)`.
   #[serde(rename = "viaIR", skip_serializing_if = "Option::is_none")]
@@ -333,6 +334,7 @@ pub struct JsYulDetailsOptions {
 pub struct JsDebuggingSettingsOptions {
   /// Controls how revert strings are emitted (`Default`, `Strip`, `Debug`, `VerboseDebug`).
   #[serde(skip_serializing_if = "Option::is_none")]
+  #[napi(ts_type = "import('./solc-settings').RevertStrings | undefined")]
   pub revert_strings: Option<RevertStrings>,
   /// Additional debug information tags. Defaults to Solc's list (currently `"location"`) when empty.
   #[serde(
@@ -352,6 +354,7 @@ pub struct JsSettingsMetadataOptions {
   pub use_literal_content: Option<bool>,
   /// Metadata hash strategy (defaults to Solc's own setting when `None`).
   #[serde(skip_serializing_if = "Option::is_none")]
+  #[napi(ts_type = "import('./solc-settings').BytecodeHash | undefined")]
   pub bytecode_hash: Option<BytecodeHash>,
   /// Enables or disables CBOR metadata embedding.
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -369,15 +372,18 @@ pub struct JsModelCheckerSettingsOptions {
   pub contracts: BTreeMap<String, Vec<String>>,
   /// Model checker engine to use (`None` disables the feature, `Bmc` runs bounded model checking).
   #[serde(skip_serializing_if = "Option::is_none")]
+  #[napi(ts_type = "import('./solc-settings').ModelCheckerEngine | undefined")]
   pub engine: Option<ModelCheckerEngine>,
   /// Timeout in seconds for model checking.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub timeout: Option<u32>,
   /// Specific target categories to analyse (asserts or require statements).
   #[serde(skip_serializing_if = "Option::is_none")]
+  #[napi(ts_type = "Array<import('./solc-settings').ModelCheckerTarget> | undefined")]
   pub targets: Option<Vec<ModelCheckerTarget>>,
   /// Invariants that should hold across execution traces (e.g. `Reentrancy`).
   #[serde(skip_serializing_if = "Option::is_none")]
+  #[napi(ts_type = "Array<import('./solc-settings').ModelCheckerInvariant> | undefined")]
   pub invariants: Option<Vec<ModelCheckerInvariant>>,
   /// Emits counterexamples for unproved properties when `true`.
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -387,6 +393,7 @@ pub struct JsModelCheckerSettingsOptions {
   pub div_mod_with_slacks: Option<bool>,
   /// Solvers to run during model checking (`Chc`, `Eld`, `Bmc`, `AllZ3`, `Cvc4`).
   #[serde(skip_serializing_if = "Option::is_none")]
+  #[napi(ts_type = "Array<import('./solc-settings').ModelCheckerSolver> | undefined")]
   pub solvers: Option<Vec<ModelCheckerSolver>>,
   /// Displays unsupported properties discovered during analysis.
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -471,18 +478,85 @@ pub fn output_selection_is_effectively_empty(selection: &OutputSelection) -> boo
   })
 }
 
-#[napi(string_enum)]
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+macro_rules! impl_enum_string_traits {
+  ($name:ident { $($variant:ident => $value:expr),+ $(,)? }) => {
+    impl $name {
+      const fn as_str(&self) -> &'static str {
+        match self {
+          $(Self::$variant => $value,)*
+        }
+      }
+    }
+
+    impl ::serde::Serialize for $name {
+      fn serialize<S>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error>
+      where
+        S: ::serde::Serializer,
+      {
+        serializer.serialize_str(self.as_str())
+      }
+    }
+
+    impl ::std::str::FromStr for $name {
+      type Err = ::std::string::String;
+
+      fn from_str(value: &str) -> ::std::result::Result<Self, Self::Err> {
+        $(
+          if value.eq_ignore_ascii_case($value) {
+            return Ok(Self::$variant);
+          }
+        )*
+        Err(format!("Invalid {} value `{}`", stringify!($name), value))
+      }
+    }
+
+    impl<'de> ::serde::Deserialize<'de> for $name {
+      fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
+      where
+        D: ::serde::Deserializer<'de>,
+      {
+        let value = String::deserialize(deserializer)?;
+        value
+          .parse()
+          .map_err(|err| <D::Error as ::serde::de::Error>::custom(err))
+      }
+    }
+
+    impl ::napi::bindgen_prelude::ToNapiValue for $name {
+      unsafe fn to_napi_value(
+        env: ::napi::sys::napi_env,
+        value: Self,
+      ) -> ::napi::Result<::napi::sys::napi_value> {
+        <&str as ::napi::bindgen_prelude::ToNapiValue>::to_napi_value(env, value.as_str())
+      }
+    }
+
+    impl ::napi::bindgen_prelude::FromNapiValue for $name {
+      unsafe fn from_napi_value(
+        env: ::napi::sys::napi_env,
+        napi_val: ::napi::sys::napi_value,
+      ) -> ::napi::Result<Self> {
+        let value = <String as ::napi::bindgen_prelude::FromNapiValue>::from_napi_value(env, napi_val)?;
+        value.parse().map_err(|err| ::napi::Error::new(::napi::Status::InvalidArg, err))
+      }
+    }
+  };
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BytecodeHash {
   Ipfs,
   None,
   Bzzr1,
 }
 
-#[napi(string_enum)]
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+impl_enum_string_traits!(BytecodeHash {
+  Ipfs => "ipfs",
+  None => "none",
+  Bzzr1 => "bzzr1"
+});
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RevertStrings {
   Default,
   Strip,
@@ -490,33 +564,47 @@ pub enum RevertStrings {
   VerboseDebug,
 }
 
-#[napi(string_enum)]
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+impl_enum_string_traits!(RevertStrings {
+  Default => "default",
+  Strip => "strip",
+  Debug => "debug",
+  VerboseDebug => "verbosedebug"
+});
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ModelCheckerEngine {
   Bmc,
   None,
 }
 
-#[napi(string_enum)]
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+impl_enum_string_traits!(ModelCheckerEngine {
+  Bmc => "bmc",
+  None => "none"
+});
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ModelCheckerTarget {
   Assert,
   Require,
 }
 
-#[napi(string_enum)]
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+impl_enum_string_traits!(ModelCheckerTarget {
+  Assert => "assert",
+  Require => "require"
+});
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ModelCheckerInvariant {
   Contract,
   Reentrancy,
 }
 
-#[napi(string_enum)]
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+impl_enum_string_traits!(ModelCheckerInvariant {
+  Contract => "contract",
+  Reentrancy => "reentrancy"
+});
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ModelCheckerSolver {
   Chc,
   Eld,
@@ -525,17 +613,27 @@ pub enum ModelCheckerSolver {
   Cvc4,
 }
 
-#[napi(string_enum)]
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+impl_enum_string_traits!(ModelCheckerSolver {
+  Chc => "chc",
+  Eld => "eld",
+  Bmc => "bmc",
+  AllZ3 => "allz3",
+  Cvc4 => "cvc4"
+});
+
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ModelCheckerInvariantKind {
   Reentrancy,
   Contract,
 }
 
-#[napi(string_enum)]
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+impl_enum_string_traits!(ModelCheckerInvariantKind {
+  Reentrancy => "reentrancy",
+  Contract => "contract"
+});
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EvmVersion {
   Byzantium,
   Constantinople,
@@ -548,6 +646,19 @@ pub enum EvmVersion {
   Cancun,
   Prague,
 }
+
+impl_enum_string_traits!(EvmVersion {
+  Byzantium => "byzantium",
+  Constantinople => "constantinople",
+  Petersburg => "petersburg",
+  Istanbul => "istanbul",
+  Berlin => "berlin",
+  London => "london",
+  Paris => "paris",
+  Shanghai => "shanghai",
+  Cancun => "cancun",
+  Prague => "prague"
+});
 
 impl TryFrom<&JsCompilerSettingsOptions> for CompilerSettingsOptions {
   type Error = napi::Error;

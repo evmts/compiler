@@ -238,7 +238,7 @@ export interface AstConfigOptions {
   /** Semantic version of `solc` used for AST parsing. Defaults to `0.8.30`. */
   solcVersion?: string | undefined
   /** Solc language mode. Only `Solidity` is supported and used by default. */
-  solcLanguage?: SolcLanguage
+  solcLanguage?: import('./solc-settings').SolcLanguage | undefined
   /** Partial solc settings merged with the AST orchestrator defaults. */
   solcSettings?: CompilerSettings | undefined
   /** Contract name to target when mutating the AST. Applies to every contract when omitted. */
@@ -252,12 +252,6 @@ export interface AstConfigOptions {
    * will overwrite the existing members when conflicting.
    */
   resolveConflictStrategy?: ResolveConflictStrategy | undefined
-}
-
-export declare const enum BytecodeHash {
-  Ipfs = 'Ipfs',
-  None = 'None',
-  Bzzr1 = 'Bzzr1'
 }
 
 /** Serializable projection of `CompileOutput` exposed to JS callers. */
@@ -378,13 +372,6 @@ export interface CompilerError {
   vyperSourceLocation?: VyperSourceLocation
 }
 
-/** Selects which frontend pipeline the compiler should use. */
-export declare const enum CompilerLanguage {
-  Solidity = 'Solidity',
-  Yul = 'Yul',
-  Vyper = 'Vyper'
-}
-
 /**
  * JavaScript-facing wrapper around `solc` compiler settings. Everything is optional—unset values
  * inherit Foundry's defaults for the resolved compiler version before being sanitised.
@@ -412,7 +399,7 @@ export interface CompilerSettings {
    * Target EVM version for the compilation (e.g. `"paris"`). Defaults to the latest supported
    * version for the chosen solc release.
    */
-  evmVersion?: EvmVersion
+  evmVersion?: import('./solc-settings').EvmVersion | undefined
   /** Enables Solc's via-IR pipeline when `Some(true)`. */
   viaIr?: boolean
   /** Debugging configuration merged with defaults; useful for enabling extra revert information. */
@@ -482,22 +469,9 @@ export interface ContractState {
 
 export interface DebuggingSettings {
   /** Controls how revert strings are emitted (`Default`, `Strip`, `Debug`, `VerboseDebug`). */
-  revertStrings?: RevertStrings
+  revertStrings?: import('./solc-settings').RevertStrings | undefined
   /** Additional debug information tags. Defaults to Solc's list (currently `"location"`) when empty. */
   debugInfo: Array<string>
-}
-
-export declare const enum EvmVersion {
-  Byzantium = 'Byzantium',
-  Constantinople = 'Constantinople',
-  Petersburg = 'Petersburg',
-  Istanbul = 'Istanbul',
-  Berlin = 'Berlin',
-  London = 'London',
-  Paris = 'Paris',
-  Shanghai = 'Shanghai',
-  Cancun = 'Cancun',
-  Prague = 'Prague'
 }
 
 export interface EwasmOutput {
@@ -544,29 +518,6 @@ export interface ImmutableSlot {
   length: number
 }
 
-/** Logging levels surfaced to JavaScript callers. */
-export declare const enum LoggingLevel {
-  Silent = 'Silent',
-  Error = 'Error',
-  Warn = 'Warn',
-  Info = 'Info'
-}
-
-export declare const enum ModelCheckerEngine {
-  Bmc = 'Bmc',
-  None = 'None'
-}
-
-export declare const enum ModelCheckerInvariant {
-  Contract = 'Contract',
-  Reentrancy = 'Reentrancy'
-}
-
-export declare const enum ModelCheckerInvariantKind {
-  Reentrancy = 'Reentrancy',
-  Contract = 'Contract'
-}
-
 export interface ModelCheckerSettings {
   /**
    * Contracts and properties to target during model checking (map of contract filename =>
@@ -574,36 +525,23 @@ export interface ModelCheckerSettings {
    */
   contracts: Record<string, string[]> | undefined
   /** Model checker engine to use (`None` disables the feature, `Bmc` runs bounded model checking). */
-  engine?: ModelCheckerEngine
+  engine?: import('./solc-settings').ModelCheckerEngine | undefined
   /** Timeout in seconds for model checking. */
   timeout?: number
   /** Specific target categories to analyse (asserts or require statements). */
-  targets?: Array<ModelCheckerTarget>
+  targets?: Array<import('./solc-settings').ModelCheckerTarget> | undefined
   /** Invariants that should hold across execution traces (e.g. `Reentrancy`). */
-  invariants?: Array<ModelCheckerInvariant>
+  invariants?: Array<import('./solc-settings').ModelCheckerInvariant> | undefined
   /** Emits counterexamples for unproved properties when `true`. */
   showUnproved?: boolean
   /** Enables relaxed division/modulo handling via slack variables. */
   divModWithSlacks?: boolean
   /** Solvers to run during model checking (`Chc`, `Eld`, `Bmc`, `AllZ3`, `Cvc4`). */
-  solvers?: Array<ModelCheckerSolver>
+  solvers?: Array<import('./solc-settings').ModelCheckerSolver> | undefined
   /** Displays unsupported properties discovered during analysis. */
   showUnsupported?: boolean
   /** Displays properties proved to be safe. */
   showProvedSafe?: boolean
-}
-
-export declare const enum ModelCheckerSolver {
-  Chc = 'Chc',
-  Eld = 'Eld',
-  Bmc = 'Bmc',
-  AllZ3 = 'AllZ3',
-  Cvc4 = 'Cvc4'
-}
-
-export declare const enum ModelCheckerTarget {
-  Assert = 'Assert',
-  Require = 'Require'
 }
 
 export interface OptimizerDetails {
@@ -670,18 +608,6 @@ export interface ProjectPaths {
   virtualSources?: string
 }
 
-export declare const enum ResolveConflictStrategy {
-  Safe = 'Safe',
-  Replace = 'Replace'
-}
-
-export declare const enum RevertStrings {
-  Default = 'Default',
-  Strip = 'Strip',
-  Debug = 'Debug',
-  VerboseDebug = 'VerboseDebug'
-}
-
 /**
  * Additional spans that provide extra context for a diagnostic (Solc's "secondary locations").
  * Offsets share the same units as [`SourceLocation`] (byte offsets within the source file).
@@ -701,21 +627,9 @@ export interface SettingsMetadata {
   /** Emit literal source content in the metadata output. */
   useLiteralContent?: boolean
   /** Metadata hash strategy (defaults to Solc's own setting when `None`). */
-  bytecodeHash?: BytecodeHash
+  bytecodeHash?: import('./solc-settings').BytecodeHash | undefined
   /** Enables or disables CBOR metadata embedding. */
   cborMetadata?: boolean
-}
-
-/** Severity level attached to a compiler diagnostic emitted by Solc or Vyper. */
-export declare const enum SeverityLevel {
-  Error = 'Error',
-  Warning = 'Warning',
-  Info = 'Info'
-}
-
-export declare const enum SolcLanguage {
-  Solidity = 'Solidity',
-  Yul = 'Yul'
 }
 
 /**
@@ -756,7 +670,7 @@ export interface VyperCompilerConfig {
   /** Optimisation strategy forwarded to the Vyper compiler. Uses Vyper defaults when unset. */
   optimize?: VyperOptimizationMode | undefined
   /** Target EVM version. Defaults to Vyper's bundled target when omitted. */
-  evmVersion?: EvmVersion | undefined
+  evmVersion?: import('./solc-settings').EvmVersion | undefined
   /** Whether to embed bytecode metadata. Falls back to Vyper defaults when unspecified. */
   bytecodeMetadata?: boolean | undefined
   /** Additional import search paths for Vyper. Relative entries are resolved from the project root. */
@@ -768,13 +682,6 @@ export interface VyperCompilerConfig {
   outputSelection?: import('./solc-settings').OutputSelection | undefined
   /** Enables experimental Vyper codegen features. Disabled by default. */
   experimentalCodegen?: boolean | undefined
-}
-
-/** Optimisation goals exposed by the Vyper compiler. */
-export declare const enum VyperOptimizationMode {
-  Gas = 'Gas',
-  Codesize = 'Codesize',
-  None = 'None'
 }
 
 /**
@@ -796,6 +703,16 @@ export interface YulDetails {
   /** Custom optimiser step string for the Yul pipeline. */
   optimizerSteps?: string
 }
+
+export type CompilerLanguage = "solidity" | "yul" | "vyper";
+
+export type LoggingLevel = "silent" | "error" | "warn" | "info";
+
+export type ResolveConflictStrategy = "safe" | "replace";
+
+export type SeverityLevel = "error" | "warning" | "info";
+
+export type VyperOptimizationMode = "gas" | "codesize" | "none";
 
 type WithPathKey<TPath, TValue> = TValue extends SourceArtifacts<infer _>
   ? SourceArtifacts<Extract<TPath, string>>

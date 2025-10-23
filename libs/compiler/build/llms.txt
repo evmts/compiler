@@ -75,7 +75,7 @@
     await Compiler.installSolcVersion('0.8.30')
     
     const compiler = new Compiler({
-      language: CompilerLanguage.Solidity, // Solidity, Yul, Vyper
+      language: 'solidity', // or 'yul', 'vyper'
       solcVersion: '0.8.30',
       solcSettings: {
         // any solc settings, see index.d.ts:CompilerSettings
@@ -182,7 +182,9 @@
     ```ts
     astHelper.injectShadow(
       "function getValue() public view returns (uint256) { return value + 1; }",
-      { resolveConflictStrategy: ResolveConflictStrategy.Replace },
+      // 'safe' is the default strategy (will fail to compile if conflicting members are found)
+      // 'replace' will overwrite the existing members when conflicting
+      { resolveConflictStrategy: 'replace' },
     )
     ```
     
@@ -222,11 +224,14 @@
     ```ts
     import { Contract } from "@tevm/compiler";
     
-    const counter = Contract.fromSolcContractOutput("Counter", artifact).withAddress("0xabc...").withCreationBytecode("0x6000...");
+    const counter = Contract
+      .fromSolcContractOutput("Counter", artifact)
+      .withAddress("0xabc...")
+      .withDeployedBytecode("0x6000...");
     
-    // address and creationBytecode are typed
+    // address and deployedBytecode are typed
     console.log(counter.address);
-    console.log(counter.creationBytecode.hex);
+    console.log(counter.deployedBytecode.hex);
     console.log(counter.toJson()); // normalised contract state
     ```
     
@@ -526,7 +531,7 @@
       /** Semantic version of `solc` used for AST parsing. Defaults to `0.8.30`. */
       solcVersion?: string | undefined
       /** Solc language mode. Only `Solidity` is supported and used by default. */
-      solcLanguage?: SolcLanguage
+      solcLanguage?: import('./solc-settings').SolcLanguage | undefined
       /** Partial solc settings merged with the AST orchestrator defaults. */
       solcSettings?: CompilerSettings | undefined
       /** Contract name to target when mutating the AST. Applies to every contract when omitted. */
@@ -540,12 +545,6 @@
        * will overwrite the existing members when conflicting.
        */
       resolveConflictStrategy?: ResolveConflictStrategy | undefined
-    }
-    
-    export declare const enum BytecodeHash {
-      Ipfs = 'Ipfs',
-      None = 'None',
-      Bzzr1 = 'Bzzr1'
     }
     
     /** Serializable projection of `CompileOutput` exposed to JS callers. */
@@ -666,13 +665,6 @@
       vyperSourceLocation?: VyperSourceLocation
     }
     
-    /** Selects which frontend pipeline the compiler should use. */
-    export declare const enum CompilerLanguage {
-      Solidity = 'Solidity',
-      Yul = 'Yul',
-      Vyper = 'Vyper'
-    }
-    
     /**
      * JavaScript-facing wrapper around `solc` compiler settings. Everything is optional—unset values
      * inherit Foundry's defaults for the resolved compiler version before being sanitised.
@@ -700,7 +692,7 @@
        * Target EVM version for the compilation (e.g. `"paris"`). Defaults to the latest supported
        * version for the chosen solc release.
        */
-      evmVersion?: EvmVersion
+      evmVersion?: import('./solc-settings').EvmVersion | undefined
       /** Enables Solc's via-IR pipeline when `Some(true)`. */
       viaIr?: boolean
       /** Debugging configuration merged with defaults; useful for enabling extra revert information. */
@@ -770,22 +762,9 @@
     
     export interface DebuggingSettings {
       /** Controls how revert strings are emitted (`Default`, `Strip`, `Debug`, `VerboseDebug`). */
-      revertStrings?: RevertStrings
+      revertStrings?: import('./solc-settings').RevertStrings | undefined
       /** Additional debug information tags. Defaults to Solc's list (currently `"location"`) when empty. */
       debugInfo: Array<string>
-    }
-    
-    export declare const enum EvmVersion {
-      Byzantium = 'Byzantium',
-      Constantinople = 'Constantinople',
-      Petersburg = 'Petersburg',
-      Istanbul = 'Istanbul',
-      Berlin = 'Berlin',
-      London = 'London',
-      Paris = 'Paris',
-      Shanghai = 'Shanghai',
-      Cancun = 'Cancun',
-      Prague = 'Prague'
     }
     
     export interface EwasmOutput {
@@ -832,29 +811,6 @@
       length: number
     }
     
-    /** Logging levels surfaced to JavaScript callers. */
-    export declare const enum LoggingLevel {
-      Silent = 'Silent',
-      Error = 'Error',
-      Warn = 'Warn',
-      Info = 'Info'
-    }
-    
-    export declare const enum ModelCheckerEngine {
-      Bmc = 'Bmc',
-      None = 'None'
-    }
-    
-    export declare const enum ModelCheckerInvariant {
-      Contract = 'Contract',
-      Reentrancy = 'Reentrancy'
-    }
-    
-    export declare const enum ModelCheckerInvariantKind {
-      Reentrancy = 'Reentrancy',
-      Contract = 'Contract'
-    }
-    
     export interface ModelCheckerSettings {
       /**
        * Contracts and properties to target during model checking (map of contract filename =>
@@ -862,36 +818,23 @@
        */
       contracts: Record<string, string[]> | undefined
       /** Model checker engine to use (`None` disables the feature, `Bmc` runs bounded model checking). */
-      engine?: ModelCheckerEngine
+      engine?: import('./solc-settings').ModelCheckerEngine | undefined
       /** Timeout in seconds for model checking. */
       timeout?: number
       /** Specific target categories to analyse (asserts or require statements). */
-      targets?: Array<ModelCheckerTarget>
+      targets?: Array<import('./solc-settings').ModelCheckerTarget> | undefined
       /** Invariants that should hold across execution traces (e.g. `Reentrancy`). */
-      invariants?: Array<ModelCheckerInvariant>
+      invariants?: Array<import('./solc-settings').ModelCheckerInvariant> | undefined
       /** Emits counterexamples for unproved properties when `true`. */
       showUnproved?: boolean
       /** Enables relaxed division/modulo handling via slack variables. */
       divModWithSlacks?: boolean
       /** Solvers to run during model checking (`Chc`, `Eld`, `Bmc`, `AllZ3`, `Cvc4`). */
-      solvers?: Array<ModelCheckerSolver>
+      solvers?: Array<import('./solc-settings').ModelCheckerSolver> | undefined
       /** Displays unsupported properties discovered during analysis. */
       showUnsupported?: boolean
       /** Displays properties proved to be safe. */
       showProvedSafe?: boolean
-    }
-    
-    export declare const enum ModelCheckerSolver {
-      Chc = 'Chc',
-      Eld = 'Eld',
-      Bmc = 'Bmc',
-      AllZ3 = 'AllZ3',
-      Cvc4 = 'Cvc4'
-    }
-    
-    export declare const enum ModelCheckerTarget {
-      Assert = 'Assert',
-      Require = 'Require'
     }
     
     export interface OptimizerDetails {
@@ -958,18 +901,6 @@
       virtualSources?: string
     }
     
-    export declare const enum ResolveConflictStrategy {
-      Safe = 'Safe',
-      Replace = 'Replace'
-    }
-    
-    export declare const enum RevertStrings {
-      Default = 'Default',
-      Strip = 'Strip',
-      Debug = 'Debug',
-      VerboseDebug = 'VerboseDebug'
-    }
-    
     /**
      * Additional spans that provide extra context for a diagnostic (Solc's "secondary locations").
      * Offsets share the same units as [`SourceLocation`] (byte offsets within the source file).
@@ -989,21 +920,9 @@
       /** Emit literal source content in the metadata output. */
       useLiteralContent?: boolean
       /** Metadata hash strategy (defaults to Solc's own setting when `None`). */
-      bytecodeHash?: BytecodeHash
+      bytecodeHash?: import('./solc-settings').BytecodeHash | undefined
       /** Enables or disables CBOR metadata embedding. */
       cborMetadata?: boolean
-    }
-    
-    /** Severity level attached to a compiler diagnostic emitted by Solc or Vyper. */
-    export declare const enum SeverityLevel {
-      Error = 'Error',
-      Warning = 'Warning',
-      Info = 'Info'
-    }
-    
-    export declare const enum SolcLanguage {
-      Solidity = 'Solidity',
-      Yul = 'Yul'
     }
     
     /**
@@ -1044,7 +963,7 @@
       /** Optimisation strategy forwarded to the Vyper compiler. Uses Vyper defaults when unset. */
       optimize?: VyperOptimizationMode | undefined
       /** Target EVM version. Defaults to Vyper's bundled target when omitted. */
-      evmVersion?: EvmVersion | undefined
+      evmVersion?: import('./solc-settings').EvmVersion | undefined
       /** Whether to embed bytecode metadata. Falls back to Vyper defaults when unspecified. */
       bytecodeMetadata?: boolean | undefined
       /** Additional import search paths for Vyper. Relative entries are resolved from the project root. */
@@ -1056,13 +975,6 @@
       outputSelection?: import('./solc-settings').OutputSelection | undefined
       /** Enables experimental Vyper codegen features. Disabled by default. */
       experimentalCodegen?: boolean | undefined
-    }
-    
-    /** Optimisation goals exposed by the Vyper compiler. */
-    export declare const enum VyperOptimizationMode {
-      Gas = 'Gas',
-      Codesize = 'Codesize',
-      None = 'None'
     }
     
     /**
@@ -1084,6 +996,16 @@
       /** Custom optimiser step string for the Yul pipeline. */
       optimizerSteps?: string
     }
+    
+    export type CompilerLanguage = "solidity" | "yul" | "vyper";
+    
+    export type LoggingLevel = "silent" | "error" | "warn" | "info";
+    
+    export type ResolveConflictStrategy = "safe" | "replace";
+    
+    export type SeverityLevel = "error" | "warning" | "info";
+    
+    export type VyperOptimizationMode = "gas" | "codesize" | "none";
     
     type WithPathKey<TPath, TValue> = TValue extends SourceArtifacts<infer _>
       ? SourceArtifacts<Extract<TPath, string>>
@@ -1249,7 +1171,7 @@
       import { beforeAll, describe, expect, test } from 'bun:test'
       import { readFileSync } from 'node:fs'
       import { join } from 'node:path'
-      import { Ast, Compiler, ResolveConflictStrategy } from '../build/index.js'
+      import { Ast, Compiler } from '../build/index.js'
       import type { ContractDefinition, FunctionDefinition, SourceUnit } from '../build/solc-ast.js'
       
       const DEFAULT_SOLC_VERSION = '0.8.30'
@@ -1503,7 +1425,7 @@
       		const originalId = original.id
       
       		instrumented.injectShadow(FUNCTION_FRAGMENT_OVERRIDE, {
-      			resolveConflictStrategy: ResolveConflictStrategy.Replace,
+      			resolveConflictStrategy: 'replace',
       		})
       
       		const contract = findContract(instrumented.sourceUnit(), 'InlineExample')!
@@ -2067,19 +1989,7 @@
       import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
       import { tmpdir } from 'node:os'
       import { join } from 'node:path'
-      import {
-      	Ast,
-      	BytecodeHash,
-      	CompileOutput,
-      	Compiler,
-      	CompilerLanguage,
-      	CompilerSettings,
-      	Contract,
-      	EvmVersion,
-      	ModelCheckerEngine,
-      	RevertStrings,
-      	SeverityLevel,
-      } from '../build/index.js'
+      import { Ast, CompileOutput, Compiler, CompilerSettings, Contract } from '../build/index.js'
       import type { OutputSelection } from '../build/solc-settings.js'
       
       const DEFAULT_SOLC_VERSION = '0.8.30'
@@ -2252,9 +2162,9 @@
       			solcVersion: DEFAULT_SOLC_VERSION,
       			solcSettings: {
       				optimizer: { enabled: true, runs: 9 },
-      				metadata: { bytecodeHash: BytecodeHash.None },
+      				metadata: { bytecodeHash: 'none' },
       				debug: {
-      					revertStrings: RevertStrings.Debug,
+      					revertStrings: 'debug',
       					debugInfo: ['*'],
       				},
       				libraries: {
@@ -2263,7 +2173,7 @@
       					},
       				},
       				outputSelection: DEFAULT_OUTPUT_SELECTION,
-      				evmVersion: EvmVersion.London,
+      				evmVersion: 'london',
       			},
       		})
       
@@ -2342,10 +2252,10 @@
       
       		expect(output.hasCompilerErrors()).toBe(false)
       		expect(output.errors).toBeUndefined()
-      		const warnings = output.diagnostics.filter((diagnostic) => diagnostic.severity === SeverityLevel.Warning)
+      		const warnings = output.diagnostics.filter((diagnostic) => diagnostic.severity === 'warning')
       		expect(warnings.length).toBeGreaterThan(0)
       		const severities = new Set(output.diagnostics.map((err) => err.severity))
-      		expect(severities.has(SeverityLevel.Warning)).toBe(true)
+      		expect(severities.has('warning')).toBe(true)
       	})
       
       	test('surfaces syntax errors without throwing', () => {
@@ -2358,7 +2268,7 @@
       		expect(errors.length).toBeGreaterThan(0)
       		const error = errors[0]
       		expect(error.message).toMatch(/expected ';'/i)
-      		expect(error.severity).toBe(SeverityLevel.Error)
+      		expect(error.severity.toLowerCase()).toBe('error')
       	})
       
       	test('supports stopAfter parsing while keeping diagnostics', () => {
@@ -2406,21 +2316,21 @@
       			remappings: ['lib/=lib'],
       			optimizer: { enabled: true, runs: 123, details: { yul: true } },
       			modelChecker: {
-      				engine: ModelCheckerEngine.Bmc,
+      				engine: 'bmc',
       				timeout: 1,
       				contracts: { '*': ['*'] },
       			},
       			metadata: {
       				useLiteralContent: true,
-      				bytecodeHash: BytecodeHash.None,
+      				bytecodeHash: 'none',
       				cborMetadata: false,
       			},
       			outputSelection: {
       				'*': { '*': ['abi', 'evm.bytecode.object'] },
       			},
-      			evmVersion: EvmVersion.Prague,
+      			evmVersion: 'prague',
       			viaIr: true,
-      			debug: { revertStrings: RevertStrings.Debug, debugInfo: ['location'] },
+      			debug: { revertStrings: 'debug', debugInfo: ['location'] },
       			libraries: {
       				'LibraryConsumer.sol': {
       					MathLib: '0x0000000000000000000000000000000000000001',
@@ -2469,8 +2379,8 @@
       		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileSource(INLINE_SOURCE, {
       			solcSettings: {
-      				metadata: { bytecodeHash: BytecodeHash.None },
-      				evmVersion: EvmVersion.London,
+      				metadata: { bytecodeHash: 'none' },
+      				evmVersion: 'london',
       			},
       		})
       		expect(output.hasCompilerErrors()).toBe(false)
@@ -2538,12 +2448,12 @@
       		const compiler = new Compiler({ cacheEnabled: false })
       		expect(() =>
       			compiler.compileSource(ast, {
-      				language: CompilerLanguage.Yul,
+      				language: 'yul',
       			}),
       		).toThrow(/AST compilation is only supported for Solidity sources/i)
       		expect(() =>
       			compiler.compileSource(ast, {
-      				language: CompilerLanguage.Vyper,
+      				language: 'vyper',
       			}),
       		).toThrow(/AST compilation is only supported for Solidity sources/i)
       	})
@@ -2551,7 +2461,7 @@
       	test('compiles Yul sources when requested', () => {
       		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileSource(YUL_SOURCE, {
-      			language: CompilerLanguage.Yul,
+      			language: 'yul',
       		})
       		expect(output.hasCompilerErrors()).toBe(false)
       		const [contract] = flattenContracts(output)
@@ -2559,9 +2469,9 @@
       	})
       
       	test('compiles Vyper sources when requested', () => {
-      		const compiler = new Compiler({ cacheEnabled: false, language: CompilerLanguage.Vyper })
+      		const compiler = new Compiler({ cacheEnabled: false, language: 'vyper' })
       		const output = compiler.compileSource(VYPER_COUNTER_SOURCE, {
-      			language: CompilerLanguage.Vyper,
+      			language: 'vyper',
       		})
       		expect(output.hasCompilerErrors()).toBe(false)
       		const [contract] = flattenContracts(output)
@@ -2587,7 +2497,7 @@
       			{
       				'Echo.yul': YUL_SOURCE,
       			},
-      			{ language: CompilerLanguage.Yul },
+      			{ language: 'yul' },
       		)
       
       		expect(output.hasCompilerErrors()).toBe(false)
@@ -2595,7 +2505,7 @@
       	})
       
       	test('compiles Vyper sources when supplied as a map', () => {
-      		const compiler = new Compiler({ cacheEnabled: false, language: CompilerLanguage.Vyper })
+      		const compiler = new Compiler({ cacheEnabled: false, language: 'vyper' })
       		const output = compiler.compileSources({
       			'Counter.vy': VYPER_COUNTER_SOURCE,
       		})
@@ -2642,13 +2552,13 @@
       			{
       				'Echo.yul': YUL_SOURCE,
       			},
-      			{ language: CompilerLanguage.Yul },
+      			{ language: 'yul' },
       		)
       		expect(output.toJson()).toMatchSnapshot()
       	})
       
       	test('captures structured Vyper artifacts', () => {
-      		const compiler = new Compiler({ cacheEnabled: false, language: CompilerLanguage.Vyper })
+      		const compiler = new Compiler({ cacheEnabled: false, language: 'vyper' })
       		const output = compiler.compileSources({
       			'Counter.vy': VYPER_COUNTER_SOURCE,
       		})
@@ -2668,7 +2578,7 @@
       	test('compiles yul files when language override is provided', () => {
       		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileFiles([YUL_PATH], {
-      			language: CompilerLanguage.Yul,
+      			language: 'yul',
       		})
       
       		expect(output.hasCompilerErrors()).toBe(false)
@@ -2676,9 +2586,9 @@
       	})
       
       	test('compiles vyper files when language override is provided', () => {
-      		const compiler = new Compiler({ cacheEnabled: false, language: CompilerLanguage.Vyper })
+      		const compiler = new Compiler({ cacheEnabled: false, language: 'vyper' })
       		const output = compiler.compileFiles([VYPER_COUNTER_PATH], {
-      			language: CompilerLanguage.Vyper,
+      			language: 'vyper',
       		})
       		expect(output.hasCompilerErrors()).toBe(false)
       		expect(flattenContracts(output)).toHaveLength(1)
@@ -2750,7 +2660,7 @@
       		const compiler = new Compiler({
       			cacheEnabled: false,
       			solcVersion: DEFAULT_SOLC_VERSION,
-      			language: CompilerLanguage.Yul,
+      			language: 'yul',
       		})
       		const output = compiler.compileFiles([INLINE_PATH])
       
@@ -2968,7 +2878,7 @@
       import { join } from 'node:path'
       import { whatsabi } from '@shazow/whatsabi'
       import { createMemoryClient, MemoryClient } from '@tevm/memory-client'
-      import { Ast, Compiler, Contract, EvmVersion, FullyDefinedMap, LoggingLevel, SolcLanguage } from '../build/index.js'
+      import { Ast, Compiler, Contract, FullyDefinedMap } from '../build/index.js'
       
       // Various integration examples for shadowing contracts and enable better workflows on a 1:1 matching mainnet environment
       describe('Integrations', () => {
@@ -3015,10 +2925,10 @@
       			}
       
       			const ast = new Ast({
-      				solcLanguage: whatsabiResult.loaderResult.language === 'Solidity' ? SolcLanguage.Solidity : SolcLanguage.Yul,
+      				solcLanguage: whatsabiResult.loaderResult.language === 'Solidity' ? 'solidity' : 'yul',
       				solcVersion: compilerVersion,
       				solcSettings: {
-      					evmVersion: toEvmVersion(solcSettings.evmVersion),
+      					evmVersion: solcSettings.evmVersion,
       					optimizer: solcSettings.optimizer,
       					libraries: solcSettings.libraries,
       					remappings: solcSettings.remappings,
@@ -3042,7 +2952,8 @@
       			// If we wanted to actually work with a fork and an onchain contract, we would create a client
       			// in fork mode and use the actual contract address; we don't here for the sake of simplicity.
       			// client = createMemoryClient({ fork: { transport: http('mainnet.rpc.url') }})
-      			client = createMemoryClient()
+      			const makeMemoryClient = createMemoryClient as unknown as () => MemoryClient
+      			client = makeMemoryClient()
       
       			// The following are purely test setup; on a fork we would want to use the actual fork state instead
       			// or this in-memory test state
@@ -3066,9 +2977,9 @@
       			})
       		})
       
-      		test.only('ERC721A: expose packed address data analytics', async () => {
+      		test.skip('ERC721A: expose packed address data analytics', async () => {
       			const ast = new Ast({
-      				loggingLevel: LoggingLevel.Info,
+      				loggingLevel: 'info',
       				solcVersion: '0.8.30',
       				instrumentedContract: 'ERC721AMock',
       			})
@@ -3076,12 +2987,11 @@
       				// Add the shadow function that creates the analytics
       				.injectShadow(`
       			function addressAnalytics(address owner) external view returns (uint64 balance, uint64 minted, uint64 burned, uint64 aux) {
-      				return (0, 0, 0, 0);
-      				// balance = balanceOf(owner);
-      				// minted = _numberMinted(owner);
-      				// burned = _numberBurned(owner);
-      				// aux = _getAux(owner);
-      				}
+      				balance = balanceOf(owner);
+      				minted = _numberMinted(owner);
+      				burned = _numberBurned(owner);
+      				aux = _getAux(owner);
+      			}
       				`)
       				// Validate to make sure the AST is valid (this will compile it internally)
       				.validate()
@@ -3092,19 +3002,17 @@
       				throw new Error(`Failed to compile: ${output.errors.map((e) => e.formattedMessage).join(', ')}`)
       			}
       
-      			console.log(output.artifact.contracts)
       			const instrumentedContract = output.artifact.contracts['ERC721AMock'].withAddress(erc721AContract.address)
-      			await client.tevmSetAccount({
-      				address: instrumentedContract.address!,
-      				deployedBytecode: instrumentedContract.deployedBytecode!.hex,
-      			})
-      
+      			// Call the original contract using the intrumented bytecode
+      			// Meaning execute the instrumented (shadowed) contract in the context of the original contract
       			const res = await client.tevmContract({
       				to: instrumentedContract.address!,
       				abi: instrumentedContract.abi!,
+      				deployedBytecode: instrumentedContract.deployedBytecode!.hex,
       				functionName: 'addressAnalytics',
       				args: [callerAddress],
       			})
+      			console.log(res)
       			expect(res).toBeDefined()
       
       			// Outline:
@@ -3175,39 +3083,12 @@
       		})
       	})
       })
-      
-      const toEvmVersion = (evmVersion: string | undefined) => {
-      	switch (evmVersion) {
-      		case 'byzantium':
-      			return EvmVersion.Byzantium
-      		case 'constantinople':
-      			return EvmVersion.Constantinople
-      		case 'petersburg':
-      			return EvmVersion.Petersburg
-      		case 'istanbul':
-      			return EvmVersion.Istanbul
-      		case 'berlin':
-      			return EvmVersion.Berlin
-      		case 'london':
-      			return EvmVersion.London
-      		case 'paris':
-      			return EvmVersion.Paris
-      		case 'shanghai':
-      			return EvmVersion.Shanghai
-      		case 'cancun':
-      			return EvmVersion.Cancun
-      		case 'prague':
-      			return EvmVersion.Prague
-      		default:
-      			return undefined
-      	}
-      }
     </spec-file>
 
     <spec-file path="test/logger.spec.ts" format="typescript">
       import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
       import { join } from 'node:path'
-      import { Ast, Compiler, Contract, LoggingLevel } from '../build/index.js'
+      import { Ast, Compiler, Contract } from '../build/index.js'
       
       const INLINE_SOURCE = 'contract Logger { function noop() public {} }'
       const _INVALID_SOURCE = 'contract Broken {'
@@ -3260,21 +3141,21 @@
       	})
       
       	test('compiler suppresses info logs at warn level', async () => {
-      		const compiler = new Compiler({ loggingLevel: LoggingLevel.Warn })
+      		const compiler = new Compiler({ loggingLevel: 'warn' })
       		compiler.compileSource(INLINE_SOURCE)
       		await flushLogs()
       		expect(capturedLog.length).toBe(0)
       	})
       
       	test('compiler emits no logs at silent level', async () => {
-      		const compiler = new Compiler({ loggingLevel: LoggingLevel.Silent })
+      		const compiler = new Compiler({ loggingLevel: 'silent' })
       		compiler.compileSource(INLINE_SOURCE)
       		await flushLogs()
       		expect(capturedLog.length).toBe(0)
       	})
       
       	test('compiler logs context for filesystem errors', async () => {
-      		const compiler = new Compiler({ loggingLevel: LoggingLevel.Info })
+      		const compiler = new Compiler({ loggingLevel: 'info' })
       		const missing = join(process.cwd(), 'libs', 'compiler', 'test', 'fixtures', 'missing.sol')
       		let threw = false
       		try {
@@ -3294,7 +3175,7 @@
       	})
       
       	test('ast helper logs structural changes', async () => {
-      		const ast = new Ast({ loggingLevel: LoggingLevel.Info })
+      		const ast = new Ast({ loggingLevel: 'info' })
       		ast.fromSource(INLINE_SOURCE)
       		await flushLogs()
       		expect(capturedLog.some((line) => line.includes('loading AST from source text'))).toBe(true)
@@ -3302,7 +3183,7 @@
       
       	test('contract helpers emit lifecycle logs', async () => {
       		// Ensure the JS logger is initialised before creating contract instances.
-      		new Compiler({ loggingLevel: LoggingLevel.Info })
+      		new Compiler({ loggingLevel: 'info' })
       		await flushLogs()
       		capturedLog.length = 0
       

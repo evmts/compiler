@@ -14,10 +14,12 @@ use foundry_compilers::artifacts::{
 use foundry_compilers::compilers::multi::{MultiCompiler, MultiCompilerError};
 use foundry_compilers::compilers::Compiler as FoundryCompiler;
 use foundry_compilers::ProjectCompileOutput;
+use napi::bindgen_prelude::{FromNapiValue, ToNapiValue};
 use napi::{Env, JsUnknown};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use std::str::FromStr;
 
 use crate::ast::{Ast, JsAst, SourceTarget};
 use crate::contract;
@@ -30,12 +32,79 @@ use crate::internal::errors::napi_error;
 // -----------------------------------------------------------------------------
 
 /// Severity level attached to a compiler diagnostic emitted by Solc or Vyper.
-#[napi(string_enum)]
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SeverityLevel {
   Error,
   Warning,
   Info,
+}
+
+impl SeverityLevel {
+  const fn as_str(&self) -> &'static str {
+    match self {
+      SeverityLevel::Error => "error",
+      SeverityLevel::Warning => "warning",
+      SeverityLevel::Info => "info",
+    }
+  }
+}
+
+impl Serialize for SeverityLevel {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: serde::Serializer,
+  {
+    serializer.serialize_str(self.as_str())
+  }
+}
+
+impl FromStr for SeverityLevel {
+  type Err = String;
+
+  fn from_str(value: &str) -> Result<Self, Self::Err> {
+    if value.eq_ignore_ascii_case("error") {
+      Ok(Self::Error)
+    } else if value.eq_ignore_ascii_case("warning") {
+      Ok(Self::Warning)
+    } else if value.eq_ignore_ascii_case("info") {
+      Ok(Self::Info)
+    } else {
+      Err(format!("Invalid SeverityLevel value `{value}`"))
+    }
+  }
+}
+
+impl<'de> Deserialize<'de> for SeverityLevel {
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    let value = String::deserialize(deserializer)?;
+    value
+      .parse()
+      .map_err(|err| <D::Error as serde::de::Error>::custom(err))
+  }
+}
+
+impl ToNapiValue for SeverityLevel {
+  unsafe fn to_napi_value(
+    env: napi::sys::napi_env,
+    value: Self,
+  ) -> napi::Result<napi::sys::napi_value> {
+    <&str as ToNapiValue>::to_napi_value(env, value.as_str())
+  }
+}
+
+impl FromNapiValue for SeverityLevel {
+  unsafe fn from_napi_value(
+    env: napi::sys::napi_env,
+    napi_val: napi::sys::napi_value,
+  ) -> napi::Result<Self> {
+    let value = <String as FromNapiValue>::from_napi_value(env, napi_val)?;
+    value
+      .parse()
+      .map_err(|err| napi::Error::new(napi::Status::InvalidArg, err))
+  }
 }
 
 /// Byte offsets (0-based, measured against the UTF-8 source) pointing at the primary diagnostic span
@@ -91,6 +160,7 @@ pub struct CompilerError {
   /// Component or subsystem that produced the diagnostic (e.g. `general`, `parser`).
   pub component: String,
   /// Severity category for the diagnostic.
+  #[napi(ts_type = "SeverityLevel")]
   pub severity: SeverityLevel,
   /// Diagnostic type string provided by the compiler.
   pub error_type: String,

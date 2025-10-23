@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { Ast, Compiler, ResolveConflictStrategy } from '../build/index.js'
+import { Ast, Compiler } from '../build/index.js'
 import type { ContractDefinition, FunctionDefinition, SourceUnit } from '../build/solc-ast.js'
 
 const DEFAULT_SOLC_VERSION = '0.8.30'
@@ -255,7 +255,7 @@ describe('injectShadow', () => {
 		const originalId = original.id
 
 		instrumented.injectShadow(FUNCTION_FRAGMENT_OVERRIDE, {
-			resolveConflictStrategy: ResolveConflictStrategy.Replace,
+			resolveConflictStrategy: 'replace',
 		})
 
 		const contract = findContract(instrumented.sourceUnit(), 'InlineExample')!

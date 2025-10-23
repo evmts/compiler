@@ -7,6 +7,12 @@ import type {
   SourceArtifactsJson,
 } from "../../build";
 
+export type CompilerLanguage = "solidity" | "yul" | "vyper";
+export type LoggingLevel = "silent" | "error" | "warn" | "info";
+export type ResolveConflictStrategy = "safe" | "replace";
+export type SeverityLevel = "error" | "warning" | "info";
+export type VyperOptimizationMode = "gas" | "codesize" | "none";
+
 type WithPathKey<TPath, TValue> = TValue extends SourceArtifacts<infer _>
   ? SourceArtifacts<Extract<TPath, string>>
   : TValue;

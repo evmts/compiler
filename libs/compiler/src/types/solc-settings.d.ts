@@ -15,6 +15,7 @@
 
 // @ts-ignore
 const fileLevelOption = "" as const;
+
 export type OutputSelection = {
   [fileSelector: string]: {
     [fileLevelOption]?: ReadonlyArray<"ast">;
@@ -76,3 +77,28 @@ type DeployedBytecodeOutput =
   | "evm.deployedBytecode.generatedSources"
   | "evm.deployedBytecode.immutableReferences";
 type EwasmOutput = "ewasm" | "ewasm.wast" | "ewasm.wasm";
+
+export type SolcLanguage = "solidity" | "yul";
+export type EvmVersion =
+| "byzantium"
+| "constantinople"
+| "petersburg"
+| "istanbul"
+| "berlin"
+| "london"
+| "paris"
+| "shanghai"
+| "cancun"
+| "prague";
+export type BytecodeHash = "ipfs" | "none" | "bzzr1";
+export type ModelCheckerEngine = "bmc" | "none";
+export type ModelCheckerInvariant = "contract" | "reentrancy";
+export type ModelCheckerInvariantKind = "reentrancy" | "contract";
+export type ModelCheckerSolver =
+  | "chc"
+  | "eld"
+  | "bmc"
+  | "allz3"
+  | "cvc4";
+export type ModelCheckerTarget = "assert" | "require";
+export type RevertStrings = "default" | "strip" | "debug" | "verbosedebug";
