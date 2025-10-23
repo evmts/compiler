@@ -1,0 +1,49 @@
+name: Version 🔖
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  release:
+    name: Version 🔖
+    if: github.repository == 'evmts/compiler'
+    runs-on: ubuntu-latest
+    env:
+      SOLC_VERSION: "0.8.30"
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout Repo
+        with:
+          filter: tree:0
+          fetch-depth: 0
+
+      - name: "Setup"
+        uses: ./.github/actions/setup
+
+      - name: Check for pre.json file existence
+        id: check_files
+        uses: andstor/file-existence-action@v3.0.0
+        with:
+          files: ".changeset/pre.json"
+
+      - name: Set deployment token
+        run: npm config set '//registry.npmjs.org/:_authToken' "${NPM_TOKEN}"
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Handle release pull request or publish to npm
+        id: changesets
+        if: steps.check_files.outputs.files_exists == 'false'
+        uses: changesets/action@v1
+        with:
+          title: "chore: Version packages 🔖"
+          commit: "chore: Version packages 🔖"
+          publish: bun release:publish
+          version: bun release:version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

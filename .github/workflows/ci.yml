@@ -12,69 +12,25 @@ permissions:
 
 jobs:
   main:
+    name: CI
     runs-on: ubuntu-latest
     env:
       SOLC_VERSION: "0.8.30"
     steps:
       - uses: actions/checkout@v4
+        name: Checkout Repo
         with:
           filter: tree:0
           fetch-depth: 0
+
+      - name: "Setup"
+        uses: ./.github/actions/setup
 
       # This enables task distribution via Nx Cloud
       # Run this command as early as possible, before dependencies are installed
       # Learn more at https://nx.dev/ci/reference/nx-cloud-cli#npx-nxcloud-startcirun
       # Uncomment this line to enable task distribution
       # - run: npx nx start-ci-run --distribute-on="3 linux-medium-js" --stop-agents-after="build"
-
-      # Setup Rust
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: "libs/compiler -> target"
-
-      # Cache node_modules
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: "pnpm"
-
-      - uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
-
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.foundry
-            ~/.svm
-          key: ${{ runner.os }}-svm-${{ env.SOLC_VERSION }}
-          restore-keys: |
-            ${{ runner.os }}-svm-
-
-      - name: Install Foundry (svm)
-        run: |
-          curl -L https://foundry.paradigm.xyz | bash
-          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
-          ~/.foundry/bin/foundryup
-
-      - name: Install solc
-        run: svm install $SOLC_VERSION
-
-      - name: Install Vyper
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install vyper
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - run: pnpm install --frozen-lockfile
 
       # Prepend any command with "nx-cloud record --" to record its logs to Nx Cloud
       # - run: npx nx-cloud record -- echo Hello World

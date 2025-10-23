@@ -5,12 +5,17 @@
   "scripts": {
     "all": "nx run-many -t lint format test build post-build",
     "build": "nx run-many -t build post-build",
+    "build:release": "pnpm all --configuration=production",
     "lint": "nx run-many -t lint format",
+    "release:init": "changeset",
+    "release:version": "changeset version",
+    "release:publish": "changeset publish",
     "test": "nx run-many -t test"
   },
   "private": true,
   "devDependencies": {
     "@biomejs/biome": "^2.2.6",
+    "@changesets/cli": "^2.29.7",
     "@monodon/rust": "2.3.0",
     "@napi-rs/cli": "3.0.0-alpha.63",
     "@napi-rs/wasm-runtime": "^0.2.4",

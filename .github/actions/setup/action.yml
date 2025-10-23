@@ -1,0 +1,54 @@
+name: Setup
+runs:
+  using: composite
+  steps:
+    # Setup Rust
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: "libs/compiler -> target"
+
+    # Cache node_modules
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 10
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: "pnpm"
+
+    - uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: latest
+
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.foundry
+          ~/.svm
+        key: ${{ runner.os }}-svm-${{ env.SOLC_VERSION }}
+        restore-keys: |
+          ${{ runner.os }}-svm-
+
+    - name: Install Foundry (svm)
+      uses: foundry-rs/foundry-toolchain@v1
+      with:
+        version: nightly
+
+    - name: Install solc
+      run: svm install $SOLC_VERSION
+      shell: bash
+
+    - name: Install Vyper
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install vyper
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+      shell: bash

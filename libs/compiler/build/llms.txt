@@ -66,6 +66,7 @@
     
     - Feed `libs/compiler/build/llms.txt` to your favourite LLM and ask how to adapt the compiler for your workflow—the bundle includes the public API surface, curated `.d.ts`, and executable specs.
     - The sections below show direct JavaScript usage patterns; all examples run in Node.js or Bun.
+    - You will also find realistic use cases in [test/integrations.spec.ts](test/integrations.spec.ts).
     
     ### Compile inline sources
     
@@ -156,7 +157,7 @@
     
     await Compiler.installSolcVersion("0.8.30");
     
-    const astHelper = new Ast({
+    const ast = new Ast({
       solcVersion: "0.8.30",
       instrumentedContract: "Example", // this is not necessary if there is only one contract
     })
@@ -166,10 +167,10 @@
       .exposeInternalVariables() // promote private/internal variables
       .validate(); // optional: recompiles to ensure the AST is sound
     
-    const stitched = astHelper.sourceUnit(); // SourceUnit ready for compilation
+    const stitched = ast.sourceUnit(); // SourceUnit ready for compilation
     
     // Compile the instrumented AST (this will reuse the cached output from validate() if not invalidated)
-    const compiled = astHelper.compile();
+    const compiled = ast.compile();
     // which is exactly the same as:
     const compiler = new Compiler({ solcVersion: "0.8.30" });
     const output = compiler.compileSources({ "Example.sol": stitched });
@@ -180,7 +181,7 @@
     When a fragment redefines existing members you can switch the conflict strategy to replace the matching node while still appending the rest:
     
     ```ts
-    astHelper.injectShadow(
+    ast.injectShadow(
       "function getValue() public view returns (uint256) { return value + 1; }",
       // 'safe' is the default strategy (will fail to compile if conflicting members are found)
       // 'replace' will overwrite the existing members when conflicting
@@ -276,10 +277,10 @@
     
     ## Release Checklist
     
-    1. `pnpm nx run compiler:build --configuration=production`
-    2. `pnpm nx run compiler:post-build`
-    3. `pnpm nx run compiler:test`
-    4. Package platform binaries or publish as required.
+    1. `pnpm build:release`
+    2. `pnpm release:init` to create new release notes
+    3. `pnpm release:version` to update the version in the package.json
+    4. `pnpm release:publish` to publish the package
     
     The `libs/compiler/build/llms.txt` bundle is regenerated automatically during `post-build` so AI assistants stay in sync with the public surface.
     

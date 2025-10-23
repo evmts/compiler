@@ -240,10 +240,10 @@ Useful sub-targets:
 
 ## Release Checklist
 
-1. `pnpm nx run compiler:build --configuration=production`
-2. `pnpm nx run compiler:post-build`
-3. `pnpm nx run compiler:test`
-4. Package platform binaries or publish as required.
+1. `pnpm build:release`
+2. `pnpm release:init` to create new release notes
+3. `pnpm release:version` to update the version in the package.json
+4. `pnpm release:publish` to publish the package
 
 The `libs/compiler/build/llms.txt` bundle is regenerated automatically during `post-build` so AI assistants stay in sync with the public surface.
 
