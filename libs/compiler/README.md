@@ -120,7 +120,7 @@ import { Ast, Compiler, ResolveConflictStrategy } from "@tevm/compiler";
 
 await Compiler.installSolcVersion("0.8.30");
 
-const astHelper = new Ast({
+const ast = new Ast({
   solcVersion: "0.8.30",
   instrumentedContract: "Example", // this is not necessary if there is only one contract
 })
@@ -130,10 +130,10 @@ const astHelper = new Ast({
   .exposeInternalVariables() // promote private/internal variables
   .validate(); // optional: recompiles to ensure the AST is sound
 
-const stitched = astHelper.sourceUnit(); // SourceUnit ready for compilation
+const stitched = ast.sourceUnit(); // SourceUnit ready for compilation
 
 // Compile the instrumented AST (this will reuse the cached output from validate() if not invalidated)
-const compiled = astHelper.compile();
+const compiled = ast.compile();
 // which is exactly the same as:
 const compiler = new Compiler({ solcVersion: "0.8.30" });
 const output = compiler.compileSources({ "Example.sol": stitched });
@@ -144,7 +144,7 @@ const ast = output.artifacts["Example.sol"].ast;
 When a fragment redefines existing members you can switch the conflict strategy to replace the matching node while still appending the rest:
 
 ```ts
-astHelper.injectShadow(
+ast.injectShadow(
   "function getValue() public view returns (uint256) { return value + 1; }",
   // 'safe' is the default strategy (will fail to compile if conflicting members are found)
   // 'replace' will overwrite the existing members when conflicting
