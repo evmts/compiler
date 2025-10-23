@@ -2874,11 +2874,18 @@
 
     <spec-file path="test/integrations.spec.ts" format="typescript">
       import { beforeAll, describe, expect, test } from 'bun:test'
-      import { readFileSync } from 'node:fs'
-      import { join } from 'node:path'
       import { whatsabi } from '@shazow/whatsabi'
-      import { createMemoryClient, MemoryClient } from '@tevm/memory-client'
-      import { Ast, Compiler, Contract, FullyDefinedMap } from '../build/index.js'
+      import { Ast, Compiler, Contract } from '../build/index.js'
+      import {
+      	encodeUintWords,
+      	etherToWei,
+      	padAddress,
+      	setupCompound,
+      	setupErc721A,
+      	setupSeaport,
+      	setupUniswapV3,
+      	setupUniswapV4,
+      } from './integration.setup.js'
       
       // Various integration examples for shadowing contracts and enable better workflows on a 1:1 matching mainnet environment
       describe('Integrations', () => {
@@ -2917,6 +2924,7 @@
       			expect(contract.name).toBe(whatsabiResult.name)
       			expect(contract.abi).toEqual(whatsabiResult.loaderResult.output.abi)
       		})
+      
       		test('Create an Ast instance out of a verified contract', async () => {
       			const solcSettings = whatsabiResult.loaderResult.settings
       			const compilerVersion = whatsabiResult.compilerVersion?.split('+')[0]
@@ -2943,64 +2951,31 @@
       	})
       
       	describe('Various use cases', () => {
-      		let client: MemoryClient
-      		const erc721APath = join(__dirname, 'fixtures', 'contracts', 'ERC721A.sol')
-      		let erc721AContract: Contract<string, FullyDefinedMap>
-      		const callerAddress = `0x${'1'.repeat(40)}` as const
+      		test('ERC721A: expose packed address data analytics', async () => {
+      			const { callerAddress, client, contract, source } = await setupErc721A()
       
-      		beforeAll(async () => {
-      			// If we wanted to actually work with a fork and an onchain contract, we would create a client
-      			// in fork mode and use the actual contract address; we don't here for the sake of simplicity.
-      			// client = createMemoryClient({ fork: { transport: http('mainnet.rpc.url') }})
-      			client = createMemoryClient() as unknown as MemoryClient
+      			const analyticsShadow = `
+      				struct Analytics {
+      					uint64 balance;
+      					uint64 minted;
+      					uint64 burned;
+      					uint64 aux;
+      				}
       
-      			// The following are purely test setup; on a fork we would want to use the actual fork state instead
-      			// or this in-memory test state
-      			const compiler = new Compiler({ solcVersion: '0.8.30' })
-      			const output = compiler.compileFiles([erc721APath])
-      			if (output.hasCompilerErrors()) {
-      				throw new Error(`Failed to compile: ${output.errors.map((e) => e.formattedMessage).join(', ')}`)
-      			}
+      				function addressAnalytics(address owner) external view returns (Analytics memory) {
+      					return Analytics(
+      						uint64(balanceOf(owner)),
+      						uint64(_numberMinted(owner)),
+      						uint64(_numberBurned(owner)),
+      						uint64(_getAux(owner))
+      					);
+      				}
+      			`
       
-      			erc721AContract = output.artifacts[erc721APath].contracts['ERC721AMock'].withAddress(`0x${'a'.repeat(40)}`)
-      			await client.tevmSetAccount({
-      				address: erc721AContract.address!,
-      				deployedBytecode: erc721AContract.deployedBytecode!.hex,
-      			})
-      			await client.tevmContract({
-      				to: erc721AContract.address!,
-      				abi: erc721AContract.abi!,
-      				functionName: 'mint',
-      				args: [callerAddress, 1],
-      				addToBlockchain: true,
-      			})
-      		})
-      
-      		test.only('ERC721A: expose packed address data analytics', async () => {
-      			const ast = new Ast({
-      				solcVersion: '0.8.30',
-      				instrumentedContract: 'ERC721AMock',
-      			})
-      				.fromSource(readFileSync(erc721APath, 'utf8'))
-      				// Add the shadow function that creates the analytics
-      				.injectShadow(`
-      			struct Analytics {
-      				uint64 balance;
-      				uint64 minted;
-      				uint64 burned;
-      				uint64 aux;
-      			}
-      
-      			function addressAnalytics(address owner) external view returns (Analytics memory) {
-      				return Analytics(
-      				  uint64(balanceOf(owner)),
-      				  uint64(_numberMinted(owner)),
-      				  uint64(_numberBurned(owner)),
-      				  uint64(_getAux(owner))
-      				);
-      			}
-      				`)
-      				// Validate to make sure the AST is valid (this will compile it internally)
+      			// Instrument the ERC721A mock with an analytics surface mirroring packed address data
+      			const ast = new Ast({ instrumentedContract: 'ERC721AMock' })
+      				.fromSource(source)
+      				.injectShadow(analyticsShadow)
       				.validate()
       
       			// Compile the AST (this will reuse the cached output from validation here)
@@ -3009,11 +2984,11 @@
       				throw new Error(`Failed to compile: ${output.errors.map((e) => e.formattedMessage).join(', ')}`)
       			}
       
-      			const instrumentedContract = output.artifact.contracts['ERC721AMock'].withAddress(erc721AContract.address)
+      			const instrumentedContract = output.artifact.contracts['ERC721AMock']
       			// Call the original contract using the intrumented bytecode
       			// Meaning execute the instrumented (shadowed) contract in the context of the original contract
       			const res = await client.tevmContract({
-      				to: instrumentedContract.address!,
+      				to: contract.address,
       				abi: instrumentedContract.abi!,
       				deployedBytecode: instrumentedContract.deployedBytecode!.hex,
       				functionName: 'addressAnalytics',
@@ -3022,58 +2997,266 @@
       			expect(res.data).toMatchObject({ balance: 1n, minted: 1n, burned: 0n, aux: 0n })
       		})
       
-      		test.todo('Uniswap v3: decode TickBitmap word in-contract', () => {
-      			// Outline:
-      			// 1. Patch UniswapV3Pool (or a thin reader) with __decodeTickBitmap(int16,uint24) that
-      			//    reads tickBitmap(wordIndex), counts set bits, allocates int24[] ticks, iterates bits,
-      			//    and maps bit index → tick via (wordIndex * 256 + bitIndex) * tickSpacing.
-      			// 2. Compile + deploy patched bytecode on fork, call helper from viem to recover ticks.
-      			// Why shadowing:
-      			// - ABI exposes tickBitmap(wordIndex) but not enumeration; off-chain scanning requires
-      			//   guessing non-zero words and manual bit math, creating many RPC calls and easy mistakes.
-      			// - On-chain decoder returns canonical tick list in one call per word.
-      			// Reference viem usage:
-      			// const { result: ticks } = await client.readContract({ functionName: '__decodeTickBitmap', args: [wordIndex, spacing] })
+      		test('Uniswap v3: decode TickBitmap word in-contract', async () => {
+      			const { client, contract, source, tickSpacing } = await setupUniswapV3()
+      
+      			const bitmapDecoderShadow = `
+      				function decodeTickBitmap(int16 wordIndex, int24 spacing) external view returns (int24[] memory ticks) {
+      					require(spacing > 0, "TickSpacingZero");
+      					uint256 word = _tickBitmap[wordIndex];
+      					uint256 population;
+      					for (uint16 bit = 0; bit < 256; bit++) {
+      						if ((word & (uint256(1) << bit)) != 0) {
+      							population++;
+      						}
+      					}
+      					ticks = new int24[](population);
+      					uint256 cursor;
+      					for (uint16 bit = 0; bit < 256; bit++) {
+      						if ((word & (uint256(1) << bit)) != 0) {
+      							int256 tick = (int256(wordIndex) * 256 + int256(uint256(bit))) * int256(spacing);
+      							ticks[cursor] = int24(tick);
+      							cursor++;
+      						}
+      					}
+      					return ticks;
+      				}
+      			`
+      
+      			// Shadow the pool with an on-chain bitmap decoder mirroring the off-chain bit math
+      			const output = new Ast({ instrumentedContract: 'UniswapV3PoolMock' })
+      				.fromSource(source)
+      				.injectShadow(bitmapDecoderShadow)
+      				.compile()
+      			if (output.hasCompilerErrors()) {
+      				throw new Error(`Failed to compile: ${output.errors.map((e) => e.formattedMessage).join(', ')}`)
+      			}
+      			const instrumentedContract = output.artifact.contracts['UniswapV3PoolMock']
+      
+      			// Call into the shadow helper and present numeric ticks for the expectations
+      			const decode = async (wordIndex: number) =>
+      				client
+      					.tevmContract({
+      						to: contract.address,
+      						abi: instrumentedContract.abi!,
+      						deployedBytecode: instrumentedContract.deployedBytecode!.hex,
+      						functionName: 'decodeTickBitmap',
+      						args: [wordIndex, tickSpacing],
+      					})
+      					.then((response) => response.data)
+      			expect(await decode(-1)).toEqual([-120])
+      			expect(await decode(0)).toEqual([0, 60])
       		})
-      		test.todo('Uniswap v4: override hook dispatch for fork testing', () => {
-      			// Outline:
-      			// 1. Fork PoolManager, add storage slot address __testHook and setter __setTestHook(address).
-      			// 2. In hook dispatch path (beforeSwap/afterSwap, liquidity callbacks, etc.), use
-      			//    hookToCall = __testHook != address(0) ? __testHook : address(key.hooks).
-      			// 3. Compile patched PoolManager, patch forked bytecode, set custom hook via viem,
-      			//    run swaps to exercise custom hook against unchanged pool state.
-      			// Why shadowing:
-      			// - PoolKey (currency0, currency1, fee, tickSpacing, hooks) is hashed into PoolId at init,
-      			//   so hook address is immutable; ABI offers no way to attach a new hook to an existing pool.
-      			// - Shadow override enables testing hooks on real pool liquidity without reinitializing.
-      			// Reference viem usage:
-      			// await client.writeContract({ functionName: '__setTestHook', args: ['0xYourHook'] })
+      
+      		test('Uniswap v4: override hook dispatch for fork testing', async () => {
+      			const { client, poolId, poolManager, defaultHooks, overrideHooks, source, swapData } = await setupUniswapV4()
+      
+      			const dispatchShadow = `
+      				function dispatchSwapWithHookOverride(bytes32 poolId, address overrideHook, bytes calldata data)
+      					external
+      					returns (address hook, bytes memory result)
+      				{
+      					hook = overrideHook != address(0) ? overrideHook : pools[poolId].hooks;
+      					if (hook == address(0)) {
+      						lastHookInvoked = address(0);
+      						return (address(0), "");
+      					}
+      					lastHookInvoked = hook;
+      					result = IHooks(hook).beforeSwap(msg.sender, data);
+      				}
+      			`
+      
+      			// Expose a dev-only dispatcher that can override the hook target
+      			const output = new Ast({ instrumentedContract: 'PoolManagerMock' })
+      				.fromSource(source)
+      				.injectShadow(dispatchShadow)
+      				.compile()
+      			if (output.hasCompilerErrors()) {
+      				throw new Error(`Failed to compile: ${output.errors.map((e) => e.formattedMessage).join(', ')}`)
+      			}
+      			const instrumentedPoolManager = output.artifact.contracts['PoolManagerMock']
+      
+      			const dispatch = async (overrideHook = `0x${'0'.repeat(40)}`) =>
+      				client.tevmContract({
+      					to: poolManager.address,
+      					abi: instrumentedPoolManager.abi!,
+      					deployedBytecode: instrumentedPoolManager.deployedBytecode!.hex,
+      					functionName: 'dispatchSwapWithHookOverride',
+      					args: [poolId, overrideHook, swapData],
+      					addToBlockchain: true,
+      				})
+      
+      			// First call uses the pool's registered hook
+      			const initialDispatch = await dispatch()
+      
+      			// Confirm the pool still reports the original hook in storage
+      			const { data: hookFromStorage } = await client.tevmContract({
+      				to: poolManager.address,
+      				abi: instrumentedPoolManager.abi!,
+      				deployedBytecode: instrumentedPoolManager.deployedBytecode!.hex,
+      				functionName: 'poolHooks',
+      				args: [poolId],
+      			})
+      			expect((hookFromStorage as string).toLowerCase()).toBe(defaultHooks.address.toLowerCase())
+      
+      			// First call uses the pool's registered hook in storage
+      			const [initialHook, initialResult] = initialDispatch.data as [string, string]
+      			expect([initialHook.toLowerCase(), initialResult]).toEqual([defaultHooks.address.toLowerCase(), swapData])
+      
+      			// Subsequent call forces the override hook via the injected helper
+      			const overriddenDispatch = await dispatch(overrideHooks.address)
+      			const [overrideHook, overrideResult] = overriddenDispatch.data as [string, string]
+      			expect([overrideHook.toLowerCase(), overrideResult]).toEqual([overrideHooks.address.toLowerCase(), swapData])
+      
+      			const { data: hookAfterOverride } = await client.tevmContract({
+      				to: poolManager.address,
+      				abi: instrumentedPoolManager.abi!,
+      				deployedBytecode: instrumentedPoolManager.deployedBytecode!.hex,
+      				functionName: 'poolHooks',
+      				args: [poolId],
+      			})
+      			expect((hookAfterOverride as string).toLowerCase()).toBe(defaultHooks.address.toLowerCase())
       		})
-      		test.todo('Compound v2: shadow exchange-rate invariant checker', () => {
-      			// Outline:
-      			// 1. Add __checkExchangeRateInvariant() view that reads getCash(), totalBorrows(),
-      			//    totalReserves(), totalSupply(), mirrors exchangeRateStoredInternal() math, and
-      			//    returns (ok, expected, stored).
-      			// 2. Wrap relevant functions with a pre & post invariant check by calling this function.
-      			// 3. Use tevm compiler to rebuild instrumented cToken, patch fork, call helper from viem.
-      			// Why shadowing (despite ABI parity):
-      			// - Public views allow reconstruction, but shadow method guarantees identical rounding/
-      			//   scaling logic and offers one-call forensic output with explicit pass/fail context.
-      			// Reference viem usage:
-      			// const { result } = await client.readContract({ functionName: '__checkExchangeRateInvariant' })
+      
+      		test('Compound v2: shadow exchange-rate invariant checker', async () => {
+      			const { client, contract, source } = await setupCompound()
+      
+      			const invariantShadow = `
+      				error BrokenInvariant();
+      				function exchangeRateInvariant() internal view {
+      					uint256 supply = totalSupply();
+      					if (supply == 0) revert BrokenInvariant();
+      					uint256 expected = (getCash() + totalBorrows - totalReserves) * 1e18 / supply;
+      					uint256 stored = exchangeRateStoredInternal();
+      					if (expected != stored) revert BrokenInvariant();
+      				}
+      			`
+      
+      			// Publish the borrow function wrapped with the exchange-rate invariant
+      			const output = new Ast({ instrumentedContract: 'CErc20DelegateMock' })
+      				.fromSource(source)
+      				.injectShadow(invariantShadow)
+      				.injectShadowAtEdges('borrow', {
+      					before: 'exchangeRateInvariant();',
+      					after: 'exchangeRateInvariant();',
+      				})
+      				.compile()
+      			if (output.hasCompilerErrors()) {
+      				throw new Error(`Failed to compile: ${output.errors.map((e) => e.formattedMessage).join(', ')}`)
+      			}
+      			const instrumentedContract = output.artifact.contracts['CErc20DelegateMock']
+      
+      			// A dust borrow accumulates less than one wei of reserves (after scaling) and passes the invariant
+      			await client.tevmContract({
+      				to: contract.address,
+      				abi: instrumentedContract.abi!,
+      				deployedBytecode: instrumentedContract.deployedBytecode!.hex,
+      				functionName: 'borrow',
+      				args: [1n],
+      				addToBlockchain: true,
+      			})
+      
+      			// The contract has an obvious intentional bug that truncates the reserves to zero, which gets the
+      			// exchange rate to ignore the newly-accrued reserves, and breaks the invariant
+      			expect(
+      				client.tevmContract({
+      					to: contract.address,
+      					abi: instrumentedContract.abi!,
+      					deployedBytecode: instrumentedContract.deployedBytecode!.hex,
+      					functionName: 'borrow',
+      					args: [etherToWei(0.4)],
+      					addToBlockchain: true,
+      				}),
+      			).rejects.toThrowError('Error: BrokenInvariant()')
       		})
-      		test.todo('Seaport: shadow wrapper emitting ShadowSale summaries', () => {
-      			// Outline:
-      			// 1. Wrap fulfillOrder / fulfillBasicOrder with a dev-only layer that snapshots balances/
-      			//    transfers pre/post-call and emits a ShadowSale event summarizing consideration flows.
-      			// 2. Compile patched Seaport contract, replace bytecode on fork, run marketplace fills,
-      			//    consume ShadowSale events in tests.
-      			// Why shadowing:
-      			// - ABI emits granular events; aggregating actual fills (multi-item bundles, fees, royalties)
-      			//   off-chain is error-prone and requires stitching numerous logs.
-      			// - Wrapper delivers canonical “who paid/received what” event for analytics and debugging.
-      			// Reference viem usage:
-      			// await client.writeContract({ functionName: 'fulfillOrder', args: [...] }) // event logs contain ShadowSale summary
+      
+      		test('Seaport: shadow wrapper emitting ShadowSale summaries', async () => {
+      			const { client, contract, source, order, fulfiller } = await setupSeaport()
+      
+      			const shadowSale = `
+      				event ShadowSale(
+      					address indexed offerer,
+      					address indexed fulfiller,
+      					uint256 offererDebited,
+      					uint256 fulfillerCredited,
+      					uint256 totalConsideration
+      				);
+      
+      				function fulfillOrderWithShadow(Order memory params)
+      					external
+      					returns (uint256 offererDebited, uint256 fulfillerCredited, uint256[] memory considerationCredits)
+      				{
+      					uint256 beforeOfferer = balances[params.offerer];
+      					uint256 beforeFulfiller = balances[params.fulfiller];
+      					considerationCredits = new uint256[](params.consideration.length);
+      					uint256[] memory snapshots = new uint256[](params.consideration.length);
+      					for (uint256 i = 0; i < params.consideration.length; i++) {
+      						snapshots[i] = balances[params.consideration[i].recipient];
+      					}
+      
+      					require(fulfillOrder(params), "FULFILL_FAILED");
+      
+      					offererDebited = beforeOfferer - balances[params.offerer];
+      					fulfillerCredited = balances[params.fulfiller] - beforeFulfiller;
+      					uint256 mintedToFulfiller = params.offer.amount;
+      					uint256 totalConsideration;
+      					for (uint256 i = 0; i < params.consideration.length; i++) {
+      						address recipient = params.consideration[i].recipient;
+      						uint256 delta = balances[recipient] - snapshots[i];
+      						if (recipient == params.fulfiller && mintedToFulfiller != 0) {
+      							considerationCredits[i] = delta - mintedToFulfiller;
+      							mintedToFulfiller = 0;
+      						} else {
+      							considerationCredits[i] = delta;
+      						}
+      						totalConsideration += considerationCredits[i];
+      					}
+      
+      					emit ShadowSale(params.offerer, params.fulfiller, offererDebited, fulfillerCredited, totalConsideration);
+      				}
+      			`
+      
+      			// Wrap fulfillOrder with a summary emitter that mirrors Seaport flows
+      			const output = new Ast({ instrumentedContract: 'SeaportMock' })
+      				.fromSource(source)
+      				.injectShadow(shadowSale)
+      				.compile()
+      			if (output.hasCompilerErrors()) {
+      				throw new Error(`Failed to compile: ${output.errors.map((e) => e.formattedMessage).join(', ')}`)
+      			}
+      			const instrumentedContract = output.artifact.contracts['SeaportMock']
+      
+      			const response = await client.tevmContract({
+      				to: contract.address,
+      				abi: instrumentedContract.abi!,
+      				deployedBytecode: instrumentedContract.deployedBytecode!.hex,
+      				functionName: 'fulfillOrderWithShadow',
+      				args: [order],
+      				addToBlockchain: true,
+      			})
+      
+      			const [offererDebited, fulfillerCredited, considerationCredits] = response.data as [bigint, bigint, bigint[]]
+      
+      			expect(offererDebited).toBe(order.offer.amount)
+      			const fulfillerConsideration = order.consideration
+      				.filter((item) => item.recipient === fulfiller)
+      				.reduce((acc, item) => acc + item.amount, 0n)
+      			// Fulfiller receives both the listed item and any direct consideration
+      			expect(fulfillerCredited).toBe(order.offer.amount + fulfillerConsideration)
+      			expect(considerationCredits).toEqual(order.consideration.map((item) => item.amount))
+      
+      			const shadowSaleTopic = '0x963207103f08cdcf5c0d2473aba5d66d197542d11ef0f71e99070632c22fe8df'
+      			const log = response.logs?.find((entry) => entry.topics[0] === shadowSaleTopic)
+      
+      			expect(log).toMatchObject({
+      				address: contract.address,
+      				topics: [shadowSaleTopic, padAddress(order.offerer), padAddress(fulfiller)],
+      				data: encodeUintWords(
+      					offererDebited,
+      					fulfillerCredited,
+      					considerationCredits.reduce((sum, value) => sum + value, 0n),
+      				),
+      			})
       		})
       	})
       })

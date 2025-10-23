@@ -29,6 +29,7 @@ Rust + N-API bindings that expose Foundry's multi-language compiler (Solidity, Y
 
 - Feed `libs/compiler/build/llms.txt` to your favourite LLM and ask how to adapt the compiler for your workflow—the bundle includes the public API surface, curated `.d.ts`, and executable specs.
 - The sections below show direct JavaScript usage patterns; all examples run in Node.js or Bun.
+- You will also find realistic use cases in [test/integrations.spec.ts](test/integrations.spec.ts).
 
 ### Compile inline sources
 

@@ -49,7 +49,7 @@ async function collectSpecFiles(dir) {
 
 		if (entry.isDirectory()) {
 			files.push(...(await collectSpecFiles(entryPath)))
-		} else if (entry.isFile() && entry.name.endsWith('.spec.ts')) {
+		} else if (entry.isFile() && entry.name.endsWith('.spec.ts') && !entry.name.includes('integration.setup.ts')) {
 			files.push(entryPath)
 		}
 	}
