@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use foundry_compilers::artifacts::ast::SourceUnit;
+use serde_json::Value;
 
 use crate::internal::config::CompilerLanguage;
 
@@ -16,7 +16,7 @@ pub enum CompilationInput {
     language_override: Option<CompilerLanguage>,
   },
   /// Pre-parsed Solidity AST units keyed by their path.
-  AstUnits { units: BTreeMap<String, SourceUnit> },
+  AstUnits { units: BTreeMap<String, Value> },
   /// Concrete filesystem paths that must be read from disk.
   FilePaths {
     paths: Vec<PathBuf>,

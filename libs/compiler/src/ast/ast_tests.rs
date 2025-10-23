@@ -1,9 +1,6 @@
 #[cfg(test)]
 mod tests {
-  use crate::ast::{Ast, FragmentTarget, SourceTarget, SourceUnit};
-  use foundry_compilers::artifacts::ast::{
-    ContractDefinitionPart, FunctionDefinition, SourceUnitPart, Statement,
-  };
+  use crate::ast::{Ast, FragmentTarget, SourceTarget};
   use serde_json::Value;
 
   const SAMPLE_CONTRACT: &str = r#"
@@ -20,10 +17,6 @@ contract Sample {
 
   const SHADOW_FRAGMENT: &str =
     r#"function expose() external view returns (uint256) { return stored; }"#;
-
-  fn to_json(unit: &SourceUnit) -> Value {
-    serde_json::to_value(unit).expect("serialize source unit")
-  }
 
   fn contains_contract(unit: &Value, name: &str) -> bool {
     unit["nodes"]
@@ -56,26 +49,22 @@ contract Sample {
     }
   }
 
-  fn find_function<'a>(unit: &'a SourceUnit, name: &str) -> Option<&'a FunctionDefinition> {
-    unit
-      .nodes
-      .iter()
-      .filter_map(|part| {
-        if let SourceUnitPart::ContractDefinition(contract) = part {
-          Some(contract)
-        } else {
-          None
+  fn find_function<'a>(unit: &'a Value, name: &str) -> Option<&'a Value> {
+    let nodes = unit.get("nodes")?.as_array()?;
+    for node in nodes {
+      if node.get("nodeType")?.as_str()? != "ContractDefinition" {
+        continue;
+      }
+      let contract_nodes = node.get("nodes")?.as_array()?;
+      for member in contract_nodes {
+        if member.get("nodeType")?.as_str()? == "FunctionDefinition"
+          && member.get("name")?.as_str()? == name
+        {
+          return Some(member);
         }
-      })
-      .flat_map(|contract| contract.nodes.iter())
-      .filter_map(|part| {
-        if let ContractDefinitionPart::FunctionDefinition(function) = part {
-          Some(function.as_ref())
-        } else {
-          None
-        }
-      })
-      .find(|function| function.name == name)
+      }
+    }
+    None
   }
 
   #[test]
@@ -85,7 +74,7 @@ contract Sample {
       .from_source(SourceTarget::Text(SAMPLE_CONTRACT.into()), None)
       .expect("load source");
     let unit = ast.ast().expect("loaded ast");
-    let json = to_json(unit);
+    let json = unit.clone();
     assert!(contains_contract(&json, "Sample"));
   }
 
@@ -100,7 +89,7 @@ contract Sample {
       .expect("inject fragment");
 
     let unit = ast.ast().expect("loaded ast");
-    let json = to_json(unit);
+    let json = unit.clone();
     assert!(json_contains_value(&json, "name", "expose"));
   }
 
@@ -119,7 +108,7 @@ contract Sample {
       .expect("expose functions");
 
     let unit = ast.ast().expect("loaded ast");
-    let json = to_json(unit);
+    let json = unit.clone();
     assert!(json_contains_value(&json, "visibility", "public"));
   }
 
@@ -150,18 +139,27 @@ contract Sample {
 
     let unit = ast.ast().expect("loaded ast");
     let function = find_function(unit, "read").expect("read function");
-    let body = function.body.as_ref().expect("function body");
+    let body = function
+      .get("body")
+      .and_then(|value| value.as_object())
+      .expect("function body");
+
+    let statements = body
+      .get("statements")
+      .and_then(|value| value.as_array())
+      .expect("statements list");
 
     let mut expression_statements = 0;
-    if let Some(first) = body.statements.first() {
-      assert!(
-        matches!(first, Statement::ExpressionStatement(_)),
+    if let Some(first) = statements.first() {
+      assert_eq!(
+        first.get("nodeType").and_then(|value| value.as_str()),
+        Some("ExpressionStatement"),
         "expected before statements to be prepended"
       );
     }
 
-    for statement in &body.statements {
-      if matches!(statement, Statement::ExpressionStatement(_)) {
+    for statement in statements {
+      if statement.get("nodeType").and_then(|value| value.as_str()) == Some("ExpressionStatement") {
         expression_statements += 1;
       }
     }

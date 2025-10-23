@@ -1,27 +1,29 @@
-use foundry_compilers::artifacts::ast::{
-  ContractDefinition, ContractDefinitionPart, FunctionDefinition, SourceUnit, SourceUnitPart,
-  VariableDeclaration,
-};
-use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 
 use crate::internal::config::ResolveConflictStrategy;
 
 use super::{error::AstError, utils};
 
+const CONTRACT_DEFINITION: &str = "ContractDefinition";
+
 pub fn find_instrumented_contract_index(
-  unit: &SourceUnit,
+  unit: &Value,
   contract_name: Option<&str>,
 ) -> Result<usize, AstError> {
+  let nodes = unit
+    .get("nodes")
+    .and_then(|value| value.as_array())
+    .ok_or_else(|| AstError::InvalidContractStructure("Source unit has no nodes array".into()))?;
+
   let mut fallback: Option<usize> = None;
 
-  for (idx, part) in unit.nodes.iter().enumerate() {
-    let SourceUnitPart::ContractDefinition(contract) = part else {
+  for (idx, node) in nodes.iter().enumerate() {
+    if node_type(node) != Some(CONTRACT_DEFINITION) {
       continue;
-    };
-    let name = &contract.name;
+    }
     if let Some(target) = contract_name {
+      let name = node_name(node).unwrap_or_default();
       if name == target {
         return Ok(idx);
       }
@@ -45,79 +47,120 @@ pub fn find_instrumented_contract_index(
 }
 
 pub fn stitch_fragment_nodes_into_contract(
-  target: &mut SourceUnit,
+  target: &mut Value,
   contract_idx: usize,
-  fragment_contract: &ContractDefinition,
+  fragment_contract: &Value,
   max_target_id: i64,
   strategy: ResolveConflictStrategy,
 ) -> Result<(), AstError> {
-  let SourceUnitPart::ContractDefinition(target_contract) = target
-    .nodes
-    .get_mut(contract_idx)
-    .ok_or_else(|| AstError::InvalidContractStructure("Invalid contract index".to_string()))?
-  else {
-    return Err(AstError::InvalidContractStructure(
-      "Target index is not a contract".to_string(),
-    ));
-  };
+  let target_contract = contract_mut_at(target, contract_idx)?;
+  let fragment_nodes = fragment_contract
+    .get("nodes")
+    .and_then(|value| value.as_array())
+    .ok_or_else(|| {
+      AstError::InvalidContractStructure("Fragment contract missing nodes array".to_string())
+    })?;
+
+  let target_nodes = target_contract
+    .get_mut("nodes")
+    .and_then(|value| value.as_array_mut())
+    .ok_or_else(|| {
+      AstError::InvalidContractStructure("Target contract missing nodes array".to_string())
+    })?;
+
+  let mut next_id = max_target_id;
 
   match strategy {
     ResolveConflictStrategy::Safe => {
-      let mut fragment = fragment_contract.clone();
-      utils::renumber_contract_definition(&mut fragment, max_target_id)?;
-      target_contract
-        .nodes
-        .extend(fragment.nodes.into_iter().map(resolve_contract_part));
+      for part in fragment_nodes {
+        let cloned = utils::clone_with_new_ids(part, &mut next_id);
+        target_nodes.push(cloned);
+      }
       Ok(())
     }
-    ResolveConflictStrategy::Replace => {
-      let mut next_id = max_target_id;
-      let mut target_index_by_key: HashMap<ConflictKey, (usize, Vec<i64>)> = HashMap::new();
-      for (idx, part) in target_contract.nodes.iter().enumerate() {
-        if let Some(key) = contract_part_key(part)? {
-          let ids = collect_ids(part)?;
-          target_index_by_key.insert(key, (idx, ids));
-        }
-      }
-
-      let mut replacements: Vec<(usize, Vec<i64>, ContractDefinitionPart)> = Vec::new();
-      let mut append_nodes: Vec<ContractDefinitionPart> = Vec::new();
-
-      for part in fragment_contract
-        .nodes
-        .iter()
-        .cloned()
-        .map(resolve_contract_part)
-      {
-        if let Some(key) = contract_part_key(&part)? {
-          if let Some((idx, ids)) = target_index_by_key.remove(&key) {
-            replacements.push((idx, ids, part));
-            continue;
-          }
-        }
-        append_nodes.push(part);
-      }
-
-      for (idx, ids, mut part) in replacements {
-        renumber_part_with_snapshot(&mut part, &ids, &mut next_id)?;
-        let slot = target_contract.nodes.get_mut(idx).ok_or_else(|| {
-          AstError::InvalidContractStructure("Replacement index out of bounds".to_string())
-        })?;
-        *slot = part;
-      }
-
-      for mut part in append_nodes {
-        renumber_part_with_snapshot(&mut part, &[], &mut next_id)?;
-        target_contract.nodes.push(part);
-      }
-
-      Ok(())
-    }
+    ResolveConflictStrategy::Replace => stitch_replace(target_nodes, fragment_nodes, &mut next_id),
   }
 }
 
-fn resolve_contract_part(part: ContractDefinitionPart) -> ContractDefinitionPart {
-  part
+fn stitch_replace(
+  target_nodes: &mut Vec<Value>,
+  fragment_nodes: &[Value],
+  next_id: &mut i64,
+) -> Result<(), AstError> {
+  let mut target_index_by_key: HashMap<ConflictKey, (usize, Vec<i64>)> = HashMap::new();
+
+  for (idx, node) in target_nodes.iter().enumerate() {
+    if let Some(key) = contract_part_key(node)? {
+      let mut ids = Vec::new();
+      collect_ids(node, &mut ids);
+      target_index_by_key.insert(key, (idx, ids));
+    }
+  }
+
+  let mut replacements: Vec<(usize, Vec<i64>, Value)> = Vec::new();
+  let mut append_nodes: Vec<Value> = Vec::new();
+
+  for node in fragment_nodes {
+    let candidate = if let Some(key) = contract_part_key(node)? {
+      if let Some((idx, ids)) = target_index_by_key.remove(&key) {
+        replacements.push((idx, ids, node.clone()));
+        continue;
+      }
+      node.clone()
+    } else {
+      node.clone()
+    };
+    append_nodes.push(candidate);
+  }
+
+  replacements.sort_by_key(|(idx, _, _)| *idx);
+
+  for (idx, snapshot, mut replacement) in replacements {
+    apply_id_snapshot(&mut replacement, &snapshot, next_id);
+    if let Some(slot) = target_nodes.get_mut(idx) {
+      *slot = replacement;
+    } else {
+      return Err(AstError::InvalidContractStructure(
+        "Replacement index out of bounds".to_string(),
+      ));
+    }
+  }
+
+  for node in append_nodes {
+    let cloned = utils::clone_with_new_ids(&node, next_id);
+    target_nodes.push(cloned);
+  }
+
+  Ok(())
+}
+
+fn node_type(value: &Value) -> Option<&str> {
+  value.get("nodeType").and_then(|value| value.as_str())
+}
+
+fn node_name(value: &Value) -> Option<&str> {
+  value.get("name").and_then(|value| value.as_str())
+}
+
+fn contract_mut_at<'a>(unit: &'a mut Value, idx: usize) -> Result<&'a mut Value, AstError> {
+  let nodes = unit
+    .get_mut("nodes")
+    .and_then(|value| value.as_array_mut())
+    .ok_or_else(|| AstError::InvalidContractStructure("Source unit has no nodes array".into()))?;
+
+  let Some(node) = nodes.get_mut(idx) else {
+    return Err(AstError::InvalidContractStructure(
+      "Invalid contract index".to_string(),
+    ));
+  };
+
+  if node_type(node) != Some(CONTRACT_DEFINITION) {
+    return Err(AstError::InvalidContractStructure(
+      "Target index is not a contract definition".to_string(),
+    ));
+  }
+
+  Ok(node)
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -136,104 +179,109 @@ enum ConflictKey {
   UserDefinedValueType(String),
 }
 
-fn contract_part_key(part: &ContractDefinitionPart) -> Result<Option<ConflictKey>, AstError> {
-  match part {
-    ContractDefinitionPart::FunctionDefinition(function) => Ok(Some(ConflictKey::Function {
-      name: function.name.clone(),
-      signature: function_signature(function)?,
-      kind: function_kind_tag(function),
-    })),
-    ContractDefinitionPart::VariableDeclaration(variable) => {
-      Ok(Some(ConflictKey::Variable(variable.name.clone())))
+fn contract_part_key(node: &Value) -> Result<Option<ConflictKey>, AstError> {
+  match node_type(node) {
+    Some("FunctionDefinition") => {
+      let name = node_name(node).unwrap_or_default().to_string();
+      let signature = function_signature(node)?;
+      let kind = function_kind_tag(node);
+      Ok(Some(ConflictKey::Function {
+        name,
+        signature,
+        kind,
+      }))
     }
-    ContractDefinitionPart::EventDefinition(event) => {
-      Ok(Some(ConflictKey::Event(event.name.clone())))
+    Some("VariableDeclaration") => {
+      Ok(node_name(node).map(|name| ConflictKey::Variable(name.to_string())))
     }
-    ContractDefinitionPart::ErrorDefinition(error) => {
-      Ok(Some(ConflictKey::Error(error.name.clone())))
+    Some("EventDefinition") => Ok(node_name(node).map(|name| ConflictKey::Event(name.to_string()))),
+    Some("ErrorDefinition") => Ok(node_name(node).map(|name| ConflictKey::Error(name.to_string()))),
+    Some("ModifierDefinition") => {
+      Ok(node_name(node).map(|name| ConflictKey::Modifier(name.to_string())))
     }
-    ContractDefinitionPart::ModifierDefinition(modifier) => {
-      Ok(Some(ConflictKey::Modifier(modifier.name.clone())))
+    Some("StructDefinition") => {
+      Ok(node_name(node).map(|name| ConflictKey::Struct(name.to_string())))
     }
-    ContractDefinitionPart::StructDefinition(struct_definition) => {
-      Ok(Some(ConflictKey::Struct(struct_definition.name.clone())))
+    Some("EnumDefinition") => Ok(node_name(node).map(|name| ConflictKey::Enum(name.to_string()))),
+    Some("UserDefinedValueTypeDefinition") => {
+      Ok(node_name(node).map(|name| ConflictKey::UserDefinedValueType(name.to_string())))
     }
-    ContractDefinitionPart::EnumDefinition(enum_definition) => {
-      Ok(Some(ConflictKey::Enum(enum_definition.name.clone())))
-    }
-    ContractDefinitionPart::UserDefinedValueTypeDefinition(value_type) => Ok(Some(
-      ConflictKey::UserDefinedValueType(value_type.name.clone()),
-    )),
-    ContractDefinitionPart::UsingForDirective(_) => Ok(None),
+    Some("UsingForDirective") => Ok(None),
+    _ => Ok(None),
   }
 }
 
-pub(crate) fn function_signature(function: &FunctionDefinition) -> Result<Vec<String>, AstError> {
-  function
-    .parameters
-    .parameters
+pub(crate) fn function_signature(function: &Value) -> Result<Vec<String>, AstError> {
+  let parameters = function
+    .get("parameters")
+    .and_then(|value| value.get("parameters"))
+    .and_then(|value| value.as_array())
+    .ok_or_else(|| {
+      AstError::InvalidContractStructure(
+        "FunctionDefinition parameters list is missing".to_string(),
+      )
+    })?;
+
+  parameters
     .iter()
     .enumerate()
     .map(|(idx, param)| parameter_type_key(param, idx))
     .collect()
 }
 
-fn function_kind_tag(function: &FunctionDefinition) -> String {
-  match function.kind() {
-    foundry_compilers::artifacts::ast::FunctionKind::Constructor => "constructor",
-    foundry_compilers::artifacts::ast::FunctionKind::Function => "function",
-    foundry_compilers::artifacts::ast::FunctionKind::Fallback => "fallback",
-    foundry_compilers::artifacts::ast::FunctionKind::Receive => "receive",
-    foundry_compilers::artifacts::ast::FunctionKind::FreeFunction => "free",
-  }
-  .to_string()
+fn function_kind_tag(function: &Value) -> String {
+  function
+    .get("kind")
+    .and_then(|value| value.as_str())
+    .map(|kind| kind.to_string())
+    .unwrap_or_else(|| "function".to_string())
 }
 
-fn parameter_type_key(param: &VariableDeclaration, idx: usize) -> Result<String, AstError> {
-  if let Some(identifier) = &param.type_descriptions.type_identifier {
-    return Ok(identifier.clone());
+fn parameter_type_key(param: &Value, idx: usize) -> Result<String, AstError> {
+  if let Some(identifier) = param
+    .get("typeDescriptions")
+    .and_then(|value| value.get("typeIdentifier"))
+    .and_then(|value| value.as_str())
+  {
+    return Ok(identifier.to_string());
   }
-  if let Some(type_string) = &param.type_descriptions.type_string {
-    return Ok(type_string.clone());
+  if let Some(type_string) = param
+    .get("typeDescriptions")
+    .and_then(|value| value.get("typeString"))
+    .and_then(|value| value.as_str())
+  {
+    return Ok(type_string.to_string());
   }
-  if let Some(type_name) = &param.type_name {
+  if let Some(type_name) = param.get("typeName") {
     return serialise_without_ids(type_name);
   }
-  Ok(format!("__unknown_{}", idx))
+  Ok(format!("__anon_parameter_{}", idx))
 }
 
-fn serialise_without_ids<T: Serialize>(value: &T) -> Result<String, AstError> {
-  let mut json = serde_json::to_value(value).map_err(|err| AstError::JsonError(err.to_string()))?;
-  strip_ids(&mut json);
-  serde_json::to_string(&json).map_err(|err| AstError::JsonError(err.to_string()))
+fn serialise_without_ids(node: &Value) -> Result<String, AstError> {
+  let mut clone = node.clone();
+  drop_ids(&mut clone);
+  serde_json::to_string(&clone).map_err(|err| AstError::JsonError(err.to_string()))
 }
 
-fn strip_ids(node: &mut Value) {
+fn drop_ids(node: &mut Value) {
   match node {
     Value::Object(map) => {
       map.remove("id");
-      map.remove("src");
       for child in map.values_mut() {
-        strip_ids(child);
+        drop_ids(child);
       }
     }
     Value::Array(items) => {
       for item in items {
-        strip_ids(item);
+        drop_ids(item);
       }
     }
     _ => {}
   }
 }
 
-fn collect_ids(part: &ContractDefinitionPart) -> Result<Vec<i64>, AstError> {
-  let json = serde_json::to_value(part).map_err(|err| AstError::JsonError(err.to_string()))?;
-  let mut ids = Vec::new();
-  collect_ids_from_value(&json, &mut ids);
-  Ok(ids)
-}
-
-fn collect_ids_from_value(node: &Value, ids: &mut Vec<i64>) {
+fn collect_ids(node: &Value, ids: &mut Vec<i64>) {
   match node {
     Value::Object(map) => {
       if let Some(Value::Number(num)) = map.get("id") {
@@ -242,277 +290,51 @@ fn collect_ids_from_value(node: &Value, ids: &mut Vec<i64>) {
         }
       }
       for child in map.values() {
-        collect_ids_from_value(child, ids);
+        collect_ids(child, ids);
       }
     }
     Value::Array(items) => {
       for item in items {
-        collect_ids_from_value(item, ids);
+        collect_ids(item, ids);
       }
     }
     _ => {}
   }
 }
 
-fn renumber_part_with_snapshot(
-  part: &mut ContractDefinitionPart,
-  snapshot: &[i64],
-  next_id: &mut i64,
-) -> Result<(), AstError> {
-  let mut json =
-    serde_json::to_value(&*part).map_err(|err| AstError::JsonError(err.to_string()))?;
-  let mut snapshot_iter = snapshot.iter();
-  assign_ids_with_snapshot(&mut json, &mut snapshot_iter, next_id);
-  utils::sanitize_ast_value(&mut json);
-  *part = serde_json::from_value(json).map_err(|err| AstError::JsonError(err.to_string()))?;
-  Ok(())
+fn apply_id_snapshot(node: &mut Value, snapshot: &[i64], next_id: &mut i64) {
+  let mut cursor = 0usize;
+  assign_ids_with_snapshot(node, snapshot, &mut cursor, next_id);
 }
 
 fn assign_ids_with_snapshot(
   node: &mut Value,
-  snapshot: &mut std::slice::Iter<'_, i64>,
+  snapshot: &[i64],
+  cursor: &mut usize,
   next_id: &mut i64,
 ) {
   match node {
     Value::Object(map) => {
-      if let Some(id_value) = map.get_mut("id") {
-        if let Some(source_id) = snapshot.next() {
-          *next_id = (*next_id).max(*source_id);
-          *id_value = Value::Number(serde_json::Number::from(*source_id));
+      if map.get("nodeType").is_some() {
+        let replacement = if *cursor < snapshot.len() {
+          let id = snapshot[*cursor];
+          *cursor += 1;
+          id
         } else {
           *next_id += 1;
-          let assigned = *next_id;
-          *id_value = Value::Number(serde_json::Number::from(assigned));
-        }
+          *next_id
+        };
+        map.insert("id".to_string(), json!(replacement));
       }
       for child in map.values_mut() {
-        assign_ids_with_snapshot(child, snapshot, next_id);
+        assign_ids_with_snapshot(child, snapshot, cursor, next_id);
       }
     }
     Value::Array(items) => {
       for item in items {
-        assign_ids_with_snapshot(item, snapshot, next_id);
+        assign_ids_with_snapshot(item, snapshot, cursor, next_id);
       }
     }
     _ => {}
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-  use crate::ast::{orchestrator::AstOrchestrator, parser, utils};
-  use crate::internal::{config::ResolveConflictStrategy, solc};
-  use foundry_compilers::solc::Solc;
-
-  const MULTI_CONTRACT: &str = r#"
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-
-contract First {}
-contract Second {}
-contract Target {}
-"#;
-
-  const FRAGMENT: &str = "function hello() public {}";
-  const TARGET_WITH_FUNCTION: &str = r#"
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-
-contract Target {
-  function hello() public pure returns (uint256) {
-    return 1;
-  }
-}
-"#;
-
-  const REPLACEMENT_FRAGMENT: &str = r#"
-function hello() public pure returns (uint256) {
-  return 2;
-}
-uint256 public replacementCounter;
-"#;
-
-  fn find_default_solc() -> Option<Solc> {
-    let version = solc::default_version().ok()?;
-    Solc::find_svm_installed_version(&version).ok().flatten()
-  }
-
-  #[test]
-  fn locates_contract_by_name() {
-    let Some(solc) = find_default_solc() else {
-      return;
-    };
-    let settings = AstOrchestrator::sanitize_settings(None).expect("sanitize default settings");
-    let unit = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol", &solc, &settings).unwrap();
-    let idx = find_instrumented_contract_index(&unit, Some("Target")).unwrap();
-    let SourceUnitPart::ContractDefinition(contract) = &unit.nodes[idx] else {
-      panic!("Expected contract definition");
-    };
-    assert_eq!(contract.name, "Target");
-  }
-
-  #[test]
-  fn falls_back_to_last_contract() {
-    let Some(solc) = find_default_solc() else {
-      return;
-    };
-    let settings = AstOrchestrator::sanitize_settings(None).expect("sanitize default settings");
-    let unit = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol", &solc, &settings).unwrap();
-    let idx = find_instrumented_contract_index(&unit, None).unwrap();
-    let SourceUnitPart::ContractDefinition(contract) = &unit.nodes[idx] else {
-      panic!("Expected contract definition");
-    };
-    assert_eq!(contract.name, "Target");
-  }
-
-  #[test]
-  fn stitches_fragment_into_contract() {
-    let Some(solc) = find_default_solc() else {
-      return;
-    };
-    let settings = AstOrchestrator::sanitize_settings(None).expect("sanitize default settings");
-    let mut unit = parser::parse_source_ast(MULTI_CONTRACT, "Multi.sol", &solc, &settings).unwrap();
-    let fragment = parser::parse_fragment_contract(FRAGMENT, &solc, &settings).unwrap();
-    let idx = find_instrumented_contract_index(&unit, Some("Target")).unwrap();
-    let max_id = utils::max_id(&unit).unwrap();
-
-    stitch_fragment_nodes_into_contract(
-      &mut unit,
-      idx,
-      &fragment,
-      max_id,
-      ResolveConflictStrategy::Safe,
-    )
-    .unwrap();
-
-    let SourceUnitPart::ContractDefinition(contract) = &unit.nodes[idx] else {
-      panic!("Expected contract definition");
-    };
-
-    assert!(contract.nodes.iter().any(|part| matches!(part,
-      ContractDefinitionPart::FunctionDefinition(function) if function.name == "hello"
-    )));
-  }
-
-  #[test]
-  fn safe_strategy_retains_conflicting_members() {
-    let Some(solc) = find_default_solc() else {
-      return;
-    };
-    let settings = AstOrchestrator::sanitize_settings(None).expect("sanitize default settings");
-    let mut unit = parser::parse_source_ast(TARGET_WITH_FUNCTION, "Target.sol", &solc, &settings)
-      .expect("parse target source");
-    let fragment =
-      parser::parse_fragment_contract(REPLACEMENT_FRAGMENT, &solc, &settings).expect("fragment");
-    let idx = find_instrumented_contract_index(&unit, Some("Target")).expect("target index");
-    let max_id = utils::max_id(&unit).expect("max target id");
-
-    stitch_fragment_nodes_into_contract(
-      &mut unit,
-      idx,
-      &fragment,
-      max_id,
-      ResolveConflictStrategy::Safe,
-    )
-    .expect("stitch safe");
-
-    let SourceUnitPart::ContractDefinition(contract) = &unit.nodes[idx] else {
-      panic!("Expected contract definition");
-    };
-    let hello_functions = contract
-      .nodes
-      .iter()
-      .filter(|part| {
-        matches!(part, ContractDefinitionPart::FunctionDefinition(function) if function.name == "hello")
-      })
-      .count();
-    assert_eq!(hello_functions, 2);
-  }
-
-  #[test]
-  fn replace_strategy_overwrites_conflicting_function_and_appends_new_members() {
-    use foundry_compilers::artifacts::ast::{Expression, Statement};
-
-    let Some(solc) = find_default_solc() else {
-      return;
-    };
-    let settings = AstOrchestrator::sanitize_settings(None).expect("sanitize default settings");
-    let mut unit = parser::parse_source_ast(TARGET_WITH_FUNCTION, "Target.sol", &solc, &settings)
-      .expect("parse target");
-    let idx = find_instrumented_contract_index(&unit, Some("Target")).expect("target index");
-    let max_id = utils::max_id(&unit).expect("max target id");
-
-    let original_function_id = {
-      let SourceUnitPart::ContractDefinition(contract) = &unit.nodes[idx] else {
-        panic!("Expected contract definition");
-      };
-      contract
-        .nodes
-        .iter()
-        .find_map(|part| match part {
-          ContractDefinitionPart::FunctionDefinition(function) if function.name == "hello" => {
-            Some(function.id)
-          }
-          _ => None,
-        })
-        .expect("original hello function")
-    };
-
-    let fragment =
-      parser::parse_fragment_contract(REPLACEMENT_FRAGMENT, &solc, &settings).expect("fragment");
-
-    stitch_fragment_nodes_into_contract(
-      &mut unit,
-      idx,
-      &fragment,
-      max_id,
-      ResolveConflictStrategy::Replace,
-    )
-    .expect("stitch replace");
-
-    let SourceUnitPart::ContractDefinition(contract) = &unit.nodes[idx] else {
-      panic!("Expected contract definition");
-    };
-
-    let replaced_function = contract
-      .nodes
-      .iter()
-      .find_map(|part| match part {
-        ContractDefinitionPart::FunctionDefinition(function) if function.name == "hello" => {
-          Some(function)
-        }
-        _ => None,
-      })
-      .expect("replaced function present");
-
-    assert_eq!(replaced_function.id, original_function_id);
-
-    let body = replaced_function
-      .body
-      .as_ref()
-      .expect("function body present");
-    let Statement::Return(ret) = body.statements.first().expect("return statement present") else {
-      panic!("expected return statement");
-    };
-    let Expression::Literal(literal) = ret.expression.as_ref().expect("return expression present")
-    else {
-      panic!("expected literal expression");
-    };
-    assert_eq!(literal.value.as_deref(), Some("2"));
-
-    let appended_variable = contract
-      .nodes
-      .iter()
-      .find_map(|part| match part {
-        ContractDefinitionPart::VariableDeclaration(variable)
-          if variable.name == "replacementCounter" =>
-        {
-          Some(variable)
-        }
-        _ => None,
-      })
-      .expect("appended variable present");
-    assert!((appended_variable.id as i64) > max_id);
   }
 }

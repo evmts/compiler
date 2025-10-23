@@ -45,11 +45,11 @@ describe('Logger integration', () => {
 		capturedError = []
 	})
 
-	test('compiler emits info logs by default', async () => {
+	test('compiler emits no logs by default', async () => {
 		const compiler = new Compiler()
 		compiler.compileSource(INLINE_SOURCE)
 		await flushLogs()
-		expect(capturedLog.some((line) => line.includes('compiler initialised'))).toBe(true)
+		expect(capturedLog.length).toBe(0)
 	})
 
 	test('compiler suppresses info logs at warn level', async () => {

@@ -306,7 +306,7 @@ pub struct CompilerConfigOptions {
   /// Overrides the severity filter applied to compiler diagnostics. Accepts `Severity::Error`,
   /// `Severity::Warning`, or `Severity::Info`.
   pub compiler_severity_filter: Option<Severity>,
-  /// Overrides the compiler logging level. Defaults to [`LoggingLevel::Info`].
+  /// Overrides the compiler logging level. Defaults to [`LoggingLevel::Silent`].
   pub logging_level: Option<LoggingLevel>,
 }
 

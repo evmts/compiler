@@ -201,7 +201,7 @@ pub struct JsContractState {
   #[napi(ts_type = "`0x${string}` | null | undefined")]
   pub address: Option<String>,
   /// ABI definition exactly as produced by the compiler (either an array or legacy object form).
-  #[napi(ts_type = "unknown | null | undefined")]
+  #[napi(ts_type = "readonly unknown[] | null | undefined")]
   pub abi: Option<Value>,
   /// Original source path for the contract, relative to the project root when available.
   pub source_path: Option<String>,

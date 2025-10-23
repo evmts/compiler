@@ -4,7 +4,6 @@ use std::path::PathBuf;
 
 use foundry_compilers::artifacts::contract::Contract as FoundryContract;
 use foundry_compilers::artifacts::{
-  ast::SourceUnit,
   error::{
     Error as FoundryCompilerError, SecondarySourceLocation as FoundrySecondarySourceLocation,
     Severity,
@@ -20,7 +19,7 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::ast::{utils::sanitize_ast_value, Ast, JsAst, SourceTarget};
+use crate::ast::{Ast, JsAst, SourceTarget};
 use crate::contract;
 use crate::contract::{Contract, JsContract, JsContractState};
 use crate::internal::config::AstConfigOptions;
@@ -121,8 +120,8 @@ pub struct SourceArtifacts {
   pub source_id: Option<u32>,
   /// Solc version that produced these artifacts.
   pub solc_version: Option<Version>,
-  /// Sanitised Solidity AST for the source file.
-  pub ast: Option<SourceUnit>,
+  /// JSON Solidity AST for the source file.
+  pub ast: Option<Value>,
   /// Contracts emitted for this source keyed by contract name. Each entry is the rich wrapper used
   /// elsewhere in the bindings (ABI, bytecode, metadata, etc.).
   pub contracts: BTreeMap<String, Contract>,
@@ -159,8 +158,7 @@ pub struct SourceArtifactsJson {
   /// Solc version recorded for the source.
   #[napi(ts_type = "string | undefined")]
   pub solc_version: Option<String>,
-  /// Sanitised AST value ready for JSON serialisation. Hash and source content fields are stripped
-  /// so the value is stable across compiler invocations.
+  /// Parsed Solidity AST of this source unit.
   #[napi(ts_type = "import('./solc-ast').SourceUnit | undefined")]
   pub ast: Option<Value>,
   /// Contracts emitted for the source keyed by contract name.
@@ -170,11 +168,7 @@ pub struct SourceArtifactsJson {
 
 impl SourceArtifactsJson {
   fn from_source_artifacts(artifacts: &SourceArtifacts) -> Self {
-    let ast = artifacts.ast.as_ref().and_then(|unit| {
-      let mut value = serde_json::to_value(unit).ok()?;
-      sanitize_ast_value(&mut value);
-      Some(value)
-    });
+    let ast = artifacts.ast.clone();
 
     let contracts = if artifacts.contracts.is_empty() {
       None
@@ -319,11 +313,9 @@ pub fn from_standard_json(output: CompilerOutput) -> CompileOutput {
   build_compile_output(&output.contracts, &output.sources, raw_artifacts, errors)
 }
 
-fn convert_source_ast(source: &SourceFile) -> Option<SourceUnit> {
+fn convert_source_ast(source: &SourceFile) -> Option<Value> {
   let ast = source.ast.as_ref()?;
-  let mut value = serde_json::to_value(ast).ok()?;
-  sanitize_ast_value(&mut value);
-  serde_json::from_value(value).ok()
+  serde_json::to_value(ast).ok()
 }
 
 fn solc_error_to_core(error: &FoundryCompilerError) -> CompilerError {
@@ -572,7 +564,7 @@ pub struct JsSourceArtifacts {
   /// Solc version recorded for this source.
   solc_version: Option<Version>,
   /// Sanitised AST captured for the source when emitted by the compiler.
-  ast_unit: Option<SourceUnit>,
+  ast_unit: Option<Value>,
   /// JSON snapshot retained for cheap serialization via `to_json()`.
   json: SourceArtifactsJson,
   /// Contracts emitted for the source keyed by name (rich `Contract` wrappers, not plain JSON).
@@ -893,7 +885,11 @@ mod tests {
           "nodeType": "ContractDefinition",
           "src": "0:0:0",
           "nodes": [],
-          "body": null,
+          "baseContracts": [],
+          "contractDependencies": [],
+          "linearizedBaseContracts": [2],
+          "usedEvents": [],
+          "usedErrors": [],
           "contractKind": "contract",
           "fullyImplemented": true,
           "name": "Inline"

@@ -132,7 +132,7 @@ export type JsCompiler = Compiler
 /** Chainable JavaScript wrapper around a compiler-emitted contract state snapshot. */
 export interface Contract<
   Name extends string = string,
-  Map extends ContractStateMap = ContractStateMap
+  Map extends ContractStateMap = FullyDefinedMap
 > {
   readonly __state: ContractSnapshot<Name, Map>;
   readonly name: Name;
@@ -225,7 +225,7 @@ export declare class SourceArtifacts<TPath extends string = string> {
   /** Lazily materialise the Solidity AST as a reusable `Ast` helper instance. */
   get ast(): Ast | undefined;
   /** Contracts produced for this source keyed by contract name. */
-  get contracts(): Record<string, Contract>;
+  get contracts(): Record<string, Contract<string, FullyDefinedMap>>;
   /** Snapshot this artifact bundle as a serialisable JSON structure. */
   toJson(): SourceArtifactsJson;
 }
@@ -437,7 +437,7 @@ export interface ContractState {
   /** Deployed address associated with this artifact, if known. */
   address?: `0x${string}` | null | undefined
   /** ABI definition exactly as produced by the compiler (either an array or legacy object form). */
-  abi?: unknown | null | undefined
+  abi?: readonly unknown[] | null | undefined
   /** Original source path for the contract, relative to the project root when available. */
   sourcePath?: string
   /** Numeric source identifier assigned by solc (used to correlate diagnostics back to sources). */
@@ -728,10 +728,7 @@ export interface SourceArtifactsJson {
   sourceId?: number | undefined
   /** Solc version recorded for the source. */
   solcVersion?: string | undefined
-  /**
-   * Sanitised AST value ready for JSON serialisation. Hash and source content fields are stripped
-   * so the value is stable across compiler invocations.
-   */
+  /** Parsed Solidity AST of this source unit. */
   ast?: import('./solc-ast').SourceUnit | undefined
   /** Contracts emitted for the source keyed by contract name. */
   contracts?: Record<string, ContractState> | undefined

@@ -165,7 +165,7 @@ type ContractStateAllDefined = ContractSnapshot<string, FullyDefinedMap>;
 
 export interface Contract<
   Name extends string = string,
-  Map extends ContractStateMap = ContractStateMap
+  Map extends ContractStateMap = FullyDefinedMap
 > {
   readonly __state: ContractSnapshot<Name, Map>;
   readonly name: Name;
@@ -252,6 +252,6 @@ export declare class SourceArtifacts<TPath extends string = string> {
   get sourceId(): number | null;
   get solcVersion(): string | null;
   get ast(): Ast | undefined;
-  get contracts(): Record<string, Contract>;
+  get contracts(): Record<string, Contract<string, FullyDefinedMap>>;
   toJson(): SourceArtifactsJson;
 }

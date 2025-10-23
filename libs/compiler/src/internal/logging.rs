@@ -15,10 +15,10 @@ use crate::internal::errors::Result;
 /// Shared logging level exposed to both Rust and JavaScript callers.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
 pub enum LoggingLevel {
+  #[default]
   Silent,
   Error,
   Warn,
-  #[default]
   Info,
 }
 

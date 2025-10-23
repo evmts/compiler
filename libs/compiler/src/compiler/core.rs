@@ -2,7 +2,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use foundry_compilers::artifacts::ast::SourceUnit;
 use foundry_compilers::artifacts::{
   CompilerOutput, SolcInput, SolcLanguage as FoundrySolcLanguage, Source, Sources,
 };
@@ -14,7 +13,6 @@ use serde_json::{json, Value};
 use super::input::CompilationInput;
 use super::output::{build_compile_output, from_standard_json, vyper_error_to_core, CompileOutput};
 use super::project_runner::ProjectRunner;
-use crate::ast::utils;
 use crate::internal::config::{
   CompilerConfig, CompilerConfigOptions, CompilerLanguage, SolcConfig,
 };
@@ -35,13 +33,13 @@ pub struct State {
 #[derive(Clone)]
 pub enum SourceTarget {
   Text(String),
-  Ast(SourceUnit),
+  Ast(Value),
 }
 
 #[derive(Clone)]
 pub enum SourceValue {
   Text(String),
-  Ast(SourceUnit),
+  Ast(Value),
 }
 
 pub fn init(config: CompilerConfig, project: Option<ProjectContext>) -> Result<State> {
@@ -333,7 +331,7 @@ fn compile_standard_sources(
 
 fn compile_ast_sources(
   config: &CompilerConfig,
-  ast_sources: BTreeMap<String, SourceUnit>,
+  ast_sources: BTreeMap<String, Value>,
 ) -> Result<CompileOutput> {
   if !matches!(config.language, CompilerLanguage::Solidity) {
     // TODO: support once merged https://github.com/foundry-rs/compilers/pull/291
@@ -353,10 +351,7 @@ fn compile_ast_sources(
   )?;
 
   let mut sources_value = serde_json::Map::new();
-  for (file_name, unit) in ast_sources {
-    let mut ast_value =
-      map_err_with_context(serde_json::to_value(&unit), "Failed to serialise AST value")?;
-    utils::sanitize_ast_value(&mut ast_value);
+  for (file_name, ast_value) in ast_sources {
     sources_value.insert(file_name, json!({ "ast": ast_value }));
   }
 
@@ -393,7 +388,7 @@ fn compile_file_paths(
   );
 
   let mut string_entries: BTreeMap<String, String> = BTreeMap::new();
-  let mut ast_entries: BTreeMap<String, SourceUnit> = BTreeMap::new();
+  let mut ast_entries: BTreeMap<String, Value> = BTreeMap::new();
   let mut detected_language: Option<CompilerLanguage> = None;
 
   for original in paths {
@@ -477,7 +472,7 @@ fn compile_file_paths(
 fn try_parse_ast_from_file(
   canonical_path: &str,
   content: &str,
-  ast_entries: &mut BTreeMap<String, SourceUnit>,
+  ast_entries: &mut BTreeMap<String, Value>,
 ) -> Result<bool> {
   let extension = Path::new(canonical_path)
     .extension()
@@ -499,9 +494,7 @@ fn try_parse_ast_from_file(
         "JSON sources must contain a Solidity AST object.",
       ));
     }
-    let unit: SourceUnit =
-      map_err_with_context(serde_json::from_value(value), "Failed to parse AST entry")?;
-    ast_entries.insert(canonical_path.to_string(), unit);
+    ast_entries.insert(canonical_path.to_string(), value);
     return Ok(true);
   }
 
@@ -509,9 +502,7 @@ fn try_parse_ast_from_file(
     let value: Value =
       map_err_with_context(serde_json::from_str(content), "Failed to parse JSON input")?;
     if value.is_object() {
-      let unit: SourceUnit =
-        map_err_with_context(serde_json::from_value(value), "Failed to parse AST entry")?;
-      ast_entries.insert(canonical_path.to_string(), unit);
+      ast_entries.insert(canonical_path.to_string(), value);
       return Ok(true);
     }
   }
@@ -545,7 +536,7 @@ fn compilation_input_from_values(
   sources: BTreeMap<String, SourceValue>,
 ) -> Result<CompilationInput> {
   let mut string_entries: BTreeMap<String, String> = BTreeMap::new();
-  let mut ast_entries: BTreeMap<String, SourceUnit> = BTreeMap::new();
+  let mut ast_entries: BTreeMap<String, Value> = BTreeMap::new();
 
   for (path, value) in sources {
     match value {
@@ -646,6 +637,34 @@ mod tests {
   }
 
   #[test]
+  fn try_parse_ast_from_file_accepts_json_ast_objects() {
+    let mut entries = BTreeMap::new();
+    let content = r#"{"nodeType":"SourceUnit","nodes": []}"#;
+    let parsed =
+      try_parse_ast_from_file("InlineExample.ast.json", content, &mut entries).expect("parse");
+    assert!(parsed);
+    assert_eq!(entries.len(), 1);
+    assert_eq!(
+      entries
+        .values()
+        .next()
+        .and_then(|value| value.get("nodeType"))
+        .and_then(|node_type| node_type.as_str()),
+      Some("SourceUnit")
+    );
+  }
+
+  #[test]
+  fn try_parse_ast_from_file_skips_non_ast_json() {
+    let mut entries = BTreeMap::new();
+    let content = r#"[{"nodeType":"SourceUnit"}]"#;
+    let parsed =
+      try_parse_ast_from_file("InlineExample.ast", content, &mut entries).expect("parse");
+    assert!(!parsed);
+    assert!(entries.is_empty());
+  }
+
+  #[test]
   fn compilation_input_from_values_rejects_mixed_languages() {
     let mut sources = BTreeMap::new();
     sources.insert(
@@ -661,6 +680,24 @@ mod tests {
     assert!(error
       .to_string()
       .contains("compileSources requires all entries to share the same language"));
+  }
+
+  #[test]
+  fn compilation_input_from_values_rejects_mixed_ast_and_sources() {
+    let mut sources = BTreeMap::new();
+    sources.insert(
+      "InlineExample.sol".to_string(),
+      SourceValue::Text("contract InlineExample { function foo() public {} }".into()),
+    );
+    sources.insert(
+      "InlineExample.ast".to_string(),
+      SourceValue::Ast(json!({"nodeType":"SourceUnit","nodes":[]})),
+    );
+
+    let error = compilation_input_from_values(sources).unwrap_err();
+    assert!(error
+      .to_string()
+      .contains("compileSources does not support mixing inline source strings with AST entries"));
   }
 
   #[test]

@@ -1,9 +1,9 @@
-use foundry_compilers::artifacts::ast::{ContractDefinition, SourceUnit};
 use foundry_compilers::artifacts::{output_selection::OutputSelection, Settings};
 use foundry_compilers::solc::Solc;
 
 use super::{error::AstError, parser, stitcher, utils};
 use crate::internal::{config::ResolveConflictStrategy, settings};
+use serde_json::Value;
 
 pub(crate) struct AstOrchestrator;
 
@@ -24,7 +24,7 @@ impl AstOrchestrator {
     file_name: &str,
     solc: &Solc,
     settings: &Settings,
-  ) -> Result<SourceUnit, AstError> {
+  ) -> Result<Value, AstError> {
     parser::parse_source_ast(source, file_name, solc, settings)
   }
 
@@ -32,21 +32,21 @@ impl AstOrchestrator {
     fragment_source: &str,
     solc: &Solc,
     settings: &Settings,
-  ) -> Result<ContractDefinition, AstError> {
+  ) -> Result<Value, AstError> {
     parser::parse_fragment_contract(fragment_source, solc, settings)
   }
 
-  pub fn extract_fragment_contract(unit: &SourceUnit) -> Result<ContractDefinition, AstError> {
-    parser::extract_fragment_contract(unit).map(|contract| contract.clone())
+  pub fn extract_fragment_contract(unit: &Value) -> Result<Value, AstError> {
+    parser::extract_fragment_contract(unit)
   }
 
   pub fn stitch_fragment_into_contract(
-    target: &mut SourceUnit,
+    target: &mut Value,
     contract_idx: usize,
-    fragment_contract: &ContractDefinition,
+    fragment_contract: &Value,
     strategy: ResolveConflictStrategy,
   ) -> Result<(), AstError> {
-    let max_target_id = utils::max_id(target)?;
+    let max_target_id = utils::max_id(target);
     stitcher::stitch_fragment_nodes_into_contract(
       target,
       contract_idx,
@@ -64,10 +64,7 @@ mod tests {
     ast::stitcher,
     internal::{config::ResolveConflictStrategy, solc},
   };
-  use foundry_compilers::{
-    artifacts::ast::{ContractDefinitionPart, SourceUnitPart},
-    solc::Solc,
-  };
+  use foundry_compilers::solc::Solc;
 
   const MULTI_CONTRACT: &str = r#"
 // SPDX-License-Identifier: MIT
@@ -98,7 +95,7 @@ contract Target {
   }
 
   #[test]
-  fn stitches_fragment_through_service() {
+  fn stitches_fragment_through_orchestrator() {
     let Some(solc) = find_default_solc() else {
       return;
     };
@@ -121,12 +118,29 @@ contract Target {
     )
     .expect("stitch fragment");
 
-    let SourceUnitPart::ContractDefinition(contract) = &unit.nodes[idx] else {
-      panic!("expected contract definition");
-    };
-
-    assert!(contract.nodes.iter().any(|part| matches!(part,
-      ContractDefinitionPart::FunctionDefinition(function) if function.name == "expose"
-    )));
+    let nodes = unit
+      .get("nodes")
+      .and_then(|value| value.as_array())
+      .expect("nodes");
+    let contract = nodes
+      .get(idx)
+      .and_then(|value| value.as_object())
+      .expect("contract object");
+    let members = contract
+      .get("nodes")
+      .and_then(|value| value.as_array())
+      .expect("contract members");
+    assert!(members.iter().any(|node| {
+      node
+        .get("nodeType")
+        .and_then(|value| value.as_str())
+        .map(|node_type| node_type == "FunctionDefinition")
+        .unwrap_or(false)
+        && node
+          .get("name")
+          .and_then(|value| value.as_str())
+          .map(|name| name == "expose")
+          .unwrap_or(false)
+    }));
   }
 }

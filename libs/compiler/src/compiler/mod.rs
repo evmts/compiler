@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use foundry_compilers::artifacts::ast::SourceUnit;
 use log::{error, info};
 use napi::bindgen_prelude::*;
 use napi::{Env, JsObject, JsUnknown};
@@ -12,7 +11,7 @@ use crate::ast::utils::from_js_value;
 use crate::internal::config::{
   parse_js_compiler_config, CompilerConfig, CompilerConfigOptions, CompilerLanguage,
 };
-use crate::internal::errors::{map_napi_error, napi_error, to_napi_result, Error, Result};
+use crate::internal::errors::{napi_error, to_napi_result, Error, Result};
 use crate::internal::logging::{ensure_napi_logger, ensure_rust_logger, update_level};
 use crate::internal::path::ProjectPaths;
 use crate::internal::project::{default_cache_dir, synthetic_project_paths, ProjectContext};
@@ -882,16 +881,16 @@ impl JsCompiler {
           result.insert(path, SourceValue::Text(source));
         }
         Value::Object(map) => {
-          let unit: SourceUnit = map_napi_error(
-            serde_json::from_value(Value::Object(map)),
-            "Failed to parse AST entry",
-          )?;
-          result.insert(path, SourceValue::Ast(unit));
+          result.insert(path, SourceValue::Ast(Value::Object(map)));
         }
-        _ => {
-          return Err(napi_error(
-            "compileSources expects each entry to be a Solidity, Yul, or Vyper source string, or a Solidity AST object.",
-          ));
+        other => {
+          if other.is_object() {
+            result.insert(path, SourceValue::Ast(other));
+          } else {
+            return Err(napi_error(
+              "compileSources expects each entry to be a Solidity, Yul, or Vyper source string, or a Solidity AST object.",
+            ));
+          }
         }
       }
     }
@@ -903,10 +902,10 @@ impl JsCompiler {
 fn parse_source_target(env: &Env, target: Either<String, JsObject>) -> napi::Result<SourceTarget> {
   match target {
     Either::A(source) => Ok(SourceTarget::Text(source)),
-    Either::B(object) => {
-      let unit: SourceUnit = from_js_value(env, object.into_unknown())?;
-      Ok(SourceTarget::Ast(unit))
-    }
+    Either::B(object) => Ok(SourceTarget::Ast(from_js_value(
+      env,
+      object.into_unknown(),
+    )?)),
   }
 }
 

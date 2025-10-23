@@ -1,15 +1,16 @@
-use foundry_compilers::artifacts::ast::{
-  Block, BlockOrStatement, ContractDefinition, ContractDefinitionPart, FunctionDefinition,
-  FunctionKind, SourceUnit, SourceUnitPart, Statement, TryCatchClause,
-};
-use foundry_compilers::artifacts::{Settings, SolcInput, SolcLanguage, Source, Sources};
-use foundry_compilers::solc::Solc;
-
-use crate::internal::errors::{map_err_with_context, Error, Result};
-use serde_json::Value;
 use std::path::PathBuf;
 
-use super::{orchestrator::AstOrchestrator, parser, stitcher, utils};
+use foundry_compilers::artifacts::{Settings, SolcInput, SolcLanguage, Source, Sources};
+use foundry_compilers::solc::Solc;
+use serde_json::{Map, Value};
+
+use crate::internal::errors::{map_err_with_context, Error, Result};
+
+use super::{
+  orchestrator::AstOrchestrator,
+  parser, stitcher,
+  utils::{self},
+};
 
 #[derive(Debug)]
 enum FunctionSelectorKind {
@@ -24,7 +25,7 @@ enum FunctionSelectorKind {
 }
 
 pub fn inject_edges(
-  unit: &mut foundry_compilers::artifacts::ast::SourceUnit,
+  unit: &mut Value,
   contract_idx: usize,
   selector: &str,
   before_snippets: &[String],
@@ -38,42 +39,45 @@ pub fn inject_edges(
     ));
   }
 
-  let mut next_id = utils::max_id(unit)?;
+  let mut next_id = utils::max_id(unit);
 
-  let SourceUnitPart::ContractDefinition(contract) = unit
-    .nodes
-    .get_mut(contract_idx)
-    .ok_or_else(|| Error::new("Invalid contract index"))?
-  else {
-    return Err(Error::new("Target index is not a contract definition"));
-  };
+  let contract = contract_mut_at(unit, contract_idx)?;
   let selector_kind = parse_selector(selector, solc, settings)?;
-
   let function = resolve_function_mut(contract, &selector_kind)?;
 
   let body = function
-    .body
-    .as_mut()
+    .get_mut("body")
     .ok_or_else(|| Error::new("Cannot instrument a function without an implementation"))?;
+
+  if body.is_null() {
+    return Err(Error::new(
+      "Cannot instrument a function without an implementation",
+    ));
+  }
 
   ensure_no_inline_assembly(body)?;
 
   let before_statements = parse_statements(before_snippets, solc, settings)?;
   let after_statements = parse_statements(after_snippets, solc, settings)?;
 
-  if !before_statements.is_empty() {
-    let mut prefix = clone_statements(&before_statements, &mut next_id)?;
-    let mut combined = Vec::with_capacity(prefix.len() + body.statements.len());
-    combined.append(&mut prefix);
-    combined.extend(body.statements.clone());
-    body.statements = combined;
-  }
+  if !before_statements.is_empty() || !after_statements.is_empty() {
+    let statements = body
+      .get_mut("statements")
+      .and_then(|value| value.as_array_mut())
+      .ok_or_else(|| Error::new("Function body missing statements array"))?;
 
-  if !after_statements.is_empty() {
-    inject_after(&mut body.statements, &after_statements, &mut next_id)?;
+    if !before_statements.is_empty() {
+      let mut clones = clone_statements(&before_statements, &mut next_id);
+      for (offset, statement) in clones.drain(..).enumerate() {
+        statements.insert(offset, statement);
+      }
+    }
 
-    let mut tail = clone_statements(&after_statements, &mut next_id)?;
-    body.statements.extend(tail.drain(..));
+    if !after_statements.is_empty() {
+      inject_after(statements, &after_statements, &mut next_id)?;
+      let mut tail = clone_statements(&after_statements, &mut next_id);
+      statements.append(&mut tail);
+    }
   }
 
   Ok(())
@@ -109,60 +113,73 @@ fn parse_selector(
       AstOrchestrator::parse_fragment_contract(&fragment, solc, settings),
       "Failed to parse selector signature",
     )?;
-    let fragment_function = contract
-      .nodes
-      .iter()
-      .find_map(|part| {
-        if let ContractDefinitionPart::FunctionDefinition(def) = part {
-          Some(def)
-        } else {
-          None
-        }
-      })
+    let function = first_function_definition(&contract)
       .ok_or_else(|| Error::new("Failed to parse function signature"))?;
-    let signature = stitcher::function_signature(fragment_function).map_err(Error::from)?;
+    let signature = stitcher::function_signature(function)
+      .map_err(|err| Error::new(format!("Failed to compute function signature: {}", err)))?;
     return Ok(FunctionSelectorKind::Canonical { name, signature });
   }
 
   Ok(FunctionSelectorKind::Name(trimmed.to_string()))
 }
 
+fn first_function_definition(contract: &Value) -> Option<&Value> {
+  contract
+    .get("nodes")
+    .and_then(|value| value.as_array())
+    .and_then(|nodes| {
+      nodes.iter().find(|node| {
+        node
+          .get("nodeType")
+          .and_then(|value| value.as_str())
+          .map(|node_type| node_type == "FunctionDefinition")
+          .unwrap_or(false)
+      })
+    })
+}
+
 fn resolve_function_mut<'a>(
-  contract: &'a mut ContractDefinition,
+  contract: &'a mut Value,
   selector: &FunctionSelectorKind,
-) -> Result<&'a mut FunctionDefinition> {
+) -> Result<&'a mut Value> {
+  let nodes = contract
+    .get_mut("nodes")
+    .and_then(|value| value.as_array_mut())
+    .ok_or_else(|| Error::new("Contract has no members to instrument"))?;
+
   let mut matches: Vec<usize> = Vec::new();
 
-  for (idx, part) in contract.nodes.iter().enumerate() {
-    let ContractDefinitionPart::FunctionDefinition(function) = part else {
+  for (idx, node) in nodes.iter().enumerate() {
+    if node_type(node) != Some("FunctionDefinition") {
       continue;
-    };
+    }
     match selector {
       FunctionSelectorKind::Fallback => {
-        if matches!(function.kind(), FunctionKind::Fallback) {
+        if matches!(function_kind(node), Some("fallback")) {
           matches.push(idx);
         }
       }
       FunctionSelectorKind::Receive => {
-        if matches!(function.kind(), FunctionKind::Receive) {
+        if matches!(function_kind(node), Some("receive")) {
           matches.push(idx);
         }
       }
       FunctionSelectorKind::Constructor => {
-        if matches!(function.kind(), FunctionKind::Constructor) {
+        if matches!(function_kind(node), Some("constructor")) {
           matches.push(idx);
         }
       }
       FunctionSelectorKind::Canonical { name, signature } => {
-        if function.name == *name {
-          let current_signature = stitcher::function_signature(function).map_err(Error::from)?;
+        if node_name(node) == Some(name.as_str()) {
+          let current_signature =
+            stitcher::function_signature(node).map_err(|err| Error::new(err.to_string()))?;
           if &current_signature == signature {
             matches.push(idx);
           }
         }
       }
       FunctionSelectorKind::Name(name) => {
-        if &function.name == name {
+        if node_name(node) == Some(name.as_str()) {
           matches.push(idx);
         }
       }
@@ -182,57 +199,65 @@ fn resolve_function_mut<'a>(
   }
 
   let idx = matches[0];
-  let ContractDefinitionPart::FunctionDefinition(function) = contract
-    .nodes
+  nodes
     .get_mut(idx)
-    .ok_or_else(|| Error::new("Invalid function index after resolution"))?
-  else {
-    return Err(Error::new("Resolved index is not a function definition"));
-  };
-  Ok(function)
+    .ok_or_else(|| Error::new("Invalid function index after resolution"))
 }
 
-fn ensure_no_inline_assembly(body: &Block) -> Result<()> {
-  for statement in &body.statements {
+fn ensure_no_inline_assembly(body: &Value) -> Result<()> {
+  let statements = body
+    .get("statements")
+    .and_then(|value| value.as_array())
+    .ok_or_else(|| Error::new("Function body missing statements array"))?;
+  for statement in statements {
     ensure_no_inline_assembly_in_statement(statement)?;
   }
   Ok(())
 }
 
-fn ensure_no_inline_assembly_in_statement(statement: &Statement) -> Result<()> {
-  match statement {
-    Statement::InlineAssembly(_) => Err(Error::new(
-      "injectShadowAtEdges does not support functions containing inline assembly.",
+fn ensure_no_inline_assembly_in_statement(statement: &Value) -> Result<()> {
+  match node_type(statement) {
+    Some("InlineAssembly") => Err(Error::new(
+      "injectShadowAtEdges does not support functions that contain inline assembly.",
     )),
-    Statement::Block(block) => {
-      for stmt in &block.statements {
-        ensure_no_inline_assembly_in_statement(stmt)?;
+    Some("Block") | Some("UncheckedBlock") => {
+      let statements = statement
+        .get("statements")
+        .and_then(|value| value.as_array())
+        .ok_or_else(|| Error::new("Block missing statements array"))?;
+      for child in statements {
+        ensure_no_inline_assembly_in_statement(child)?;
       }
       Ok(())
     }
-    Statement::IfStatement(if_stmt) => {
-      ensure_no_inline_assembly_in_block_or_statement(&if_stmt.true_body)?;
-      if let Some(false_body) = &if_stmt.false_body {
-        ensure_no_inline_assembly_in_block_or_statement(false_body)?;
+    Some("IfStatement") => {
+      if let Some(true_body) = statement.get("trueBody") {
+        ensure_no_inline_assembly_in_statement(true_body)?;
+      }
+      if let Some(false_body) = statement.get("falseBody") {
+        ensure_no_inline_assembly_in_statement(false_body)?;
       }
       Ok(())
     }
-    Statement::WhileStatement(while_stmt) => {
-      ensure_no_inline_assembly_in_block_or_statement(&while_stmt.body)
-    }
-    Statement::DoWhileStatement(do_stmt) => ensure_no_inline_assembly(&do_stmt.body),
-    Statement::ForStatement(for_stmt) => {
-      ensure_no_inline_assembly_in_block_or_statement(&for_stmt.body)
-    }
-    Statement::TryStatement(try_stmt) => {
-      for clause in &try_stmt.clauses {
-        ensure_no_inline_assembly(&clause.block)?;
+    Some("WhileStatement") | Some("ForStatement") => {
+      if let Some(body) = statement.get("body") {
+        ensure_no_inline_assembly_in_statement(body)?;
       }
       Ok(())
     }
-    Statement::UncheckedBlock(unchecked) => {
-      for stmt in &unchecked.statements {
-        ensure_no_inline_assembly_in_statement(stmt)?;
+    Some("DoWhileStatement") => {
+      if let Some(body) = statement.get("body") {
+        ensure_no_inline_assembly_in_statement(body)?;
+      }
+      Ok(())
+    }
+    Some("TryStatement") => {
+      if let Some(clauses) = statement.get("clauses").and_then(|value| value.as_array()) {
+        for clause in clauses {
+          if let Some(block) = clause.get("block") {
+            ensure_no_inline_assembly_in_statement(block)?;
+          }
+        }
       }
       Ok(())
     }
@@ -240,21 +265,11 @@ fn ensure_no_inline_assembly_in_statement(statement: &Statement) -> Result<()> {
   }
 }
 
-fn ensure_no_inline_assembly_in_block_or_statement(node: &BlockOrStatement) -> Result<()> {
-  match node {
-    BlockOrStatement::Block(block) => ensure_no_inline_assembly(block),
-    BlockOrStatement::Statement(statement) => ensure_no_inline_assembly_in_statement(statement),
-  }
-}
-
-fn parse_statements(
-  snippets: &[String],
-  solc: &Solc,
-  settings: &Settings,
-) -> Result<Vec<Statement>> {
+fn parse_statements(snippets: &[String], solc: &Solc, settings: &Settings) -> Result<Vec<Value>> {
   if snippets.is_empty() {
     return Ok(Vec::new());
   }
+
   let joined = snippets
     .iter()
     .map(|snippet| snippet.trim())
@@ -279,38 +294,146 @@ fn parse_statements(
   let fragment = fragment_lines.join("\n");
 
   let contract = parse_fragment_contract(&fragment, solc, settings)?;
-  let function = contract
-    .nodes
-    .iter()
-    .find_map(|part| {
-      if let ContractDefinitionPart::FunctionDefinition(func) = part {
-        Some(func)
-      } else {
-        None
-      }
-    })
+  let function = first_function_definition(&contract)
     .ok_or_else(|| Error::new("Failed to parse instrumentation snippets"))?;
-  let Some(block) = &function.body else {
+  let body = function
+    .get("body")
+    .ok_or_else(|| Error::new("Instrumentation snippet produced no body statements"))?;
+  if body.is_null() {
     return Err(Error::new(
       "Instrumentation snippet produced no body statements.",
     ));
-  };
-  Ok(block.statements.clone())
-}
-
-fn clone_statements(statements: &[Statement], next_id: &mut i64) -> Result<Vec<Statement>> {
-  let mut clones = Vec::with_capacity(statements.len());
-  for statement in statements {
-    clones.push(utils::clone_with_new_ids(statement, next_id)?);
   }
-  Ok(clones)
+  let statements = body
+    .get("statements")
+    .and_then(|value| value.as_array())
+    .ok_or_else(|| Error::new("Instrumentation snippet missing statements array"))?;
+  Ok(statements.to_vec())
 }
 
-fn parse_fragment_contract(
-  fragment: &str,
-  solc: &Solc,
-  settings: &Settings,
-) -> Result<ContractDefinition> {
+fn clone_statements(statements: &[Value], next_id: &mut i64) -> Vec<Value> {
+  statements
+    .iter()
+    .map(|statement| utils::clone_with_new_ids(statement, next_id))
+    .collect()
+}
+
+fn inject_after(statements: &mut Vec<Value>, template: &[Value], next_id: &mut i64) -> Result<()> {
+  let mut idx = 0;
+  while idx < statements.len() {
+    let node_type = node_type(&statements[idx]);
+    match node_type {
+      Some("Return") => {
+        let clones = clone_statements(template, next_id);
+        let len = clones.len();
+        for (offset, clone) in clones.into_iter().enumerate() {
+          statements.insert(idx + offset, clone);
+        }
+        idx += len + 1;
+      }
+      Some("Block") | Some("UncheckedBlock") => {
+        let block_statements = statements[idx]
+          .get_mut("statements")
+          .and_then(|value| value.as_array_mut())
+          .ok_or_else(|| Error::new("Block missing statements array"))?;
+        inject_after(block_statements, template, next_id)?;
+        idx += 1;
+      }
+      Some("IfStatement") => {
+        if let Some(true_body) = statements[idx].get_mut("trueBody") {
+          inject_into_block_or_statement(true_body, template, next_id)?;
+        }
+        if let Some(false_body) = statements[idx].get_mut("falseBody") {
+          inject_into_block_or_statement(false_body, template, next_id)?;
+        }
+        idx += 1;
+      }
+      Some("WhileStatement") | Some("ForStatement") => {
+        if let Some(body) = statements[idx].get_mut("body") {
+          inject_into_block_or_statement(body, template, next_id)?;
+        }
+        idx += 1;
+      }
+      Some("DoWhileStatement") => {
+        if let Some(body) = statements[idx].get_mut("body") {
+          let block_statements = body
+            .get_mut("statements")
+            .and_then(|value| value.as_array_mut())
+            .ok_or_else(|| Error::new("DoWhile body missing statements array"))?;
+          inject_after(block_statements, template, next_id)?;
+        }
+        idx += 1;
+      }
+      Some("TryStatement") => {
+        if let Some(clauses) = statements[idx]
+          .get_mut("clauses")
+          .and_then(|value| value.as_array_mut())
+        {
+          for clause in clauses {
+            if let Some(block) = clause.get_mut("block") {
+              let block_statements = block
+                .get_mut("statements")
+                .and_then(|value| value.as_array_mut())
+                .ok_or_else(|| Error::new("Try clause block missing statements array"))?;
+              inject_after(block_statements, template, next_id)?;
+            }
+          }
+        }
+        idx += 1;
+      }
+      _ => {
+        idx += 1;
+      }
+    }
+  }
+  Ok(())
+}
+
+fn inject_into_block_or_statement(
+  node: &mut Value,
+  template: &[Value],
+  next_id: &mut i64,
+) -> Result<()> {
+  if node_type(node) == Some("Block") || node_type(node) == Some("UncheckedBlock") {
+    let statements = node
+      .get_mut("statements")
+      .and_then(|value| value.as_array_mut())
+      .ok_or_else(|| Error::new("Block missing statements array"))?;
+    inject_after(statements, template, next_id)
+  } else {
+    ensure_block(node, next_id)?;
+    let statements = node
+      .get_mut("statements")
+      .and_then(|value| value.as_array_mut())
+      .ok_or_else(|| Error::new("Converted block missing statements array"))?;
+    inject_after(statements, template, next_id)
+  }
+}
+
+fn ensure_block(node: &mut Value, next_id: &mut i64) -> Result<()> {
+  if node_type(node) == Some("Block") || node_type(node) == Some("UncheckedBlock") {
+    return Ok(());
+  }
+
+  let original = std::mem::replace(node, Value::Null);
+  let src = original
+    .get("src")
+    .cloned()
+    .unwrap_or_else(|| Value::String("0:0:0".to_string()));
+
+  *next_id += 1;
+
+  let mut block_map = Map::new();
+  block_map.insert("nodeType".to_string(), Value::String("Block".to_string()));
+  block_map.insert("id".to_string(), Value::Number((*next_id).into()));
+  block_map.insert("src".to_string(), src);
+  block_map.insert("statements".to_string(), Value::Array(vec![original]));
+
+  *node = Value::Object(block_map);
+  Ok(())
+}
+
+fn parse_fragment_contract(fragment: &str, solc: &Solc, settings: &Settings) -> Result<Value> {
   let wrapped = parser::wrap_fragment_source(fragment);
   let mut sources = Sources::new();
   sources.insert(PathBuf::from("__AstFragment.sol"), Source::new(&wrapped));
@@ -330,157 +453,115 @@ fn parse_fragment_contract(
     .cloned()
     .ok_or_else(|| Error::new("Failed to extract AST"))?;
 
-  let mut ast_value = ast_value;
-  ensure_kind_fields(&mut ast_value);
-  utils::sanitize_ast_value(&mut ast_value);
-
-  let unit: SourceUnit = serde_json::from_value(ast_value)
-    .map_err(|err| Error::new(format!("Failed to parse fragment AST: {}", err)))?;
-
-  unit
-    .nodes
-    .iter()
-    .find_map(|part| {
-      if let SourceUnitPart::ContractDefinition(contract) = part {
-        Some((**contract).clone())
-      } else {
-        None
-      }
-    })
-    .ok_or_else(|| Error::new("Fragment contract not found"))
+  let contract =
+    parser::extract_fragment_contract(&ast_value).map_err(|err| Error::new(err.to_string()))?;
+  Ok(contract)
 }
 
-fn ensure_kind_fields(node: &mut Value) {
-  match node {
-    Value::Object(map) => {
-      if let Some(node_type) = map
-        .get("nodeType")
-        .and_then(|value| value.as_str())
-        .map(|value| value.to_string())
-      {
-        if node_type == "FunctionDefinition" && !map.contains_key("kind") {
-          map.insert("kind".to_string(), Value::String("function".to_string()));
-        }
-        if node_type == "FunctionCall" && !map.contains_key("kind") {
-          map.insert(
-            "kind".to_string(),
-            Value::String("functionCall".to_string()),
-          );
-        }
-      }
-      for child in map.values_mut() {
-        ensure_kind_fields(child);
-      }
-    }
-    Value::Array(items) => {
-      for item in items {
-        ensure_kind_fields(item);
-      }
-    }
-    _ => {}
+fn contract_mut_at<'a>(unit: &'a mut Value, idx: usize) -> Result<&'a mut Value> {
+  let nodes = unit
+    .get_mut("nodes")
+    .and_then(|value| value.as_array_mut())
+    .ok_or_else(|| Error::new("Source unit has no nodes array"))?;
+  let Some(node) = nodes.get_mut(idx) else {
+    return Err(Error::new("Invalid contract index"));
+  };
+  if node_type(node) != Some("ContractDefinition") {
+    return Err(Error::new("Target index is not a contract definition"));
   }
+  Ok(node)
 }
 
-fn inject_after(
-  statements: &mut Vec<Statement>,
-  template: &[Statement],
-  next_id: &mut i64,
-) -> Result<()> {
-  let mut idx = 0;
-  while idx < statements.len() {
-    match &mut statements[idx] {
-      Statement::Return(_) => {
-        let clones = clone_statements(template, next_id)?;
-        let len = clones.len();
-        statements.splice(idx..idx, clones);
-        idx += len + 1;
-      }
-      Statement::Block(block) => {
-        inject_after(&mut block.statements, template, next_id)?;
-        idx += 1;
-      }
-      Statement::IfStatement(if_stmt) => {
-        inject_into_block_or_statement(&mut if_stmt.true_body, template, next_id)?;
-        if let Some(false_body) = if_stmt.false_body.as_mut() {
-          inject_into_block_or_statement(false_body, template, next_id)?;
-        }
-        idx += 1;
-      }
-      Statement::WhileStatement(while_stmt) => {
-        inject_into_block_or_statement(&mut while_stmt.body, template, next_id)?;
-        idx += 1;
-      }
-      Statement::DoWhileStatement(do_stmt) => {
-        inject_after(&mut do_stmt.body.statements, template, next_id)?;
-        idx += 1;
-      }
-      Statement::ForStatement(for_stmt) => {
-        inject_into_block_or_statement(&mut for_stmt.body, template, next_id)?;
-        idx += 1;
-      }
-      Statement::TryStatement(try_stmt) => {
-        for TryCatchClause { block, .. } in &mut try_stmt.clauses {
-          inject_after(&mut block.statements, template, next_id)?;
-        }
-        idx += 1;
-      }
-      Statement::UncheckedBlock(unchecked) => {
-        inject_after(&mut unchecked.statements, template, next_id)?;
-        idx += 1;
-      }
-      _ => {
-        idx += 1;
-      }
-    }
+fn node_type(value: &Value) -> Option<&str> {
+  value.get("nodeType").and_then(|value| value.as_str())
+}
+
+fn node_name(value: &Value) -> Option<&str> {
+  value.get("name").and_then(|value| value.as_str())
+}
+
+fn function_kind(value: &Value) -> Option<&str> {
+  value.get("kind").and_then(|value| value.as_str())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::{ast::orchestrator::AstOrchestrator, internal::solc};
+  use serde_json::json;
+
+  fn find_default_solc() -> Option<Solc> {
+    let version = solc::default_version().ok()?;
+    Solc::find_svm_installed_version(&version).ok().flatten()
   }
-  Ok(())
-}
 
-fn inject_into_block_or_statement(
-  target: &mut BlockOrStatement,
-  template: &[Statement],
-  next_id: &mut i64,
-) -> Result<()> {
-  match target {
-    BlockOrStatement::Block(block) => inject_after(&mut block.statements, template, next_id),
-    BlockOrStatement::Statement(statement) => {
-      inject_after_in_statement(statement, template, next_id)
-    }
+  #[test]
+  fn ensure_block_wraps_expression_statements() {
+    let mut node = json!({
+      "nodeType": "ExpressionStatement",
+      "expression": { "nodeType": "Identifier", "name": "foo" }
+    });
+    let mut next_id = 0;
+    ensure_block(&mut node, &mut next_id).expect("wrap into block");
+
+    assert_eq!(node["nodeType"], "Block");
+    assert!(node["id"].as_i64().is_some());
+    let statements = node["statements"].as_array().expect("statements array");
+    assert_eq!(statements.len(), 1);
+    assert_eq!(statements[0]["expression"]["name"], "foo");
+    assert_eq!(next_id, 1);
   }
-}
 
-fn inject_after_in_statement(
-  statement: &mut Statement,
-  template: &[Statement],
-  next_id: &mut i64,
-) -> Result<()> {
-  match statement {
-    Statement::Block(block) => inject_after(&mut block.statements, template, next_id),
-    Statement::IfStatement(if_stmt) => {
-      inject_into_block_or_statement(&mut if_stmt.true_body, template, next_id)?;
-      if let Some(false_body) = if_stmt.false_body.as_mut() {
-        inject_into_block_or_statement(false_body, template, next_id)?;
+  #[test]
+  fn inject_after_inserts_template_before_returns() {
+    let mut statements = vec![json!({ "nodeType": "Return" })];
+    let template = vec![json!({
+      "nodeType": "ExpressionStatement",
+      "expression": { "nodeType": "Identifier", "name": "probe" }
+    })];
+
+    let mut next_id = 0;
+    inject_after(&mut statements, &template, &mut next_id).expect("inject");
+
+    assert_eq!(statements.len(), 2);
+    assert_eq!(statements[0]["nodeType"], "ExpressionStatement");
+    assert_eq!(statements[0]["expression"]["name"], "probe");
+    assert_eq!(statements[1]["nodeType"], "Return");
+    assert_eq!(next_id, 2);
+  }
+
+  #[test]
+  fn ensure_no_inline_assembly_detects_assembly_nodes() {
+    let block = json!({
+      "nodeType": "Block",
+      "statements": [
+        { "nodeType": "InlineAssembly" }
+      ]
+    });
+
+    let err = ensure_no_inline_assembly(&block);
+    assert!(err.is_err());
+  }
+
+  #[test]
+  fn parse_selector_parses_canonical_signature() {
+    let Some(solc) = find_default_solc() else {
+      return;
+    };
+    let settings = AstOrchestrator::sanitize_settings(None).expect("default settings");
+
+    let selector =
+      parse_selector("tapStored(uint256 value)", &solc, &settings).expect("parse selector");
+
+    match selector {
+      FunctionSelectorKind::Canonical { name, signature } => {
+        assert_eq!(name, "tapStored");
+        assert!(
+          signature.iter().any(|entry| entry.contains("uint256")),
+          "signature should include uint256 type"
+        );
       }
-      Ok(())
+      other => panic!("expected canonical selector, found {:?}", other),
     }
-    Statement::WhileStatement(while_stmt) => {
-      inject_into_block_or_statement(&mut while_stmt.body, template, next_id)
-    }
-    Statement::DoWhileStatement(do_stmt) => {
-      inject_after(&mut do_stmt.body.statements, template, next_id)
-    }
-    Statement::ForStatement(for_stmt) => {
-      inject_into_block_or_statement(&mut for_stmt.body, template, next_id)
-    }
-    Statement::TryStatement(try_stmt) => {
-      for TryCatchClause { block, .. } in &mut try_stmt.clauses {
-        inject_after(&mut block.statements, template, next_id)?;
-      }
-      Ok(())
-    }
-    Statement::UncheckedBlock(unchecked) => {
-      inject_after(&mut unchecked.statements, template, next_id)
-    }
-    _ => Ok(()),
   }
 }

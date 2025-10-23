@@ -1,6 +1,6 @@
-use foundry_compilers::artifacts::ast::SourceUnit;
 use napi::bindgen_prelude::*;
 use napi::{Env, JsObject, JsUnknown, ValueType};
+use serde_json::Value;
 
 pub mod core;
 mod error;
@@ -18,10 +18,10 @@ use core::{
   inject_shadow_at_edges, source_unit, source_unit_mut, validate,
 };
 pub use core::{FragmentTarget, SourceTarget, State};
-use utils::{from_js_value, sanitize_ast_value, to_js_value};
+use utils::{from_js_value, to_js_value};
 
 use crate::internal::config::{parse_js_ast_options, AstConfig, AstConfigOptions};
-use crate::internal::errors::{map_napi_error, napi_error, to_napi_result, Result};
+use crate::internal::errors::{napi_error, to_napi_result, Result};
 use crate::internal::logging::ensure_napi_logger;
 
 /// Pure Rust façade around the AST core functions.
@@ -87,13 +87,13 @@ impl Ast {
     Ok(self)
   }
 
-  pub fn ast(&self) -> Result<&SourceUnit> {
+  pub fn ast(&self) -> Result<&Value> {
     source_unit(&self.state).ok_or_else(|| {
       crate::internal::errors::Error::new("Ast has no target unit. Call from_source first.")
     })
   }
 
-  pub fn ast_mut(&mut self) -> Result<&mut SourceUnit> {
+  pub fn ast_mut(&mut self) -> Result<&mut Value> {
     source_unit_mut(&mut self.state).ok_or_else(|| {
       crate::internal::errors::Error::new("Ast has no target unit. Call from_source first.")
     })
@@ -278,19 +278,17 @@ impl JsAst {
       .inner
       .ast()
       .map_err(|err| napi_error(err.to_string()))?;
-    let mut ast_value = map_napi_error(serde_json::to_value(ast), "Failed to serialize AST value")?;
-    sanitize_ast_value(&mut ast_value);
-    to_js_value(&env, &ast_value)
+    to_js_value(&env, ast)
   }
 }
 
 fn parse_source_target(env: &Env, target: Either<String, JsObject>) -> napi::Result<SourceTarget> {
   match target {
     Either::A(source) => Ok(SourceTarget::Text(source)),
-    Either::B(object) => {
-      let unit: SourceUnit = from_js_value(env, object.into_unknown())?;
-      Ok(SourceTarget::Ast(unit))
-    }
+    Either::B(object) => Ok(SourceTarget::Ast(from_js_value(
+      env,
+      object.into_unknown(),
+    )?)),
   }
 }
 
@@ -300,10 +298,10 @@ fn parse_fragment_input(
 ) -> napi::Result<FragmentTarget> {
   match fragment {
     Either::A(source) => Ok(FragmentTarget::Text(source)),
-    Either::B(object) => {
-      let unit: SourceUnit = from_js_value(env, object.into_unknown())?;
-      Ok(FragmentTarget::Ast(unit))
-    }
+    Either::B(object) => Ok(FragmentTarget::Ast(from_js_value(
+      env,
+      object.into_unknown(),
+    )?)),
   }
 }
 
