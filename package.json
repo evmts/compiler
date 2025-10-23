@@ -1,6 +1,6 @@
 {
   "name": "@compiler/source",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "license": "MIT",
   "scripts": {
     "all": "nx run-many -t lint format test build post-build",
