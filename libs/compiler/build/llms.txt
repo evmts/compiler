@@ -2952,52 +2952,6 @@
       	})
       
       	describe('Various use cases', () => {
-      		test('ERC721A: expose packed address data analytics', async () => {
-      			const { callerAddress, client, contract, source } = await setupErc721A()
-      
-      			const analyticsShadow = `
-      				struct Analytics {
-      					uint64 balance;
-      					uint64 minted;
-      					uint64 burned;
-      					uint64 aux;
-      				}
-      
-      				function addressAnalytics(address owner) external view returns (Analytics memory) {
-      					return Analytics(
-      						uint64(balanceOf(owner)),
-      						uint64(_numberMinted(owner)),
-      						uint64(_numberBurned(owner)),
-      						uint64(_getAux(owner))
-      					);
-      				}
-      			`
-      
-      			// Instrument the ERC721A mock with an analytics surface mirroring packed address data
-      			const ast = new Ast({ instrumentedContract: 'ERC721AMock' })
-      				.fromSource(source)
-      				.injectShadow(analyticsShadow)
-      				.validate()
-      
-      			// Compile the AST (this will reuse the cached output from validation here)
-      			const output = ast.compile()
-      			if (output.hasCompilerErrors()) {
-      				throw new Error(`Failed to compile: ${output.errors.map((e) => e.formattedMessage).join(', ')}`)
-      			}
-      
-      			const instrumentedContract = output.artifact.contracts['ERC721AMock']
-      			// Call the original contract using the intrumented bytecode
-      			// Meaning execute the instrumented (shadowed) contract in the context of the original contract
-      			const res = await client.tevmContract({
-      				to: contract.address,
-      				abi: instrumentedContract.abi!,
-      				deployedBytecode: instrumentedContract.deployedBytecode!.hex,
-      				functionName: 'addressAnalytics',
-      				args: [callerAddress],
-      			})
-      			expect(res.data).toMatchObject({ balance: 1n, minted: 1n, burned: 0n, aux: 0n })
-      		})
-      
       		test('Uniswap v3: decode TickBitmap word in-contract', async () => {
       			const { client, contract, source, tickSpacing } = await setupUniswapV3()
       
@@ -3259,6 +3213,52 @@
       				),
       			})
       		})
+      	})
+      
+      	test('ERC721A: expose packed address data analytics', async () => {
+      		const { callerAddress, client, contract, source } = await setupErc721A()
+      
+      		const analyticsShadow = `
+      			struct Analytics {
+      				uint64 balance;
+      				uint64 minted;
+      				uint64 burned;
+      				uint64 aux;
+      			}
+      
+      			function addressAnalytics(address owner) external view returns (Analytics memory) {
+      				return Analytics(
+      					uint64(balanceOf(owner)),
+      					uint64(_numberMinted(owner)),
+      					uint64(_numberBurned(owner)),
+      					uint64(_getAux(owner))
+      				);
+      			}
+      		`
+      
+      		// Instrument the ERC721A mock with an analytics surface mirroring packed address data
+      		const ast = new Ast({ instrumentedContract: 'ERC721AMock' })
+      			.fromSource(source)
+      			.injectShadow(analyticsShadow)
+      			.validate()
+      
+      		// Compile the AST (this will reuse the cached output from validation here)
+      		const output = ast.compile()
+      		if (output.hasCompilerErrors()) {
+      			throw new Error(`Failed to compile: ${output.errors.map((e) => e.formattedMessage).join(', ')}`)
+      		}
+      
+      		const instrumentedContract = output.artifact.contracts['ERC721AMock']
+      		// Call the original contract using the intrumented bytecode
+      		// Meaning execute the instrumented (shadowed) contract in the context of the original contract
+      		const res = await client.tevmContract({
+      			to: contract.address,
+      			abi: instrumentedContract.abi!,
+      			deployedBytecode: instrumentedContract.deployedBytecode!.hex,
+      			functionName: 'addressAnalytics',
+      			args: [callerAddress],
+      		})
+      		expect(res.data).toMatchObject({ balance: 1n, minted: 1n, burned: 0n, aux: 0n })
       	})
       })
     </spec-file>
