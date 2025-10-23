@@ -34,11 +34,13 @@ export declare class Ast {
   exposeInternalFunctions(options?: AstConfigOptions | undefined): this
   /**
    * Compile the current AST to ensure it represents a valid contract and refresh its references.
-   * This is optional—`ast()` already returns the parsed tree you can work with directly.
+   * This is optional—`sourceUnit()` already returns the parsed tree you can work with directly.
    */
-  validate(options?: AstConfigOptions | undefined): this
+  validate(): this
+  /** Compile the current AST with the constructor options into a CompileOutput. */
+  compile(): CompileOutput<true, undefined> | CompileOutput<false, undefined>
   /** Get the current instrumented AST. */
-  ast(): import('./solc-ast').SourceUnit
+  sourceUnit(): import('./solc-ast').SourceUnit
 }
 export type JsAst = Ast
 

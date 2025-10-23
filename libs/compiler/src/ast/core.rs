@@ -1,10 +1,17 @@
 use foundry_compilers::solc::SolcLanguage;
 use log::{error, info};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use super::{instrumenter, orchestrator::AstOrchestrator, stitcher};
+use crate::compiler::{
+  core::SourceTarget as CompilerSourceTarget,
+  output::{CompileOutput, SeverityLevel},
+  Compiler,
+};
 use crate::internal::{
-  config::{AstConfig, AstConfigOptions, ResolveConflictStrategy},
+  config::{
+    AstConfig, AstConfigOptions, CompilerConfigOptions, CompilerLanguage, ResolveConflictStrategy,
+  },
   errors::{map_err_with_context, Error, Result},
   logging::{ensure_rust_logger, update_level},
   solc,
@@ -17,6 +24,7 @@ const LOG_TARGET: &str = "tevm::ast";
 pub struct State {
   pub config: AstConfig,
   pub ast: Option<Value>,
+  pub cached_compile_output: Option<CompileOutput>,
 }
 
 #[derive(Clone)]
@@ -53,7 +61,11 @@ pub fn init(options: Option<AstConfigOptions>) -> Result<State> {
     config.instrumented_contract()
   );
 
-  Ok(State { config, ast: None })
+  Ok(State {
+    config,
+    ast: None,
+    cached_compile_output: None,
+  })
 }
 
 pub fn from_source(
@@ -61,6 +73,7 @@ pub fn from_source(
   target: SourceTarget,
   overrides: Option<&AstConfigOptions>,
 ) -> Result<()> {
+  state.cached_compile_output = None;
   match target {
     SourceTarget::Text(source) => {
       info!(
@@ -98,6 +111,7 @@ pub fn inject_shadow(
       inject_fragment_ast(state, unit, overrides)?;
     }
   }
+  state.cached_compile_output = None;
   info!(target: LOG_TARGET, "AST fragment injected");
   Ok(())
 }
@@ -143,6 +157,7 @@ pub fn inject_shadow_at_edges(
     contract
   );
 
+  state.cached_compile_output = None;
   Ok(())
 }
 
@@ -157,6 +172,7 @@ pub fn expose_internal_variables(
     contract
   );
   expose_variables_internal(state, overrides)?;
+  state.cached_compile_output = None;
   info!(target: LOG_TARGET, "internal variables exposed");
   Ok(())
 }
@@ -172,6 +188,7 @@ pub fn expose_internal_functions(
     contract
   );
   expose_functions_internal(state, overrides)?;
+  state.cached_compile_output = None;
   info!(target: LOG_TARGET, "internal functions exposed");
   Ok(())
 }
@@ -403,62 +420,33 @@ pub fn validate(state: &mut State, overrides: Option<&AstConfigOptions>) -> Resu
     "validating AST (current_contract={:?})",
     state.config.instrumented_contract()
   );
-  let config = resolve_config(state, overrides)?;
-  let mut compile_config = config.solc.clone();
-  compile_config.settings.stop_after = None;
+  let output = compile_output_internal(state, overrides)?;
 
-  let target = target_ast(state)?;
-  let ast_value = map_err_with_context(
-    serde_json::to_value(target),
-    "Failed to serialise AST for validation",
-  )?;
-
-  let settings_value = map_err_with_context(
-    serde_json::to_value(&compile_config.settings),
-    "Failed to serialise compiler settings",
-  )?;
-
-  let input = json!({
-    "language": "SolidityAST",
-    "sources": {
-      VIRTUAL_SOURCE_PATH: { "ast": ast_value }
-    },
-    "settings": settings_value
-  });
-
-  let solc = solc::ensure_installed(&compile_config.version)?;
-  let output: Value = map_err_with_context(solc.compile_as(&input), "Solc validation failed")?;
-
-  if let Some(errors) = output.get("errors").and_then(|value| value.as_array()) {
-    let mut messages = Vec::new();
-    for error in errors {
-      let severity = error
-        .get("severity")
-        .and_then(|value| value.as_str())
-        .unwrap_or_default();
-      if severity.eq_ignore_ascii_case("error") {
-        let message = error
-          .get("formattedMessage")
-          .and_then(|value| value.as_str())
-          .or_else(|| error.get("message").and_then(|value| value.as_str()))
-          .unwrap_or("Compilation error");
-        messages.push(message.to_string());
-      }
-    }
-    if !messages.is_empty() {
-      error!(
-        target: LOG_TARGET,
-        "AST validation failed with {} error(s)",
-        messages.len()
-      );
-      return Err(Error::new(format!(
-        "AST validation failed:\n{}",
-        messages.join("\n")
-      )));
+  let mut messages = Vec::new();
+  for error in &output.errors {
+    if matches!(error.severity, SeverityLevel::Error) {
+      let message = error
+        .formatted_message
+        .as_deref()
+        .unwrap_or(&error.message)
+        .to_string();
+      messages.push(message);
     }
   }
+  if !messages.is_empty() {
+    error!(
+      target: LOG_TARGET,
+      "AST validation failed with {} error(s)",
+      messages.len()
+    );
+    return Err(Error::new(format!(
+      "AST validation failed:\n{}",
+      messages.join("\n")
+    )));
+  }
 
-  let next_ast_value = output
+  let raw_artifacts = &output.raw_artifacts;
+  let next_ast_value = raw_artifacts
     .get("sources")
     .and_then(|sources| sources.get(VIRTUAL_SOURCE_PATH))
     .and_then(|entry| entry.get("ast"))
@@ -468,6 +456,56 @@ pub fn validate(state: &mut State, overrides: Option<&AstConfigOptions>) -> Resu
   state.ast = Some(next_ast_value);
   info!(target: LOG_TARGET, "AST validation succeeded");
   Ok(())
+}
+
+pub fn compile_output(state: &mut State) -> Result<CompileOutput> {
+  compile_output_internal(state, None)
+}
+
+fn compile_output_internal(
+  state: &mut State,
+  overrides: Option<&AstConfigOptions>,
+) -> Result<CompileOutput> {
+  let use_cache = overrides.is_none();
+  if use_cache {
+    if let Some(cached) = &state.cached_compile_output {
+      return Ok(cached.clone());
+    }
+  }
+
+  let config = resolve_config(state, overrides)?;
+  let output = run_compiler(state, &config)?;
+
+  if use_cache {
+    state.cached_compile_output = Some(output.clone());
+  }
+
+  Ok(output)
+}
+
+fn run_compiler(state: &State, config: &AstConfig) -> Result<CompileOutput> {
+  let ast = state
+    .ast
+    .clone()
+    .ok_or_else(|| Error::new("Ast has no target AST. Call from_source first."))?;
+
+  let compiler = Compiler::new(Some(compiler_options_from_ast(config)))?;
+  compiler.compile_source(CompilerSourceTarget::Ast(ast), None)
+}
+
+fn compiler_options_from_ast(config: &AstConfig) -> CompilerConfigOptions {
+  let mut options = CompilerConfigOptions::default();
+  options.compiler = Some(CompilerLanguage::from(config.solc.language));
+  options.solc = {
+    let mut solc = crate::SolcConfigOptions::default();
+    solc.version = Some(config.solc.version.clone());
+    solc.language = Some(config.solc.language);
+    solc.resolved_settings = Some(config.solc.settings.clone());
+    solc
+  };
+  options.cache_enabled = Some(false);
+  options.build_info_enabled = Some(false);
+  options
 }
 
 fn load_source_text(

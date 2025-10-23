@@ -14,12 +14,13 @@ pub(crate) mod utils;
 mod ast_tests;
 
 use core::{
-  expose_internal_functions, expose_internal_variables, from_source, init, inject_shadow,
-  inject_shadow_at_edges, source_unit, source_unit_mut, validate,
+  compile_output, expose_internal_functions, expose_internal_variables, from_source, init,
+  inject_shadow, inject_shadow_at_edges, source_unit, source_unit_mut, validate,
 };
 pub use core::{FragmentTarget, SourceTarget, State};
 use utils::{from_js_value, to_js_value};
 
+use crate::compiler::output::{into_js_compile_output, CompileOutput, JsCompileOutput};
 use crate::internal::config::{parse_js_ast_options, AstConfig, AstConfigOptions};
 use crate::internal::errors::{napi_error, to_napi_result, Result};
 use crate::internal::logging::ensure_napi_logger;
@@ -81,19 +82,23 @@ impl Ast {
   }
 
   /// Compile the current AST to ensure it represents a valid contract and refresh its references.
-  /// This is optional—`ast()` already returns the parsed tree you can work with directly.
-  pub fn validate(&mut self, options: Option<AstConfigOptions>) -> Result<&mut Self> {
-    validate(&mut self.state, options.as_ref())?;
+  /// This is optional—`sourceUnit()` already returns the parsed tree you can work with directly.
+  pub fn validate(&mut self) -> Result<&mut Self> {
+    validate(&mut self.state, None)?;
     Ok(self)
   }
 
-  pub fn ast(&self) -> Result<&Value> {
+  pub fn compile(&mut self) -> Result<CompileOutput> {
+    compile_output(&mut self.state)
+  }
+
+  pub fn source_unit(&self) -> Result<&Value> {
     source_unit(&self.state).ok_or_else(|| {
       crate::internal::errors::Error::new("Ast has no target unit. Call from_source first.")
     })
   }
 
-  pub fn ast_mut(&mut self) -> Result<&mut Value> {
+  pub fn source_unit_mut(&mut self) -> Result<&mut Value> {
     source_unit_mut(&mut self.state).ok_or_else(|| {
       crate::internal::errors::Error::new("Ast has no target unit. Call from_source first.")
     })
@@ -256,27 +261,29 @@ impl JsAst {
   }
 
   /// Compile the current AST to ensure it represents a valid contract and refresh its references.
-  /// This is optional—`ast()` already returns the parsed tree you can work with directly.
-  #[napi(
-    ts_args_type = "options?: AstConfigOptions | undefined",
-    ts_return_type = "this"
-  )]
-  pub fn validate(&mut self, env: Env, options: Option<JsUnknown>) -> napi::Result<JsAst> {
-    let parsed = parse_js_ast_options(&env, options)?;
-    let overrides = parsed
-      .as_ref()
-      .map(|opts| AstConfigOptions::try_from(opts))
-      .transpose()?;
-    to_napi_result(self.inner.validate(overrides))?;
+  /// This is optional—`sourceUnit()` already returns the parsed tree you can work with directly.
+  #[napi(ts_return_type = "this")]
+  pub fn validate(&mut self) -> napi::Result<JsAst> {
+    to_napi_result(self.inner.validate())?;
     Ok(self.clone())
+  }
+
+  /// Compile the current AST with the constructor options into a CompileOutput.
+  #[napi(
+    js_name = "compile",
+    ts_return_type = "CompileOutput<true, undefined> | CompileOutput<false, undefined>"
+  )]
+  pub fn compile(&mut self) -> napi::Result<JsCompileOutput> {
+    let output = to_napi_result(self.inner.compile())?;
+    Ok(into_js_compile_output(output))
   }
 
   /// Get the current instrumented AST.
   #[napi(ts_return_type = "import('./solc-ast').SourceUnit")]
-  pub fn ast(&self, env: Env) -> napi::Result<JsUnknown> {
+  pub fn source_unit(&self, env: Env) -> napi::Result<JsUnknown> {
     let ast = self
       .inner
-      .ast()
+      .source_unit()
       .map_err(|err| napi_error(err.to_string()))?;
     to_js_value(&env, ast)
   }

@@ -129,8 +129,11 @@ const astHelper = new Ast({
   .exposeInternalVariables() // promote private/internal variables
   .validate(); // optional: recompiles to ensure the AST is sound
 
-const stitched = astHelper.ast(); // SourceUnit ready for compilation
+const stitched = astHelper.sourceUnit(); // SourceUnit ready for compilation
 
+// Compile the instrumented AST (this will reuse the cached output from validate() if not invalidated)
+const compiled = astHelper.compile();
+// which is exactly the same as:
 const compiler = new Compiler({ solcVersion: "0.8.30" });
 const output = compiler.compileSources({ "Example.sol": stitched });
 // The compilation output returns ast classes as well

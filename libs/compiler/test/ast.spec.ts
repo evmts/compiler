@@ -135,15 +135,15 @@ describe('Ast constructor', () => {
 describe('fromSource', () => {
 	test('hydrates from source string', () => {
 		const instrumented = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE)
-		const ast = instrumented.ast()
+		const ast = instrumented.sourceUnit()
 
 		const contract = findContract(ast, 'InlineExample')
 		expect(contract).toBeTruthy()
 	})
 
 	test('hydrates from existing ast values', () => {
-		const sourceAst = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
-		const roundTripped = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(sourceAst).ast()
+		const sourceAst = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).sourceUnit()
+		const roundTripped = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(sourceAst).sourceUnit()
 		expect(roundTripped).toEqual(sourceAst)
 	})
 
@@ -152,7 +152,7 @@ describe('fromSource', () => {
 			solcVersion: DEFAULT_SOLC_VERSION,
 			instrumentedContract: 'Target',
 		}).fromSource(MULTI_CONTRACT_SOURCE)
-		const ast = instrumented.ast()
+		const ast = instrumented.sourceUnit()
 		const target = findContract(ast, 'Target')
 		const second = findContract(ast, 'Second')
 
@@ -162,14 +162,16 @@ describe('fromSource', () => {
 
 	test('throws when ast is requested before initialization', () => {
 		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION })
-		expect(() => ast.ast()).toThrowErrorMatchingInlineSnapshot(`"Ast has no target unit. Call from_source first."`)
+		expect(() => ast.sourceUnit()).toThrowErrorMatchingInlineSnapshot(
+			`"Ast has no target unit. Call from_source first."`,
+		)
 	})
 
 	test('handles missing contracts when instrumented contract is configured', () => {
 		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION, instrumentedContract: 'Missing' }).fromSource(
 			NO_CONTRACTS_SOURCE,
 		)
-		const unit = ast.ast()
+		const unit = ast.sourceUnit()
 		const contracts = unit.nodes.filter((node) => node.nodeType === 'ContractDefinition')
 		expect(contracts).toHaveLength(0)
 	})
@@ -181,7 +183,7 @@ describe('injectShadow', () => {
 			.fromSource(INLINE_SOURCE)
 			.injectShadow(FUNCTION_FRAGMENT)
 
-		const contract = findContract(instrumented.ast(), 'InlineExample')
+		const contract = findContract(instrumented.sourceUnit(), 'InlineExample')
 		const functionNames = contract!.nodes
 			.filter((node) => node.nodeType === 'FunctionDefinition')
 			.map((fn: any) => fn.name)
@@ -195,7 +197,7 @@ describe('injectShadow', () => {
 			.injectShadow(VARIABLE_FRAGMENT)
 			.validate()
 
-		const ast = instrumented.ast()
+		const ast = instrumented.sourceUnit()
 		const ids: number[] = []
 		collectIds(ast, ids)
 		expect(ids.length).toBeGreaterThan(0)
@@ -203,13 +205,13 @@ describe('injectShadow', () => {
 	})
 
 	test('injects pre-parsed ast fragments', () => {
-		const fragmentAst = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(SHADOW_CONTRACT_FRAGMENT).ast()
+		const fragmentAst = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(SHADOW_CONTRACT_FRAGMENT).sourceUnit()
 		const instrumented = new Ast({ solcVersion: DEFAULT_SOLC_VERSION })
 			.fromSource(INLINE_SOURCE)
 			.injectShadow(fragmentAst)
 			.validate()
 
-		const contract = findContract(instrumented.ast(), 'InlineExample')
+		const contract = findContract(instrumented.sourceUnit(), 'InlineExample')
 		const functionNames = contract!.nodes
 			.filter((node) => node.nodeType === 'FunctionDefinition')
 			.map((fn: any) => fn.name)
@@ -236,7 +238,7 @@ describe('injectShadow', () => {
 			.injectShadow(FUNCTION_FRAGMENT)
 			.injectShadow(FUNCTION_FRAGMENT_OVERRIDE)
 
-		const contract = findContract(instrumented.ast(), 'InlineExample')!
+		const contract = findContract(instrumented.sourceUnit(), 'InlineExample')!
 		const tapStored = contract.nodes.filter(
 			(node): node is any => node.nodeType === 'FunctionDefinition' && (node as any).name === 'tapStored',
 		)
@@ -249,14 +251,14 @@ describe('injectShadow', () => {
 			.fromSource(INLINE_SOURCE)
 			.injectShadow(FUNCTION_FRAGMENT)
 
-		const original = findTapStored(instrumented.ast())
+		const original = findTapStored(instrumented.sourceUnit())
 		const originalId = original.id
 
 		instrumented.injectShadow(FUNCTION_FRAGMENT_OVERRIDE, {
 			resolveConflictStrategy: ResolveConflictStrategy.Replace,
 		})
 
-		const contract = findContract(instrumented.ast(), 'InlineExample')!
+		const contract = findContract(instrumented.sourceUnit(), 'InlineExample')!
 		const tapStored = contract.nodes.filter(
 			(node): node is any => node.nodeType === 'FunctionDefinition' && (node as any).name === 'tapStored',
 		)
@@ -270,7 +272,7 @@ describe('injectShadow', () => {
 		expect(replacementVariable).toBeDefined()
 
 		const ids: number[] = []
-		collectIds(instrumented.ast(), ids)
+		collectIds(instrumented.sourceUnit(), ids)
 		expect(ids.length).toBe(new Set(ids).size)
 		instrumented.validate()
 	})
@@ -291,7 +293,7 @@ describe('injectShadowAtEdges', () => {
 			})
 			.validate()
 
-		const fn = findFunction(instrumented.ast(), 'InlineExample', 'get')
+		const fn = findFunction(instrumented.sourceUnit(), 'InlineExample', 'get')
 		expect(fn).toBeDefined()
 		const statements = fn?.body?.statements ?? []
 		expect(statements).toHaveLength(4)
@@ -319,7 +321,7 @@ describe('injectShadowAtEdges', () => {
 			})
 			.validate()
 
-		const fn = findFunction(instrumented.ast(), 'InlineExample', 'get')
+		const fn = findFunction(instrumented.sourceUnit(), 'InlineExample', 'get')
 		expect(fn).toBeDefined()
 		const statements = fn?.body?.statements ?? []
 		expect(statements).toHaveLength(5)
@@ -370,12 +372,12 @@ describe('validate', () => {
 			.fromSource(INLINE_SOURCE)
 			.injectShadow(FUNCTION_FRAGMENT)
 
-		const parsedUnit = instrumented.ast()
+		const parsedUnit = instrumented.sourceUnit()
 		const parsedTapStored = findTapStored(parsedUnit)
 		const parsedTypeDescriptions = parsedTapStored.returnParameters.parameters[0].typeDescriptions ?? {}
 		expect(Object.keys(parsedTypeDescriptions)).toHaveLength(0)
 
-		const validatedUnit = instrumented.validate().ast()
+		const validatedUnit = instrumented.validate().sourceUnit()
 		const validatedTapStored = findTapStored(validatedUnit)
 		const validatedTypeDescriptions = validatedTapStored.returnParameters.parameters[0].typeDescriptions
 
@@ -386,13 +388,22 @@ describe('validate', () => {
 	})
 })
 
+describe('compile', () => {
+	test('returns compile output snapshot', () => {
+		const output = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).compile()
+
+		expect(output.hasCompilerErrors()).toBe(false)
+		expect(output.artifact?.toJson()).toMatchSnapshot()
+	})
+})
+
 describe('visibility transformations', () => {
 	test('promotes private and internal variables to public', () => {
 		const instrumented = new Ast({ solcVersion: DEFAULT_SOLC_VERSION })
 			.fromSource(MULTI_CONTRACT_SOURCE, { instrumentedContract: 'Target' })
 			.exposeInternalVariables({ instrumentedContract: 'Target' })
 
-		const target = findContract(instrumented.ast(), 'Target')!
+		const target = findContract(instrumented.sourceUnit(), 'Target')!
 		const visibilities = target.nodes
 			.filter((node) => node.nodeType === 'VariableDeclaration')
 			.map((node: any) => node.visibility)
@@ -404,7 +415,7 @@ describe('visibility transformations', () => {
 			.fromSource(MULTI_CONTRACT_SOURCE, { instrumentedContract: 'Target' })
 			.exposeInternalFunctions({ instrumentedContract: 'Target' })
 
-		const target = findContract(instrumented.ast(), 'Target')!
+		const target = findContract(instrumented.sourceUnit(), 'Target')!
 		const visibilities = target.nodes
 			.filter((node) => node.nodeType === 'FunctionDefinition')
 			.map((node: any) => node.visibility)
@@ -417,7 +428,7 @@ describe('visibility transformations', () => {
 			.exposeInternalVariables()
 			.exposeInternalFunctions()
 
-		const ast = instrumented.ast()
+		const ast = instrumented.sourceUnit()
 		const first = findContract(ast, 'First')!
 		const second = findContract(ast, 'Second')!
 		const target = findContract(ast, 'Target')!
@@ -464,7 +475,7 @@ describe('integration with Compiler', () => {
 			.exposeInternalVariables()
 			.exposeInternalFunctions()
 
-		const ast = instrumented.ast()
+		const ast = instrumented.sourceUnit()
 		const output = sharedCompiler.compileSource(ast)
 
 		expect(output.hasCompilerErrors()).toBe(false)
@@ -478,12 +489,12 @@ describe('integration with Compiler', () => {
 		expect(Array.isArray(output.diagnostics)).toBe(true)
 	})
 
-	test('ast() returns sanitized json without null entries', () => {
-		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION })
+	test('sourceUnit() returns sanitized json without null entries', () => {
+		const sourceUnit = new Ast({ solcVersion: DEFAULT_SOLC_VERSION })
 			.fromSource(INLINE_SOURCE)
 			.injectShadow(FUNCTION_FRAGMENT)
-			.ast()
-		const serialized = JSON.stringify(ast)
+			.sourceUnit()
+		const serialized = JSON.stringify(sourceUnit)
 		expect(serialized.includes('null')).toBe(false)
 	})
 })

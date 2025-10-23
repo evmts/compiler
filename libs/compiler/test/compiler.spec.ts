@@ -437,7 +437,7 @@ describe('Compiler.compileSource with Solidity strings', () => {
 
 describe('Compiler.compileSource with AST and Yul inputs', () => {
 	test('accepts pre-parsed AST values', () => {
-		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).sourceUnit()
 		const compiler = new Compiler({ cacheEnabled: false })
 		const output = compiler.compileSource(ast)
 		expect(output.hasCompilerErrors()).toBe(false)
@@ -459,7 +459,7 @@ describe('Compiler.compileSource with AST and Yul inputs', () => {
 			.fromSource(INLINE_SOURCE)
 			.injectShadow(FUNCTION_FRAGMENT)
 			.injectShadow(VARIABLE_FRAGMENT)
-			.ast()
+			.sourceUnit()
 
 		const compiler = new Compiler({ cacheEnabled: false })
 		const output = compiler.compileSource(instrumented)
@@ -469,7 +469,7 @@ describe('Compiler.compileSource with AST and Yul inputs', () => {
 	})
 
 	test('rejects unsupported languages for AST sources', () => {
-		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).sourceUnit()
 		const compiler = new Compiler({ cacheEnabled: false })
 		expect(() =>
 			compiler.compileSource(ast, {
@@ -539,7 +539,7 @@ describe('Compiler.compileSources', () => {
 	})
 
 	test('compiles AST entries keyed by path', () => {
-		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).sourceUnit()
 		const compiler = new Compiler({ cacheEnabled: false })
 		const output = compiler.compileSources({ 'InlineExample.sol': ast })
 
@@ -549,7 +549,7 @@ describe('Compiler.compileSources', () => {
 	})
 
 	test('rejects mixing ast and source strings', () => {
-		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).sourceUnit()
 		const compiler = new Compiler({ cacheEnabled: false })
 		expect(() =>
 			compiler.compileSources({
@@ -627,7 +627,7 @@ describe('Compiler.compileFiles', () => {
 	})
 
 	test('compiles json ast files', () => {
-		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).sourceUnit()
 		const dir = createTempDir('tevm-compile-files-ast-')
 		const astPath = join(dir, 'InlineExample.ast.json')
 		writeFileSync(astPath, JSON.stringify(ast))
@@ -641,7 +641,7 @@ describe('Compiler.compileFiles', () => {
 	})
 
 	test('compiles ast files with unrecognized extensions', () => {
-		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).sourceUnit()
 		const dir = createTempDir('tevm-compile-files-ast-ext-')
 		const astPath = join(dir, 'InlineExample.ast')
 		writeFileSync(astPath, JSON.stringify(ast))
@@ -654,7 +654,7 @@ describe('Compiler.compileFiles', () => {
 	})
 
 	test('errors when mixing ast and source inputs', () => {
-		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).sourceUnit()
 		const dir = createTempDir('tevm-compile-files-mix-')
 		const astPath = join(dir, 'InlineExample.ast.json')
 		writeFileSync(astPath, JSON.stringify(ast))

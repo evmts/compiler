@@ -166,8 +166,11 @@
       .exposeInternalVariables() // promote private/internal variables
       .validate(); // optional: recompiles to ensure the AST is sound
     
-    const stitched = astHelper.ast(); // SourceUnit ready for compilation
+    const stitched = astHelper.sourceUnit(); // SourceUnit ready for compilation
     
+    // Compile the instrumented AST (this will reuse the cached output from validate() if not invalidated)
+    const compiled = astHelper.compile();
+    // which is exactly the same as:
     const compiler = new Compiler({ solcVersion: "0.8.30" });
     const output = compiler.compileSources({ "Example.sol": stitched });
     // The compilation output returns ast classes as well
@@ -319,11 +322,13 @@
       exposeInternalFunctions(options?: AstConfigOptions | undefined): this
       /**
        * Compile the current AST to ensure it represents a valid contract and refresh its references.
-       * This is optional—`ast()` already returns the parsed tree you can work with directly.
+       * This is optional—`sourceUnit()` already returns the parsed tree you can work with directly.
        */
-      validate(options?: AstConfigOptions | undefined): this
+      validate(): this
+      /** Compile the current AST with the constructor options into a CompileOutput. */
+      compile(): CompileOutput<true, undefined> | CompileOutput<false, undefined>
       /** Get the current instrumented AST. */
-      ast(): import('./solc-ast').SourceUnit
+      sourceUnit(): import('./solc-ast').SourceUnit
     }
     export type JsAst = Ast
     
@@ -1378,15 +1383,15 @@
       describe('fromSource', () => {
       	test('hydrates from source string', () => {
       		const instrumented = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE)
-      		const ast = instrumented.ast()
+      		const ast = instrumented.sourceUnit()
       
       		const contract = findContract(ast, 'InlineExample')
       		expect(contract).toBeTruthy()
       	})
       
       	test('hydrates from existing ast values', () => {
-      		const sourceAst = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
-      		const roundTripped = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(sourceAst).ast()
+      		const sourceAst = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).sourceUnit()
+      		const roundTripped = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(sourceAst).sourceUnit()
       		expect(roundTripped).toEqual(sourceAst)
       	})
       
@@ -1395,7 +1400,7 @@
       			solcVersion: DEFAULT_SOLC_VERSION,
       			instrumentedContract: 'Target',
       		}).fromSource(MULTI_CONTRACT_SOURCE)
-      		const ast = instrumented.ast()
+      		const ast = instrumented.sourceUnit()
       		const target = findContract(ast, 'Target')
       		const second = findContract(ast, 'Second')
       
@@ -1405,14 +1410,16 @@
       
       	test('throws when ast is requested before initialization', () => {
       		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION })
-      		expect(() => ast.ast()).toThrowErrorMatchingInlineSnapshot(`"Ast has no target unit. Call from_source first."`)
+      		expect(() => ast.sourceUnit()).toThrowErrorMatchingInlineSnapshot(
+      			`"Ast has no target unit. Call from_source first."`,
+      		)
       	})
       
       	test('handles missing contracts when instrumented contract is configured', () => {
       		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION, instrumentedContract: 'Missing' }).fromSource(
       			NO_CONTRACTS_SOURCE,
       		)
-      		const unit = ast.ast()
+      		const unit = ast.sourceUnit()
       		const contracts = unit.nodes.filter((node) => node.nodeType === 'ContractDefinition')
       		expect(contracts).toHaveLength(0)
       	})
@@ -1424,7 +1431,7 @@
       			.fromSource(INLINE_SOURCE)
       			.injectShadow(FUNCTION_FRAGMENT)
       
-      		const contract = findContract(instrumented.ast(), 'InlineExample')
+      		const contract = findContract(instrumented.sourceUnit(), 'InlineExample')
       		const functionNames = contract!.nodes
       			.filter((node) => node.nodeType === 'FunctionDefinition')
       			.map((fn: any) => fn.name)
@@ -1438,7 +1445,7 @@
       			.injectShadow(VARIABLE_FRAGMENT)
       			.validate()
       
-      		const ast = instrumented.ast()
+      		const ast = instrumented.sourceUnit()
       		const ids: number[] = []
       		collectIds(ast, ids)
       		expect(ids.length).toBeGreaterThan(0)
@@ -1446,13 +1453,13 @@
       	})
       
       	test('injects pre-parsed ast fragments', () => {
-      		const fragmentAst = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(SHADOW_CONTRACT_FRAGMENT).ast()
+      		const fragmentAst = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(SHADOW_CONTRACT_FRAGMENT).sourceUnit()
       		const instrumented = new Ast({ solcVersion: DEFAULT_SOLC_VERSION })
       			.fromSource(INLINE_SOURCE)
       			.injectShadow(fragmentAst)
       			.validate()
       
-      		const contract = findContract(instrumented.ast(), 'InlineExample')
+      		const contract = findContract(instrumented.sourceUnit(), 'InlineExample')
       		const functionNames = contract!.nodes
       			.filter((node) => node.nodeType === 'FunctionDefinition')
       			.map((fn: any) => fn.name)
@@ -1479,7 +1486,7 @@
       			.injectShadow(FUNCTION_FRAGMENT)
       			.injectShadow(FUNCTION_FRAGMENT_OVERRIDE)
       
-      		const contract = findContract(instrumented.ast(), 'InlineExample')!
+      		const contract = findContract(instrumented.sourceUnit(), 'InlineExample')!
       		const tapStored = contract.nodes.filter(
       			(node): node is any => node.nodeType === 'FunctionDefinition' && (node as any).name === 'tapStored',
       		)
@@ -1492,14 +1499,14 @@
       			.fromSource(INLINE_SOURCE)
       			.injectShadow(FUNCTION_FRAGMENT)
       
-      		const original = findTapStored(instrumented.ast())
+      		const original = findTapStored(instrumented.sourceUnit())
       		const originalId = original.id
       
       		instrumented.injectShadow(FUNCTION_FRAGMENT_OVERRIDE, {
       			resolveConflictStrategy: ResolveConflictStrategy.Replace,
       		})
       
-      		const contract = findContract(instrumented.ast(), 'InlineExample')!
+      		const contract = findContract(instrumented.sourceUnit(), 'InlineExample')!
       		const tapStored = contract.nodes.filter(
       			(node): node is any => node.nodeType === 'FunctionDefinition' && (node as any).name === 'tapStored',
       		)
@@ -1513,7 +1520,7 @@
       		expect(replacementVariable).toBeDefined()
       
       		const ids: number[] = []
-      		collectIds(instrumented.ast(), ids)
+      		collectIds(instrumented.sourceUnit(), ids)
       		expect(ids.length).toBe(new Set(ids).size)
       		instrumented.validate()
       	})
@@ -1534,7 +1541,7 @@
       			})
       			.validate()
       
-      		const fn = findFunction(instrumented.ast(), 'InlineExample', 'get')
+      		const fn = findFunction(instrumented.sourceUnit(), 'InlineExample', 'get')
       		expect(fn).toBeDefined()
       		const statements = fn?.body?.statements ?? []
       		expect(statements).toHaveLength(4)
@@ -1562,7 +1569,7 @@
       			})
       			.validate()
       
-      		const fn = findFunction(instrumented.ast(), 'InlineExample', 'get')
+      		const fn = findFunction(instrumented.sourceUnit(), 'InlineExample', 'get')
       		expect(fn).toBeDefined()
       		const statements = fn?.body?.statements ?? []
       		expect(statements).toHaveLength(5)
@@ -1613,12 +1620,12 @@
       			.fromSource(INLINE_SOURCE)
       			.injectShadow(FUNCTION_FRAGMENT)
       
-      		const parsedUnit = instrumented.ast()
+      		const parsedUnit = instrumented.sourceUnit()
       		const parsedTapStored = findTapStored(parsedUnit)
       		const parsedTypeDescriptions = parsedTapStored.returnParameters.parameters[0].typeDescriptions ?? {}
       		expect(Object.keys(parsedTypeDescriptions)).toHaveLength(0)
       
-      		const validatedUnit = instrumented.validate().ast()
+      		const validatedUnit = instrumented.validate().sourceUnit()
       		const validatedTapStored = findTapStored(validatedUnit)
       		const validatedTypeDescriptions = validatedTapStored.returnParameters.parameters[0].typeDescriptions
       
@@ -1629,13 +1636,22 @@
       	})
       })
       
+      describe('compile', () => {
+      	test('returns compile output snapshot', () => {
+      		const output = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).compile()
+      
+      		expect(output.hasCompilerErrors()).toBe(false)
+      		expect(output.artifact?.toJson()).toMatchSnapshot()
+      	})
+      })
+      
       describe('visibility transformations', () => {
       	test('promotes private and internal variables to public', () => {
       		const instrumented = new Ast({ solcVersion: DEFAULT_SOLC_VERSION })
       			.fromSource(MULTI_CONTRACT_SOURCE, { instrumentedContract: 'Target' })
       			.exposeInternalVariables({ instrumentedContract: 'Target' })
       
-      		const target = findContract(instrumented.ast(), 'Target')!
+      		const target = findContract(instrumented.sourceUnit(), 'Target')!
       		const visibilities = target.nodes
       			.filter((node) => node.nodeType === 'VariableDeclaration')
       			.map((node: any) => node.visibility)
@@ -1647,7 +1663,7 @@
       			.fromSource(MULTI_CONTRACT_SOURCE, { instrumentedContract: 'Target' })
       			.exposeInternalFunctions({ instrumentedContract: 'Target' })
       
-      		const target = findContract(instrumented.ast(), 'Target')!
+      		const target = findContract(instrumented.sourceUnit(), 'Target')!
       		const visibilities = target.nodes
       			.filter((node) => node.nodeType === 'FunctionDefinition')
       			.map((node: any) => node.visibility)
@@ -1660,7 +1676,7 @@
       			.exposeInternalVariables()
       			.exposeInternalFunctions()
       
-      		const ast = instrumented.ast()
+      		const ast = instrumented.sourceUnit()
       		const first = findContract(ast, 'First')!
       		const second = findContract(ast, 'Second')!
       		const target = findContract(ast, 'Target')!
@@ -1707,7 +1723,7 @@
       			.exposeInternalVariables()
       			.exposeInternalFunctions()
       
-      		const ast = instrumented.ast()
+      		const ast = instrumented.sourceUnit()
       		const output = sharedCompiler.compileSource(ast)
       
       		expect(output.hasCompilerErrors()).toBe(false)
@@ -1721,12 +1737,12 @@
       		expect(Array.isArray(output.diagnostics)).toBe(true)
       	})
       
-      	test('ast() returns sanitized json without null entries', () => {
-      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION })
+      	test('sourceUnit() returns sanitized json without null entries', () => {
+      		const sourceUnit = new Ast({ solcVersion: DEFAULT_SOLC_VERSION })
       			.fromSource(INLINE_SOURCE)
       			.injectShadow(FUNCTION_FRAGMENT)
-      			.ast()
-      		const serialized = JSON.stringify(ast)
+      			.sourceUnit()
+      		const serialized = JSON.stringify(sourceUnit)
       		expect(serialized.includes('null')).toBe(false)
       	})
       })
@@ -2486,7 +2502,7 @@
       
       describe('Compiler.compileSource with AST and Yul inputs', () => {
       	test('accepts pre-parsed AST values', () => {
-      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).sourceUnit()
       		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileSource(ast)
       		expect(output.hasCompilerErrors()).toBe(false)
@@ -2508,7 +2524,7 @@
       			.fromSource(INLINE_SOURCE)
       			.injectShadow(FUNCTION_FRAGMENT)
       			.injectShadow(VARIABLE_FRAGMENT)
-      			.ast()
+      			.sourceUnit()
       
       		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileSource(instrumented)
@@ -2518,7 +2534,7 @@
       	})
       
       	test('rejects unsupported languages for AST sources', () => {
-      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).sourceUnit()
       		const compiler = new Compiler({ cacheEnabled: false })
       		expect(() =>
       			compiler.compileSource(ast, {
@@ -2588,7 +2604,7 @@
       	})
       
       	test('compiles AST entries keyed by path', () => {
-      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).sourceUnit()
       		const compiler = new Compiler({ cacheEnabled: false })
       		const output = compiler.compileSources({ 'InlineExample.sol': ast })
       
@@ -2598,7 +2614,7 @@
       	})
       
       	test('rejects mixing ast and source strings', () => {
-      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).sourceUnit()
       		const compiler = new Compiler({ cacheEnabled: false })
       		expect(() =>
       			compiler.compileSources({
@@ -2676,7 +2692,7 @@
       	})
       
       	test('compiles json ast files', () => {
-      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).sourceUnit()
       		const dir = createTempDir('tevm-compile-files-ast-')
       		const astPath = join(dir, 'InlineExample.ast.json')
       		writeFileSync(astPath, JSON.stringify(ast))
@@ -2690,7 +2706,7 @@
       	})
       
       	test('compiles ast files with unrecognized extensions', () => {
-      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).sourceUnit()
       		const dir = createTempDir('tevm-compile-files-ast-ext-')
       		const astPath = join(dir, 'InlineExample.ast')
       		writeFileSync(astPath, JSON.stringify(ast))
@@ -2703,7 +2719,7 @@
       	})
       
       	test('errors when mixing ast and source inputs', () => {
-      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).ast()
+      		const ast = new Ast({ solcVersion: DEFAULT_SOLC_VERSION }).fromSource(INLINE_SOURCE).sourceUnit()
       		const dir = createTempDir('tevm-compile-files-mix-')
       		const astPath = join(dir, 'InlineExample.ast.json')
       		writeFileSync(astPath, JSON.stringify(ast))
@@ -3010,7 +3026,7 @@
       				instrumentedContract: 'DepositContract',
       			}).fromSource(whatsabiResult.loaderResult.sources['deposit_contract.sol'].content)
       
-      			const sourceUnit = ast.ast()
+      		const sourceUnit = ast.sourceUnit()
       			const contracts = sourceUnit.nodes.filter((node) => node.nodeType === 'ContractDefinition')
       			expect(contracts.map((c) => c.name)).toEqual(['IDepositContract', 'ERC165', 'DepositContract'])
       		})
@@ -3051,36 +3067,43 @@
       		})
       
       		test.only('ERC721A: expose packed address data analytics', async () => {
-      			const ast = new Ast({
-      				loggingLevel: LoggingLevel.Info,
-      				solcVersion: '0.8.30',
-      				instrumentedContract: 'ERC721AMock',
-      			}).fromSource(readFileSync(erc721APath, 'utf8'))
+      		const ast = new Ast({
+      			loggingLevel: LoggingLevel.Info,
+      			solcVersion: '0.8.30',
+      			instrumentedContract: 'ERC721AMock',
+      		}).fromSource(readFileSync(erc721APath, 'utf8'))
       
       			// Add the shadow function that creates the analytics
-      			ast
-      				.injectShadow(`
-      				function addressAnalytics(address owner) external view returns (uint64 balance, uint64 minted, uint64 burned, uint64 aux) {
-      					return (0, 0, 0, 0);
-      					// balance = balanceOf(owner);
-      					// minted = _numberMinted(owner);
-      					// burned = _numberBurned(owner);
-      					// aux = _getAux(owner);
-      					}
-      					`)
-      				.validate()
+      		ast
+      			.injectShadow(`
+      			function addressAnalytics(address owner) external view returns (uint64 balance, uint64 minted, uint64 burned, uint64 aux) {
+      				return (0, 0, 0, 0);
+      				// balance = balanceOf(owner);
+      				// minted = _numberMinted(owner);
+      				// burned = _numberBurned(owner);
+      				// aux = _getAux(owner);
+      				}
+      				`)
+      			.validate()
       
-      			await client.tevmSetAccount({
-      				address: callerAddress,
-      				deployedBytecode: erc721AContract.deployedBytecode!.hex,
-      			})
-      			const res = await client.tevmContract({
-      				to: erc721AContract.address!,
-      				abi: erc721AContract.abi!,
-      				functionName: 'addressAnalytics',
-      				args: [callerAddress],
-      			})
-      			console.log(res)
+      		const compiled = ast.compile()
+      		const virtualSource = compiled.artifact ?? compiled.artifacts?.['__VIRTUAL__.sol']
+      		const instrumented = virtualSource?.contracts?.ERC721AMock
+      		expect(instrumented).toBeDefined()
+      
+      		const updatedContract = instrumented!.withAddress(erc721AContract.address)
+      		await client.tevmSetAccount({
+      			address: updatedContract.address!,
+      			deployedBytecode: updatedContract.deployedBytecode!.hex,
+      		})
+      
+      		const res = await client.tevmContract({
+      			to: updatedContract.address!,
+      			abi: updatedContract.abi!,
+      			functionName: 'addressAnalytics',
+      			args: [callerAddress],
+      		})
+      		expect(res).toBeDefined()
       
       			// Outline:
       			// 1. Clone verified ERC721A source (e.g. Azuki’s implementation mirrored on Sourcify).

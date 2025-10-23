@@ -73,7 +73,7 @@ contract Sample {
     ast
       .from_source(SourceTarget::Text(SAMPLE_CONTRACT.into()), None)
       .expect("load source");
-    let unit = ast.ast().expect("loaded ast");
+    let unit = ast.source_unit().expect("loaded ast");
     let json = unit.clone();
     assert!(contains_contract(&json, "Sample"));
   }
@@ -88,7 +88,7 @@ contract Sample {
       .inject_shadow(FragmentTarget::Text(SHADOW_FRAGMENT.into()), None)
       .expect("inject fragment");
 
-    let unit = ast.ast().expect("loaded ast");
+    let unit = ast.source_unit().expect("loaded ast");
     let json = unit.clone();
     assert!(json_contains_value(&json, "name", "expose"));
   }
@@ -107,7 +107,7 @@ contract Sample {
       .expose_internal_functions(None)
       .expect("expose functions");
 
-    let unit = ast.ast().expect("loaded ast");
+    let unit = ast.source_unit().expect("loaded ast");
     let json = unit.clone();
     assert!(json_contains_value(&json, "visibility", "public"));
   }
@@ -118,7 +118,7 @@ contract Sample {
     ast
       .from_source(SourceTarget::Text(SAMPLE_CONTRACT.into()), None)
       .expect("load source");
-    ast.validate(None).expect("validate ast");
+    ast.validate().expect("validate ast");
   }
 
   #[test]
@@ -137,7 +137,7 @@ contract Sample {
       )
       .expect("inject edges");
 
-    let unit = ast.ast().expect("loaded ast");
+    let unit = ast.source_unit().expect("loaded ast");
     let function = find_function(unit, "read").expect("read function");
     let body = function
       .get("body")
