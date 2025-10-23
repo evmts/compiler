@@ -48,6 +48,7 @@ runs:
         python -m pip install --upgrade pip
         python -m pip install vyper
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      shell: bash
 
     - name: Install dependencies
       run: pnpm install --frozen-lockfile
