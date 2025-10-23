@@ -14,6 +14,7 @@ use crate::internal::{
   },
   errors::{map_err_with_context, Error, Result},
   logging::{ensure_rust_logger, update_level},
+  settings::default_output_selection,
   solc,
 };
 
@@ -500,7 +501,10 @@ fn compiler_options_from_ast(config: &AstConfig) -> CompilerConfigOptions {
     let mut solc = crate::SolcConfigOptions::default();
     solc.version = Some(config.solc.version.clone());
     solc.language = Some(config.solc.language);
-    solc.resolved_settings = Some(config.solc.settings.clone());
+    let mut settings = config.solc.settings.clone();
+    settings.stop_after = None;
+    settings.output_selection = default_output_selection();
+    solc.resolved_settings = Some(settings);
     solc
   };
   options.cache_enabled = Some(false);

@@ -3026,7 +3026,7 @@
       				instrumentedContract: 'DepositContract',
       			}).fromSource(whatsabiResult.loaderResult.sources['deposit_contract.sol'].content)
       
-      		const sourceUnit = ast.sourceUnit()
+      			const sourceUnit = ast.sourceUnit()
       			const contracts = sourceUnit.nodes.filter((node) => node.nodeType === 'ContractDefinition')
       			expect(contracts.map((c) => c.name)).toEqual(['IDepositContract', 'ERC165', 'DepositContract'])
       		})
@@ -3067,15 +3067,14 @@
       		})
       
       		test.only('ERC721A: expose packed address data analytics', async () => {
-      		const ast = new Ast({
-      			loggingLevel: LoggingLevel.Info,
-      			solcVersion: '0.8.30',
-      			instrumentedContract: 'ERC721AMock',
-      		}).fromSource(readFileSync(erc721APath, 'utf8'))
-      
-      			// Add the shadow function that creates the analytics
-      		ast
-      			.injectShadow(`
+      			const ast = new Ast({
+      				loggingLevel: LoggingLevel.Info,
+      				solcVersion: '0.8.30',
+      				instrumentedContract: 'ERC721AMock',
+      			})
+      				.fromSource(readFileSync(erc721APath, 'utf8'))
+      				// Add the shadow function that creates the analytics
+      				.injectShadow(`
       			function addressAnalytics(address owner) external view returns (uint64 balance, uint64 minted, uint64 burned, uint64 aux) {
       				return (0, 0, 0, 0);
       				// balance = balanceOf(owner);
@@ -3084,26 +3083,29 @@
       				// aux = _getAux(owner);
       				}
       				`)
-      			.validate()
+      				// Validate to make sure the AST is valid (this will compile it internally)
+      				.validate()
       
-      		const compiled = ast.compile()
-      		const virtualSource = compiled.artifact ?? compiled.artifacts?.['__VIRTUAL__.sol']
-      		const instrumented = virtualSource?.contracts?.ERC721AMock
-      		expect(instrumented).toBeDefined()
+      			// Compile the AST (this will reuse the cached output from validation here)
+      			const output = ast.compile()
+      			if (output.hasCompilerErrors()) {
+      				throw new Error(`Failed to compile: ${output.errors.map((e) => e.formattedMessage).join(', ')}`)
+      			}
       
-      		const updatedContract = instrumented!.withAddress(erc721AContract.address)
-      		await client.tevmSetAccount({
-      			address: updatedContract.address!,
-      			deployedBytecode: updatedContract.deployedBytecode!.hex,
-      		})
+      			console.log(output.artifact.contracts)
+      			const instrumentedContract = output.artifact.contracts['ERC721AMock'].withAddress(erc721AContract.address)
+      			await client.tevmSetAccount({
+      				address: instrumentedContract.address!,
+      				deployedBytecode: instrumentedContract.deployedBytecode!.hex,
+      			})
       
-      		const res = await client.tevmContract({
-      			to: updatedContract.address!,
-      			abi: updatedContract.abi!,
-      			functionName: 'addressAnalytics',
-      			args: [callerAddress],
-      		})
-      		expect(res).toBeDefined()
+      			const res = await client.tevmContract({
+      				to: instrumentedContract.address!,
+      				abi: instrumentedContract.abi!,
+      				functionName: 'addressAnalytics',
+      				args: [callerAddress],
+      			})
+      			expect(res).toBeDefined()
       
       			// Outline:
       			// 1. Clone verified ERC721A source (e.g. Azuki’s implementation mirrored on Sourcify).

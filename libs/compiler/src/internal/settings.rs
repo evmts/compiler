@@ -441,9 +441,21 @@ pub fn merge_settings(
 pub fn sanitize_settings(settings: &Settings) -> Result<Settings> {
   let mut merged = settings.clone();
   if output_selection_is_effectively_empty(&merged.output_selection) {
-    merged.output_selection = Settings::default().output_selection;
+    merged.output_selection = default_output_selection();
   }
   Ok(merged)
+}
+
+// Default Foundry output selection + file-level ast output
+pub fn default_output_selection() -> OutputSelection {
+  let mut selection = OutputSelection::default_output_selection();
+  for file_selection in selection.0.values_mut() {
+    let entry = file_selection.entry(String::new()).or_insert_with(Vec::new);
+    if !entry.iter().any(|output| output == "ast") {
+      entry.push("ast".to_string());
+    }
+  }
+  selection
 }
 
 pub fn output_selection_is_effectively_empty(selection: &OutputSelection) -> bool {

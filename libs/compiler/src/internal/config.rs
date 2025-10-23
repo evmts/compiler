@@ -15,8 +15,8 @@ use crate::internal::errors::{map_napi_error, napi_error};
 use crate::internal::logging::LoggingLevel;
 use crate::internal::path::{to_path_set, to_path_vec};
 use crate::internal::settings::{
-  merge_settings, sanitize_settings, CompilerSettingsOptions, JsCompilerSettingsOptions,
-  VyperSettingsOptions,
+  default_output_selection, merge_settings, sanitize_settings, CompilerSettingsOptions,
+  JsCompilerSettingsOptions, VyperSettingsOptions,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -130,7 +130,7 @@ impl Default for VyperCompilerSettings {
       evm_version: None,
       bytecode_metadata: None,
       search_paths: None,
-      output_selection: Some(OutputSelection::default_output_selection()),
+      output_selection: Some(default_output_selection()),
       experimental_codegen: None,
     }
   }
@@ -183,11 +183,14 @@ pub struct CompilerConfig {
 
 impl Default for CompilerConfig {
   fn default() -> Self {
+    let mut solc_settings = Settings::default();
+    solc_settings.output_selection = default_output_selection();
+
     CompilerConfig {
       language: CompilerLanguage::Solidity,
       solc_version: crate::internal::solc::default_version()
         .unwrap_or_else(|_| Version::new(0, 8, 30)),
-      solc_settings: Settings::default(),
+      solc_settings,
       vyper_settings: VyperCompilerSettings::default(),
       cache_enabled: true,
       offline_mode: false,
