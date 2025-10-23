@@ -6,7 +6,7 @@
 		"build:dts": "node ./scripts/postbuild-dts.js",
 		"build:docs": "node ./scripts/postbuild-generate-docs.js",
 		"build:typecheck": "tsc build/*.d.ts --noEmit",
-		"test:typecheck": "tsc test/*.ts --noEmit --skipLibCheck"
+		"test:typecheck": "tsc --project tsconfig.json --noEmit --skipLibCheck"
 	},
 	"main": "./build/index.js",
 	"types": "./build/index.d.ts",

@@ -2952,8 +2952,7 @@
       			// If we wanted to actually work with a fork and an onchain contract, we would create a client
       			// in fork mode and use the actual contract address; we don't here for the sake of simplicity.
       			// client = createMemoryClient({ fork: { transport: http('mainnet.rpc.url') }})
-      			const makeMemoryClient = createMemoryClient as unknown as () => MemoryClient
-      			client = makeMemoryClient()
+      			client = createMemoryClient() as unknown as MemoryClient
       
       			// The following are purely test setup; on a fork we would want to use the actual fork state instead
       			// or this in-memory test state
@@ -2977,20 +2976,28 @@
       			})
       		})
       
-      		test.skip('ERC721A: expose packed address data analytics', async () => {
+      		test.only('ERC721A: expose packed address data analytics', async () => {
       			const ast = new Ast({
-      				loggingLevel: 'info',
       				solcVersion: '0.8.30',
       				instrumentedContract: 'ERC721AMock',
       			})
       				.fromSource(readFileSync(erc721APath, 'utf8'))
       				// Add the shadow function that creates the analytics
       				.injectShadow(`
-      			function addressAnalytics(address owner) external view returns (uint64 balance, uint64 minted, uint64 burned, uint64 aux) {
-      				balance = balanceOf(owner);
-      				minted = _numberMinted(owner);
-      				burned = _numberBurned(owner);
-      				aux = _getAux(owner);
+      			struct Analytics {
+      				uint64 balance;
+      				uint64 minted;
+      				uint64 burned;
+      				uint64 aux;
+      			}
+      
+      			function addressAnalytics(address owner) external view returns (Analytics memory) {
+      				return Analytics(
+      				  uint64(balanceOf(owner)),
+      				  uint64(_numberMinted(owner)),
+      				  uint64(_numberBurned(owner)),
+      				  uint64(_getAux(owner))
+      				);
       			}
       				`)
       				// Validate to make sure the AST is valid (this will compile it internally)
@@ -3012,22 +3019,9 @@
       				functionName: 'addressAnalytics',
       				args: [callerAddress],
       			})
-      			console.log(res)
-      			expect(res).toBeDefined()
-      
-      			// Outline:
-      			// 1. Clone verified ERC721A source (e.g. Azuki’s implementation mirrored on Sourcify).
-      			// 2. Inject __addressStats(address) that reads private mapping(address => uint256)
-      			//    _packedAddressData and decodes balance, numberMinted, numberBurned, aux.
-      			// 3. Compile with tevm compiler, patch forked bytecode via setCode, then query with viem.
-      			// Why shadowing:
-      			// - ABI exposes balanceOf and ownerOf, but not mint/burn counts or aux data; reconstructing
-      			//   requires brittle slot math that changes across ERC721A releases and proxies.
-      			// - Shadow getter guarantees layout-correct analytics for wallets (mint history, burns)
-      			//   without reverse-engineering storage for each fork.
-      			// Reference viem usage:
-      			// const { result } = await client.readContract({ functionName: '__addressStats', args: [holder] })
+      			expect(res.data).toMatchObject({ balance: 1n, minted: 1n, burned: 0n, aux: 0n })
       		})
+      
       		test.todo('Uniswap v3: decode TickBitmap word in-contract', () => {
       			// Outline:
       			// 1. Patch UniswapV3Pool (or a thin reader) with __decodeTickBitmap(int16,uint24) that
