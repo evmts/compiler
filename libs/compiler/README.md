@@ -116,7 +116,7 @@ const inlineSnapshot = syntheticCompiler.compileSource("contract Foo { }");
 ### Manipulate ASTs for shadowing contracts
 
 ```ts
-import { Ast, Compiler, ResolveConflictStrategy } from "@tevm/compiler";
+import { Ast, Compiler } from "@tevm/compiler";
 
 await Compiler.installSolcVersion("0.8.30");
 
