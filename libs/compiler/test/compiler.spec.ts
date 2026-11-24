@@ -108,23 +108,13 @@ afterAll(() => {
 
 describe('Compiler static helpers', () => {
 	test('installSolcVersion resolves for cached release', async () => {
-		try {
-			await Compiler.installSolcVersion(DEFAULT_SOLC_VERSION)
-		} catch (error) {
-			if (error instanceof Error && /Failed to install solc version/i.test(error.message)) {
-				return
-			}
-			throw error
-		}
+		await expect(Compiler.installSolcVersion(DEFAULT_SOLC_VERSION)).resolves.toBeUndefined()
 	})
 
-	test('installSolcVersion installs missing releases', async () => {
-		const preInstalled = Compiler.isSolcVersionInstalled(ALT_SOLC_VERSION)
-		await expect(Compiler.installSolcVersion(ALT_SOLC_VERSION)).resolves.toBeUndefined()
+	test('installSolcVersion is idempotent for another cached release', async () => {
 		expect(Compiler.isSolcVersionInstalled(ALT_SOLC_VERSION)).toBe(true)
-		if (!preInstalled) {
-			await expect(Compiler.installSolcVersion(ALT_SOLC_VERSION)).resolves.toBeUndefined()
-		}
+		await expect(Compiler.installSolcVersion(ALT_SOLC_VERSION)).resolves.toBeUndefined()
+		await expect(Compiler.installSolcVersion(ALT_SOLC_VERSION)).resolves.toBeUndefined()
 	})
 
 	test('isSolcVersionInstalled rejects malformed versions', () => {
@@ -133,20 +123,8 @@ describe('Compiler static helpers', () => {
 		)
 	})
 
-	test('isSolcVersionInstalled respects custom svm home', () => {
-		const original = process.env.SVM_HOME
-		const temp = createTempDir('tevm-svm-')
-		process.env.SVM_HOME = temp
-		try {
-			const overridden = Compiler.isSolcVersionInstalled(DEFAULT_SOLC_VERSION)
-			expect(typeof overridden).toBe('boolean')
-		} finally {
-			if (original === undefined) {
-				delete process.env.SVM_HOME
-			} else {
-				process.env.SVM_HOME = original
-			}
-		}
+	test('isSolcVersionInstalled reports an absent release', () => {
+		expect(Compiler.isSolcVersionInstalled('0.0.0')).toBe(false)
 	})
 })
 

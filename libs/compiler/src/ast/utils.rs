@@ -73,7 +73,48 @@ pub fn clone_with_new_ids(value: &Value, next_id: &mut i64) -> Value {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use proptest::prelude::*;
   use serde_json::json;
+
+  fn ast_nodes() -> impl Strategy<Value = Value> {
+    (any::<u16>(), any::<bool>())
+      .prop_map(|(id, value)| json!({ "nodeType": "Literal", "id": id, "value": value }))
+      .prop_recursive(5, 64, 4, |child| {
+        (any::<u16>(), prop::collection::vec(child, 1..5)).prop_map(
+          |(id, children)| json!({ "nodeType": "Block", "id": id, "statements": children }),
+        )
+      })
+  }
+
+  fn strip_ids(node: &mut Value, ids: &mut Vec<i64>) {
+    let object = node.as_object_mut().expect("generated AST object");
+    let id = object.remove("id").expect("node ID");
+    ids.push(id.as_i64().expect("numeric node ID"));
+    if let Some(Value::Array(children)) = object.get_mut("statements") {
+      for child in children {
+        strip_ids(child, ids);
+      }
+    }
+  }
+
+  proptest! {
+    #[test]
+    fn renumbering_preserves_tree_and_assigns_contiguous_ids(original in ast_nodes()) {
+      let mut original_without_ids = original.clone();
+      let mut original_ids = Vec::new();
+      strip_ids(&mut original_without_ids, &mut original_ids);
+      let highest_id = original_ids.into_iter().max().expect("nonempty tree");
+      prop_assert_eq!(max_id(&original), highest_id);
+
+      let mut next_id = highest_id;
+      let mut cloned = clone_with_new_ids(&original, &mut next_id);
+      let mut cloned_ids = Vec::new();
+      strip_ids(&mut cloned, &mut cloned_ids);
+      prop_assert_eq!(original_without_ids, cloned);
+      prop_assert_eq!(next_id, highest_id + cloned_ids.len() as i64);
+      prop_assert_eq!(cloned_ids, (highest_id + 1..=next_id).collect::<Vec<_>>());
+    }
+  }
 
   #[test]
   fn max_id_finds_highest_nested_identifier() {

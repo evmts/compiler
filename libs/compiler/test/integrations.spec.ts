@@ -1,4 +1,6 @@
-import { beforeAll, describe, expect, test } from 'bun:test'
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { whatsabi } from '@shazow/whatsabi'
 import { Ast, Compiler, Contract } from '../build/index.js'
 import {
@@ -16,38 +18,45 @@ import {
 describe('Integrations', () => {
 	// The Ast that ships with the compiler pairs well with tools such as whatsabi to fetch verified contracts,
 	// as we can manipulate a contract AST as long as we are provided an original source code or parsed AST.
-	describe('Use with whatsabi', async () => {
-		const BEACON_CONTRACT_ADDRESS = '0x00000000219ab540356cBB839Cbe05303d7705Fa'
-		// An obvious use case for instance is to:
-		// 1. fetch a verified contract;
-		// 2. manipulate its AST to expose internal variables/functions;
-		// 3. compile the instrumented AST;
-		// 4. use the instrumented bytecode in the context of the original contract to extend its functionality
+	describe('Use with whatsabi', () => {
+		const address = '0x0000000000000000000000000000000000000001'
+		const sourceName = 'Counter.sol'
+		const source = readFileSync(join(__dirname, 'fixtures', 'contracts', sourceName), 'utf8')
+		const metadata = {
+			compiler: { version: '0.8.30+commit.73712a01' },
+			language: 'Solidity',
+			output: {
+				abi: [{ type: 'function', name: 'count', inputs: [], outputs: [{ type: 'uint256' }], stateMutability: 'view' }],
+			},
+			settings: { compilationTarget: { [sourceName]: 'Counter' }, optimizer: { enabled: false, runs: 200 } },
+		}
 		let whatsabiResult: whatsabi.loaders.ContractResult
 		beforeAll(async () => {
-			// See https://shazow.github.io/whatsabi/ for using whatsabi
-			const loader = new whatsabi.loaders.MultiABILoader([
-				new whatsabi.loaders.SourcifyABILoader({ chainId: 1 }),
-				// Add fallbacks for Etherscan and Blockscout to maximize coverage
-				// new whatsabi.loaders.EtherscanV2ABILoader({
-				// 	apiKey: '...', // Replace the value with your Etherscan API key
-				// }),
-				// new whatsabi.loaders.BlockscoutABILoader({
-				// 	apiKey: '...', // Replace the value with your Blockscout API key
-				// }),
-			])
-			const result = await loader.getContract(BEACON_CONTRACT_ADDRESS)
-			if (!result.ok) throw new Error('Failed to load contract from Sourcify')
-			whatsabiResult = result
+			const fetch = spyOn(globalThis, 'fetch').mockResolvedValue(
+				Response.json({
+					files: [
+						{ name: 'metadata.json', content: JSON.stringify(metadata) },
+						{ name: sourceName, path: sourceName, content: source },
+					],
+				}),
+			)
+			try {
+				const loader = new whatsabi.loaders.MultiABILoader([new whatsabi.loaders.SourcifyABILoader({ chainId: 1 })])
+				whatsabiResult = await loader.getContract(address)
+				expect(whatsabiResult.ok).toBe(true)
+				expect(fetch.mock.calls.map(([url]) => url)).toEqual([`https://sourcify.dev/server/files/1/${address}`])
+			} finally {
+				fetch.mockRestore()
+			}
 		})
 
 		test('Create a Contract instance out of a verified contract', () => {
-			const contract = new Contract({ name: whatsabiResult.name, ...whatsabiResult.loaderResult.output }).withAddress(
-				BEACON_CONTRACT_ADDRESS,
-			)
-			expect(contract.address).toBe(BEACON_CONTRACT_ADDRESS)
-			expect(contract.name).toBe(whatsabiResult.name)
-			expect(contract.abi).toEqual(whatsabiResult.loaderResult.output.abi)
+			const { name, abi } = whatsabiResult
+			if (!name || !abi) throw new Error('Sourcify metadata must contain a contract name and ABI')
+			const contract = new Contract({ name, abi }).withAddress(address)
+			expect(contract.address).toBe(address)
+			expect(contract.name).toBe('Counter')
+			expect(contract.abi).toEqual(metadata.output.abi)
 		})
 
 		test('Create an Ast instance out of a verified contract', async () => {
@@ -66,12 +75,16 @@ describe('Integrations', () => {
 					libraries: solcSettings.libraries,
 					remappings: solcSettings.remappings,
 				},
-				instrumentedContract: 'DepositContract',
-			}).fromSource(whatsabiResult.loaderResult.sources['deposit_contract.sol'].content)
+				instrumentedContract: whatsabiResult.name ?? undefined,
+			})
+			const sources = await whatsabiResult.getSources?.()
+			const verifiedSource = sources?.find((file) => file.path === sourceName)
+			if (!verifiedSource) throw new Error(`Missing ${sourceName} in the Sourcify response`)
+			ast.fromSource(verifiedSource.content)
 
 			const sourceUnit = ast.sourceUnit()
 			const contracts = sourceUnit.nodes.filter((node) => node.nodeType === 'ContractDefinition')
-			expect(contracts.map((c) => c.name)).toEqual(['IDepositContract', 'ERC165', 'DepositContract'])
+			expect(contracts.map((c) => c.name)).toEqual(['Counter'])
 		})
 	})
 

@@ -6,7 +6,7 @@ use foundry_compilers::solc::Solc;
 use super::error::AstError;
 use serde_json::Value;
 
-// TODO: remove in favor of compile_source with correct settings once we add ast to output
+// Parse-only settings let us extract ASTs from fragments that depend on the target contract.
 fn parse_source_ast_internal(
   source: &str,
   file_name: &str,

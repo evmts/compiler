@@ -699,9 +699,11 @@ dependencies = [
  "napi-build",
  "napi-derive",
  "once_cell",
+ "proptest",
  "semver 1.0.27",
  "serde",
  "serde_json",
+ "svm-rs-builds 0.2.3",
  "tempfile",
 ]
 
@@ -1478,8 +1480,8 @@ dependencies = [
  "serde_json",
  "sha2",
  "solar-compiler",
- "svm-rs 0.5.19",
- "svm-rs-builds 0.5.19",
+ "svm-rs 0.5.22",
+ "svm-rs-builds 0.5.22",
  "thiserror 2.0.17",
  "tracing",
  "winnow 0.7.13",
@@ -1546,7 +1548,7 @@ dependencies = [
  "semver 1.0.27",
  "serde",
  "serde_json",
- "svm-rs 0.5.19",
+ "svm-rs 0.5.22",
  "thiserror 2.0.17",
  "tokio",
  "walkdir",
@@ -4132,9 +4134,9 @@ dependencies = [
 
 [[package]]
 name = "svm-rs"
-version = "0.5.19"
+version = "0.5.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11f15cc0fb280301739995e3b9f0f0dde3aecb876814f4768689f9138570cd3b"
+checksum = "909e8ff825120cd2b34ceb236ab72e2a7f74b1d3a86c247936c8ff7a80c5d408"
 dependencies = [
  "const-hex",
  "dirs 6.0.0",
@@ -4164,14 +4166,14 @@ dependencies = [
 
 [[package]]
 name = "svm-rs-builds"
-version = "0.5.19"
+version = "0.5.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31affc47068aeef445accc5c3d5f7fd24f9072cae0a651cef564239003c94ff8"
+checksum = "c1ebe77b200f965e8dbec3ef1d8337e974179ca1ecaa9fc28f67288d6b438159"
 dependencies = [
  "const-hex",
  "semver 1.0.27",
  "serde_json",
- "svm-rs 0.5.19",
+ "svm-rs 0.5.22",
 ]
 
 [[package]]

@@ -12,7 +12,6 @@
       "{workspaceRoot}/.github/workflows/ci.yml"
     ]
   },
-  "nxCloudId": "68ece04d17e6805d34bb0805",
   "plugins": [
     "@monodon/rust"
   ]

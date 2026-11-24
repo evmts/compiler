@@ -534,29 +534,38 @@ fn collate_project_artifacts(
 ) -> BTreeMap<String, SourceArtifacts> {
   let mut artifacts: BTreeMap<String, SourceArtifacts> = BTreeMap::new();
 
-  let mut version_lookup: BTreeMap<(String, String), Version> = BTreeMap::new();
-  for (path, name, _, version) in output.output().contracts.contracts_with_files_and_version() {
-    let key = path.to_string_lossy().to_string();
-    version_lookup.insert((key, name.clone()), version.clone());
-  }
-
-  for (path, name, artifact) in output.artifacts_with_files() {
+  let artifact_files = output
+    .cached_artifacts()
+    .0
+    .iter()
+    .chain(&output.compiled_artifacts().0);
+  for (path, contracts) in artifact_files {
     let key = path.to_string_lossy().to_string();
     let entry = artifacts
       .entry(key.clone())
       .or_insert_with(|| SourceArtifacts::new(Some(key.clone())));
 
-    let version = version_lookup.get(&(key.clone(), name.clone())).cloned();
-    if entry.solc_version.is_none() {
-      entry.solc_version = version.clone();
-    }
+    for (name, versions) in contracts {
+      for artifact_file in versions {
+        let artifact = &artifact_file.artifact;
+        entry
+          .solc_version
+          .get_or_insert_with(|| artifact_file.version.clone());
+        if entry.ast.is_none() {
+          entry.ast = artifact
+            .ast
+            .as_ref()
+            .and_then(|ast| serde_json::to_value(ast).ok());
+        }
 
-    let mut contract = Contract::from_configurable_artifact(name.clone(), artifact);
-    contract.state_mut().source_path = Some(key.clone());
-    if entry.source_id.is_none() {
-      entry.source_id = contract.state().source_id;
+        let mut contract = Contract::from_configurable_artifact(name.clone(), artifact);
+        contract.state_mut().source_path = Some(key.clone());
+        if entry.source_id.is_none() {
+          entry.source_id = contract.state().source_id;
+        }
+        entry.contracts.insert(name.clone(), contract);
+      }
     }
-    entry.contracts.insert(name.clone(), contract);
   }
 
   for (path, source, version) in output.output().sources.sources_with_version() {

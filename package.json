@@ -2,8 +2,10 @@
   "name": "@compiler/source",
   "version": "0.0.0",
   "license": "MIT",
+  "packageManager": "pnpm@10.28.2",
   "scripts": {
     "all": "nx run-many -t lint format test build post-build",
+    "bench": "nx run compiler:bench",
     "build": "nx run-many -t build post-build",
     "build:release": "pnpm all --configuration=production",
     "lint": "nx run-many -t lint format",
@@ -13,6 +15,9 @@
     "test": "nx run-many -t test"
   },
   "private": true,
+  "pnpm": {
+    "onlyBuiltDependencies": ["nx"]
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.2.6",
     "@changesets/cli": "^2.29.7",

@@ -18,6 +18,7 @@ const fileLevelOption = "" as const;
 
 export type OutputSelection = {
   [fileSelector: string]: {
+    /** Use the empty contract selector for file-level AST output. */
     [fileLevelOption]?: ReadonlyArray<"ast">;
   } & {
     [contractName: Exclude<string, typeof fileLevelOption>]: ReadonlyArray<
@@ -27,7 +28,7 @@ export type OutputSelection = {
 };
 
 type BaseContractOutput =
-  // TODO: 'ast' should only be for file level but not sure how to type correctly
+  // The string index signature includes the empty selector, so it must also allow 'ast'.
   | "ast"
   | "abi"
   | "devdoc"

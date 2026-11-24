@@ -29,27 +29,42 @@
 			}
 		},
 		"test": {
-			"dependsOn": ["test:rust", "test:js", "test:typecheck"]
+			"dependsOn": ["test:rust", "test:js", "test:typecheck", "test:e2e"]
 		},
 		"test:rust": {
 			"cache": false,
-			"executor": "@monodon/rust:test",
-			"outputs": ["{options.target-dir}"],
+			"executor": "nx:run-commands",
 			"options": {
-				"target-dir": "libs/compiler/target"
+				"command": "cargo test --locked"
 			},
 			"configurations": {
 				"production": {
-					"release": true
+					"command": "cargo test --locked --release"
 				}
 			}
 		},
 		"test:js": {
-			"cache": true,
+			"cache": false,
 			"executor": "nx:run-commands",
 			"dependsOn": ["build", "post-build"],
 			"options": {
 				"command": "bun test",
+				"cwd": "libs/compiler"
+			}
+		},
+		"test:e2e": {
+			"dependsOn": ["post-build"],
+			"executor": "nx:run-commands",
+			"options": {
+				"command": "node --test test/node-smoke.cjs",
+				"cwd": "libs/compiler"
+			}
+		},
+		"bench": {
+			"dependsOn": ["post-build"],
+			"executor": "nx:run-commands",
+			"options": {
+				"command": "node bench/compile.cjs",
 				"cwd": "libs/compiler"
 			}
 		},
@@ -64,17 +79,16 @@
 		},
 		"lint:rust": {
 			"cache": false,
-			"executor": "@monodon/rust:lint",
-			"outputs": ["{options.target-dir}"],
+			"executor": "nx:run-commands",
 			"options": {
-				"target-dir": "libs/compiler/target"
+				"command": "cargo clippy --locked --all-targets"
 			}
 		},
 		"format:rust": {
 			"cache": true,
 			"executor": "nx:run-commands",
 			"options": {
-				"command": "cargo fmt",
+				"command": "cargo fmt --all -- --check",
 				"cwd": "libs/compiler"
 			}
 		},
@@ -82,7 +96,7 @@
 			"cache": true,
 			"executor": "nx:run-commands",
 			"options": {
-				"command": "biome check . --write --unsafe",
+				"command": "biome lint .",
 				"cwd": "libs/compiler"
 			}
 		},
@@ -90,7 +104,7 @@
 			"cache": true,
 			"executor": "nx:run-commands",
 			"options": {
-				"command": "biome format --write .",
+				"command": "biome format .",
 				"cwd": "libs/compiler"
 			}
 		},

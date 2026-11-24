@@ -89,7 +89,8 @@ pub fn ensure_napi_logger(_: &Env, _: LoggingLevel) -> napi::Result<()> {
 #[cfg(not(test))]
 pub fn ensure_napi_logger(env: &Env, level: LoggingLevel) -> napi::Result<()> {
   let state = install_logger().map_err(napi::Error::from)?;
-  let tsfn = create_threadsafe_logger(env)?;
+  let mut tsfn = create_threadsafe_logger(env)?;
+  tsfn.unref(env)?;
   state.set_node_backend(tsfn);
   state.update_level(level);
   Ok(())

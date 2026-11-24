@@ -5,15 +5,15 @@ Rust + N-API bindings that expose Foundry's multi-language compiler (Solidity, Y
 ## Quick Start
 
 1. **Install toolchains**
-   - Node.js 18+ with `pnpm` 9+
-   - Bun 1.1+ (required for the test suite)
-   - Rust stable toolchain
-   - Relevant compiler binaries:
-     - Install `solc` releases via `Compiler.installSolcVersion(version)` or Foundry's `svm`
-     - Optional: `vyper` executable on your `PATH` for Vyper projects
+   - Node.js 22 and pnpm 10.28.2
+   - Bun 1.4.1 for the JavaScript integration suite
+   - Rust stable with `rustfmt` and `clippy`
+   - Install `solc` 0.8.29 and 0.8.30 with `svm install 0.8.29` and `svm install 0.8.30`. Once the bindings are built, `Compiler.installSolcVersion(version)` also installs them.
+   - Install `vyper` 0.4.3 on your `PATH` for the full suite. The Solidity and Yul APIs can run without it.
 2. **Install dependencies**
    ```bash
-   pnpm install
+   pnpm install --frozen-lockfile
+   pnpm --dir libs/compiler install --frozen-lockfile
    ```
 3. **Build native bindings**
    ```bash
@@ -22,65 +22,48 @@ Rust + N-API bindings that expose Foundry's multi-language compiler (Solidity, Y
    ```
 4. **Run the full test matrix**
    ```bash
-   pnpm nx run compiler:test         # cargo tests + Bun specs + TS type assertions
+   pnpm all                        # lint, format check, build, and test
+   pnpm bench                      # uncached and warm-cache compilation timings
    ```
 
 ## Usage
 
 - Feed `libs/compiler/build/llms.txt` to your favourite LLM and ask how to adapt the compiler for your workflow—the bundle includes the public API surface, curated `.d.ts`, and executable specs.
-- The sections below show direct JavaScript usage patterns; all examples run in Node.js or Bun.
+- The examples use the `@tevm/compiler` import name. To run them against this checkout, import the generated `libs/compiler/build/index.js` after `post-build`.
 - You will also find realistic use cases in [test/integrations.spec.ts](test/integrations.spec.ts).
 
 ### Compile inline sources
 
 ```ts
-import { Compiler, CompilerLanguage } from '@tevm/compiler'
+import { Compiler } from '@tevm/compiler'
 
 await Compiler.installSolcVersion('0.8.30')
 
 const compiler = new Compiler({
-  language: 'solidity', // or 'yul', 'vyper'
   solcVersion: '0.8.30',
-  solcSettings: {
-    // any solc settings, see index.d.ts:CompilerSettings
-  }
-
-  // or
-  language: CompilerLanguage.Vyper,
-  vyperSettings: {
-    // any vyper settings, see index.d.ts:VyperCompilerSettings
-  }
+  cacheEnabled: false,
+  solcSettings: { optimizer: { enabled: true, runs: 200 } },
 })
 
-// This will be cached by default in ~/.tevm/virtual-sources
 const output = compiler.compileSources({
   'Example.sol': `
     // SPDX-License-Identifier: MIT
     pragma solidity ^0.8.20;
 
     contract Example {
-      ...
+      uint256 public value;
     }
   `,
-}, {
-    // override any constructor settings; this is true for every compile method
 })
 
 if (output.hasCompilerErrors()) {
   console.error(output.diagnostics)
 } else {
-  // The artifacts paths are fully typed
-  const artifact = output.artifacts["Example.sol"].contracts.Example
-  console.log(artifact?.toJson())
+  console.log(output.artifacts['Example.sol'].contracts.Example.toJson())
 }
-
-// Compile a single source, which will be cached as well as a virtual source
-const output = compiler.compileSource('contract Example { uint256 private value; }')
-const artifact = output.artifact.contract.Example
-// or some files
-const output = compiler.compileFiles(['Example.sol', 'Another.sol'])
-// ...
 ```
+
+With caching enabled, synthetic projects store inline inputs under `.tevm/virtual-sources` and can return artifact keys based on those paths. For one source, `compileSource` returns the single source through `output.artifact`. Pass on-disk sources and their imports together to `compileFiles`, or use `compileProject` to discover imports and reuse the project cache. All compilation methods accept per-call compiler options. Select `{ language: 'vyper', vyperSettings: { ... } }` for Vyper or `{ language: 'yul' }` for Yul.
 
 ### Target existing projects
 
@@ -138,7 +121,7 @@ const compiled = ast.compile();
 const compiler = new Compiler({ solcVersion: "0.8.30" });
 const output = compiler.compileSources({ "Example.sol": stitched });
 // The compilation output returns ast classes as well
-const ast = output.artifacts["Example.sol"].ast;
+const compiledAst = output.artifacts["Example.sol"].ast;
 ```
 
 When a fragment redefines existing members you can switch the conflict strategy to replace the matching node while still appending the rest:
@@ -210,16 +193,18 @@ pnpm nx run compiler:build
 # Copy curated types, generate llms.txt, type-check declarations
 pnpm nx run compiler:post-build
 
-# Execute the full suite (cargo tests + Bun integration specs + TS type checks)
+# Execute Rust tests, Bun specs, TypeScript assertions, and the Node.js smoke tests
 pnpm nx run compiler:test
 ```
 
 Useful sub-targets:
 
-- `pnpm nx run compiler:test:rust` – Rust unit tests (`cargo test`).
+- `pnpm nx run compiler:test:rust` – Rust unit and property tests. Set `PROPTEST_CASES=1024` for a longer run.
 - `pnpm nx run compiler:test:js` – Bun specs in `test/**/*.spec.ts`.
 - `pnpm nx run compiler:test:typecheck` – Validates the published `.d.ts` surface.
-- `pnpm nx run compiler:lint` / `:format` – Biome for JS + `cargo fmt` for Rust sources.
+- `pnpm nx run compiler:test:e2e` – Loads the package entry point from Node.js and checks AST compilation and project caching.
+- `pnpm nx run compiler:lint` / `:format` – Run check-only Biome, Clippy, and Rust formatting targets. Use `cargo fmt --all` and `pnpm exec biome format --write libs/compiler` to apply formatting.
+- `pnpm bench` – Compiles two Solidity fixtures with caching disabled and with a warm cache, checks bytecode consistency, and reports the mean time per operation.
 
 ## What Lives Here
 
@@ -238,12 +223,9 @@ Useful sub-targets:
 - `Ast` instances parse Solidity sources, inject fragment sources or AST objects (`injectShadow`), expose internal members, and emit unique-ID `SourceUnit`s ready for compilation.
 - `Contract` wrappers (available in JS and Rust) provide `.withAddress`, `.withCreationBytecode`, `.withDeployedBytecode`, and `.toJson()` for ergonomic artifact manipulation.
 
-## Release Checklist
+## Release Status
 
-1. `pnpm build:release`
-2. `pnpm release:init` to create new release notes
-3. `pnpm release:version` to update the version in the package.json
-4. `pnpm release:publish` to publish the package
+`pnpm build:release` builds optimized native bindings for the current platform. Changesets currently versions the private root package, `@compiler/source`. A standalone npm release still needs the compiler package identity and version policy, a build for each supported platform, and an install test of the resulting tarballs.
 
 The `libs/compiler/build/llms.txt` bundle is regenerated automatically during `post-build` so AI assistants stay in sync with the public surface.
 
