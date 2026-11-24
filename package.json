@@ -1,6 +1,6 @@
 {
   "name": "@compiler/source",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "license": "MIT",
   "packageManager": "pnpm@10.28.2",
   "scripts": {
@@ -16,7 +16,9 @@
   },
   "private": true,
   "pnpm": {
-    "onlyBuiltDependencies": ["nx"]
+    "onlyBuiltDependencies": [
+      "nx"
+    ]
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.6",
