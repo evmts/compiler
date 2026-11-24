@@ -693,7 +693,7 @@ describe('Compiler project paths', () => {
 	})
 
 	test('writes cache artifacts for inline sources in default synthetic workspace', () => {
-		const workspace = createTempDir('tevm-default-cache-')
+		const workspace = realpathSync(createTempDir('tevm-default-cache-'))
 		const originalCwd = process.cwd()
 		process.chdir(workspace)
 		try {

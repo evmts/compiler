@@ -5266,15 +5266,15 @@ exports[`Compiler project paths writes cache artifacts for inline sources in def
         },
         "name": "InlineExample",
         "sourceId": 0,
-        "sourcePath": "/private<root>/.tevm/virtual-sources/virtual-014450198f436837.sol",
+        "sourcePath": "<root>/.tevm/virtual-sources/virtual-014450198f436837.sol",
       },
     },
     "solcVersion": "0.8.30",
     "sourceId": 0,
-    "sourcePath": "/private<root>/.tevm/virtual-sources/virtual-014450198f436837.sol",
+    "sourcePath": "<root>/.tevm/virtual-sources/virtual-014450198f436837.sol",
   },
   "artifacts": {
-    "/private<root>/.tevm/virtual-sources/virtual-014450198f436837.sol": {
+    "<root>/.tevm/virtual-sources/virtual-014450198f436837.sol": {
       "ast": {
         "absolutePath": ".tevm/virtual-sources/virtual-014450198f436837.sol",
         "exportedSymbols": {
@@ -6208,17 +6208,17 @@ exports[`Compiler project paths writes cache artifacts for inline sources in def
           },
           "name": "InlineExample",
           "sourceId": 0,
-          "sourcePath": "/private<root>/.tevm/virtual-sources/virtual-014450198f436837.sol",
+          "sourcePath": "<root>/.tevm/virtual-sources/virtual-014450198f436837.sol",
         },
       },
       "solcVersion": "0.8.30",
       "sourceId": 0,
-      "sourcePath": "/private<root>/.tevm/virtual-sources/virtual-014450198f436837.sol",
+      "sourcePath": "<root>/.tevm/virtual-sources/virtual-014450198f436837.sol",
     },
   },
   "rawArtifacts": {
     "contracts": {
-      "/private<root>/.tevm/virtual-sources/virtual-014450198f436837.sol": {
+      "<root>/.tevm/virtual-sources/virtual-014450198f436837.sol": {
         "InlineExample": {
           "abi": [
             {
@@ -6271,7 +6271,7 @@ exports[`Compiler project paths writes cache artifacts for inline sources in def
     },
     "errors": [],
     "sources": {
-      "/private<root>/.tevm/virtual-sources/virtual-014450198f436837.sol": {
+      "<root>/.tevm/virtual-sources/virtual-014450198f436837.sol": {
         "ast": {
           "absolutePath": ".tevm/virtual-sources/virtual-014450198f436837.sol",
           "exportedSymbols": {
